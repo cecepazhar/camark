@@ -524,6 +524,65 @@ pub fn chat(
     })
 }
 
+/// Tests a lightweight connection to a user-provided OpenAI-compatible endpoint without
+/// persisting anything. `api_key` is optional; if `None`, we read the currently stored key.
+pub fn test_connection(base_url: &str, model: &str, api_key: Option<&str>) -> Result<String, CatermError> {
+    let resolved_key: String = api_key
+        .map(|k| k.trim().to_string())
+        .filter(|k| !k.is_empty())
+        .unwrap_or_else(|| get_stored_config().map(|c| c.api_key).unwrap_or_default());
+
+    let normalized_url = base_url.trim().trim_end_matches('/');
+    if normalized_url.is_empty() {
+        return Err(CatermError::Validation(
+            crate::error::ValidationError::InvalidFormat,
+        ));
+    }
+
+    let url = format!("{}/chat/completions", normalized_url);
+    let body = serde_json::json!({
+        "model": model,
+        "messages": [
+            {"role": "user", "content": "ping"}
+        ],
+        "max_tokens": 1
+    });
+
+    let mut req = ureq::post(&url);
+    if !resolved_key.is_empty() {
+        req = req.header("Authorization", &format!("Bearer {}", resolved_key));
+    }
+
+    let result = req.send_json(body);
+
+    match result {
+        Ok(mut resp) => {
+            let json_val: serde_json::Value = resp
+                .body_mut()
+                .read_json()
+                .map_err(|_| CatermError::Ai(AiError::ProviderUnavailable))?;
+
+            let text = json_val
+                .pointer("/choices/0/message/content")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+
+            Ok(format!("Koneksi berhasil. Model '{}' merespon: \"{}\"", model, text))
+        }
+        Err(ureq::Error::StatusCode(401)) | Err(ureq::Error::StatusCode(403)) => {
+            Err(CatermError::Ai(AiError::ApiKeyMissing))
+        }
+        Err(ureq::Error::StatusCode(402)) | Err(ureq::Error::StatusCode(429)) => {
+            Err(CatermError::Ai(AiError::QuotaExceeded))
+        }
+        Err(ureq::Error::StatusCode(_)) => {
+            Err(CatermError::Ai(AiError::ProviderUnavailable))
+        }
+        Err(_) => Err(CatermError::Ai(AiError::Timeout)),
+    }
+}
+
 #[cfg(test)]
 pub mod tests {
     use super::*;

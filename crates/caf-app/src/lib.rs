@@ -111,7 +111,7 @@ pub fn run_with_start(start: std::time::Instant) {
     {
         builder = builder.plugin(tauri_plugin_single_instance::init(|app, args, cwd| {
             use tauri::{Emitter, Manager};
-            for arg in args.into_iter().skip(1) {
+            for arg in args.into_iter() {
                 if let Some(path_str) = normalize_cli_path(&arg, Some(&cwd)) {
                     let _ = app.emit("open-file", path_str);
                     break;
@@ -217,6 +217,7 @@ pub fn run_with_start(start: std::time::Instant) {
             commands::delete_note,
             commands::get_ai_settings,
             commands::save_ai_settings,
+            commands::test_ai_connection,
             commands::set_ai_api_key,
             commands::clear_ai_api_key,
             commands::ai_preview_context,

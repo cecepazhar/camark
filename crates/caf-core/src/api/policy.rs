@@ -112,6 +112,11 @@ pub const COMMAND_POLICIES: &[CommandPolicy] = &[
         returns_list: false,
     },
     CommandPolicy {
+        name: "test_ai_connection",
+        policy: Policy::Requires("ai:manage"),
+        returns_list: false,
+    },
+    CommandPolicy {
         name: "set_ai_api_key",
         policy: Policy::Requires("ai:manage"),
         returns_list: false,

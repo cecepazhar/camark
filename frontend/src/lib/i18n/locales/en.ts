@@ -351,7 +351,11 @@ export const en: Dictionary = {
       license: 'License',
       licenseVal: 'MIT (with CATerm Attribution Notice)',
       author: 'Author',
-      authorVal: 'Cecep Saeful Azhar Hidayat, ST (Fathforce)'
+      authorVal: 'Cecep Saeful Azhar Hidayat, ST (Fathforce)',
+      testButton: 'Test AI Connection',
+      testing: 'Testing Connection...',
+      testOk: 'AI connection successful.',
+      testFail: 'AI connection failed'
     }
   },
   ambient: {

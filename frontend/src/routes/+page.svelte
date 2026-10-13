@@ -10,7 +10,7 @@
   import DOMPurify from 'dompurify';
   import katex from 'katex';
   import mermaid from 'mermaid';
-  import { getLayoutState } from '$lib/stores/layoutState.svelte';
+
   import { showToast } from '$lib/stores/uiNotifications.svelte';
   import { t } from '$lib/i18n/index.svelte';
   import { page } from '$app/state';
@@ -28,7 +28,6 @@
   } from '$lib/utils/markdownTools';
 
   // State
-  const layoutState = getLayoutState();
   let workspacePath = $state<string>('.');
   let fileTree = $state<FileNode[]>([]);
   let expandedDirs = $state<Set<string>>(new Set());
@@ -46,8 +45,8 @@
   );
   let renderedHtml = $state<string>('');
 
-  // View mode: 'split' | 'editor' | 'preview'
-  let viewMode = $state<'split' | 'editor' | 'preview'>('split');
+  // View mode: 'editor' | 'split' | 'preview' (default: open .md file = Preview)
+  let viewMode = $state<'editor' | 'split' | 'preview'>('preview');
   let isSaving = $state<boolean>(false);
 
   // Zen & Focus Mode
@@ -234,12 +233,10 @@
     if (isZenMode) {
       viewMode = 'editor';
       showFileTree = false;
-      layoutState.hideSidebar = true;
       showToast('Zen Mode aktif: Mengetik terpusat tanpa distraksi', 'info');
     } else {
-      layoutState.hideSidebar = false;
       showFileTree = true;
-      viewMode = 'split';
+      viewMode = 'preview';
     }
   }
 
@@ -348,9 +345,8 @@
     invoke<string | null>('get_initial_file_path')
       .then(async (path) => {
         if (path) {
-          viewMode = 'split';
+          viewMode = 'preview';
           showFileTree = false;
-          layoutState.hideSidebar = true;
           const parts = path.split('/');
           const name = parts[parts.length - 1] || 'document.md';
           openFile({ name, path, is_dir: false });
@@ -361,9 +357,8 @@
     // Listen for single instance open-file events
     listen<string>('open-file', (event) => {
       if (event.payload) {
-        viewMode = 'split';
+        viewMode = 'preview';
         showFileTree = false;
-        layoutState.hideSidebar = true;
         const parts = event.payload.split('/');
         const name = parts[parts.length - 1] || 'document.md';
         openFile({ name, path: event.payload, is_dir: false });
@@ -490,9 +485,8 @@
       currentFilePath = node.path;
       currentDocTitle = node.name;
       rawMarkdown = content;
-      if (viewMode === 'preview') {
-        viewMode = 'split';
-      }
+      // Buka file = selalu Preview (jaga mode Preview saat ganti file, tidak revert ke Split)
+      viewMode = 'preview';
       await tick();
       if (editorView) {
         editorView.dispatch({
@@ -708,18 +702,6 @@
   <!-- Sleek Studio Toolbar Bar (h-12 / 48px) -->
   <header class="h-12 border-b border-neutral-200 dark:border-neutral-800 bg-neutral-50/80 dark:bg-[#121212]/90 backdrop-blur-md px-3 sm:px-4 flex items-center justify-between z-10 shrink-0 no-print">
     <div class="flex items-center gap-2 sm:gap-3 min-w-0">
-      <!-- Toggle Sidebar Workspace -->
-      <button
-        onclick={() => layoutState.toggleSidebar()}
-        class="p-1.5 rounded-lg transition-colors {!layoutState.hideSidebar ? 'bg-cyan-500/10 text-cyan-600 dark:text-cyan-400' : 'text-neutral-500 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-white hover:bg-neutral-200/70 dark:hover:bg-neutral-800'}"
-        title={layoutState.hideSidebar ? "Tampilkan Menu Sidebar" : "Sembunyikan Menu Sidebar"}
-        aria-label="Toggle Navigation Sidebar"
-      >
-        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
-        </svg>
-      </button>
-
       <!-- Toggle Files / Vault Explorer Rail -->
       <button
         onclick={toggleFileTree}

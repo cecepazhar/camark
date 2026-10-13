@@ -161,3 +161,35 @@ export async function invoke_exportDocumentHtml(htmlContent: string, docTitle: s
   return invoke('export_document_html', { html_content: htmlContent, doc_title: docTitle, target_path: targetPath });
 }
 
+export async function invoke_exportDocumentPdf(htmlContent: string, docTitle: string, targetPath: string): Promise<any> {
+  return invoke('export_document_pdf', { html_content: htmlContent, doc_title: docTitle, target_path: targetPath });
+}
+
+export async function invoke_aiCopilotAction(action: string, selectedText: string): Promise<string> {
+  return invoke('ai_copilot_action', { action: action, selected_text: selectedText });
+}
+
+export async function invoke_proStatus(): Promise<any> {
+  return invoke('pro_status');
+}
+
+export async function invoke_proServerAvailable(): Promise<boolean> {
+  return invoke('pro_server_available');
+}
+
+export async function invoke_proLogin(email: string, password: string): Promise<any> {
+  return invoke('pro_login', { email: email, password: password });
+}
+
+export async function invoke_proRegister(email: string, password: string, name: string, locale: string): Promise<any> {
+  return invoke('pro_register', { email: email, password: password, name: name, locale: locale });
+}
+
+export async function invoke_proActivateLicense(licenseKey: string): Promise<any> {
+  return invoke('pro_activate_license', { license_key: licenseKey });
+}
+
+export async function invoke_proLogout(): Promise<any> {
+  return invoke('pro_logout');
+}
+

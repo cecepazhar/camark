@@ -26,12 +26,12 @@
   import { navItems as getNavItems, settingsNavItem } from '$lib/navItems';
   import CommandPalette from '$lib/components/CommandPalette.svelte';
   import { getPalette, openPalette, closePalette } from '$lib/stores/commandPalette.svelte';
-  import { getLayoutState } from '$lib/stores/layoutState.svelte';
+
   import AmbientGlow from '$lib/components/AmbientGlow.svelte';
   import { getAmbientStore } from '$lib/stores/ambient.svelte';
   import { getPro } from '$lib/stores/pro.svelte';
 
-  let isCollapsed = $state(false);
+  let isCollapsed = $state(true);
   let isVaultUnlocked = $state(true); // Open directly without blocking lockscreen
   let pendingCrashReport = $state<ScrubbedCrashReport | null>(null);
   let showAboutModal = $state(false);
@@ -42,7 +42,6 @@
   const feedbackPrompt = getFeedbackPromptState();
   const toasts = $derived(getToasts());
   const palette = getPalette();
-  const layoutState = getLayoutState();
   const ambient = getAmbientStore();
   const pro = getPro();
 
@@ -408,7 +407,7 @@
 
       <!-- Desktop Sleek Sidebar with Collapsible Rail -->
       <aside
-        class="{layoutState.hideSidebar ? 'hidden' : 'hidden md:flex'} flex-col shrink-0 will-change-[width] {isCollapsed ? 'w-16' : 'w-60'}"
+        class="hidden md:flex flex-col shrink-0 will-change-[width] {isCollapsed ? 'w-16' : 'w-60'}"
         aria-label="Desktop Sidebar"
       >
         <!-- Brand & Sidebar Toggle -->

@@ -12,7 +12,7 @@
   import { getPro } from '$lib/stores/pro.svelte';
   import { showToast, confirmModal } from '$lib/stores/uiNotifications.svelte';
   import { changeMasterPassword, MIN_VAULT_PASSWORD_LEN } from '$lib/api/vault';
-  import { getAiSettings, saveAiSettings, type AiSettings } from '$lib/api/ai';
+  import { getAiSettings, saveAiSettings, testAiConnection, type AiSettings } from '$lib/api/ai';
   import { listProfiles, saveProfile as saveFamilyProfile, type ProfileRecord } from '$lib/api/profiles';
   import { exportEncryptedBackup, importEncryptedBackup } from '$lib/api/prefs';
   import { proActivateLicense, proLogout, type ProAccount } from '$lib/api/pro';
@@ -196,25 +196,47 @@
 
   // AI Configuration State
   let aiSettings = $state<AiSettings>({
-    enabled: true,
-    provider: 'openai',
-    endpoint: 'https://api.openai.com/v1',
-    api_key: '',
-    model: 'gpt-4o-mini'
+    mode: 'byo',
+    base_url: 'http://localhost:20128/v1',
+    model: 'ZA126_PRO',
+    has_api_key: false
   });
+  let aiApiKeyInput = $state('');
   let showAiApiKey = $state(false);
   let isSavingAi = $state(false);
+  let isTestingAi = $state(false);
+  let aiTestResult = $state<{ ok: boolean; message: string } | null>(null);
 
   async function handleSaveAi(e: Event) {
     e.preventDefault();
     isSavingAi = true;
     try {
-      await saveAiSettings(aiSettings);
+      // Force mode to byo when saving custom config
+      aiSettings.mode = 'byo';
+      await saveAiSettings(aiSettings, aiApiKeyInput);
+      aiApiKeyInput = '';
+      aiSettings = await getAiSettings();
       showToast(t('settings.ai.savedToast'), 'success');
     } catch (e: any) {
       showToast(e?.message || 'Failed to save AI settings', 'error');
     } finally {
       isSavingAi = false;
+    }
+  }
+
+  async function handleTestAi() {
+    isTestingAi = true;
+    aiTestResult = null;
+    try {
+      const keyToSend = aiApiKeyInput.trim().length > 0 ? aiApiKeyInput : undefined;
+      const msg = await testAiConnection(aiSettings.base_url, aiSettings.model, keyToSend);
+      aiTestResult = { ok: true, message: msg };
+      showToast(t('settings.ai.testOk'), 'success');
+    } catch (e: any) {
+      aiTestResult = { ok: false, message: e?.message || 'Connection failed' };
+      showToast(t('settings.ai.testFail'), 'error');
+    } finally {
+      isTestingAi = false;
     }
   }
 
@@ -693,26 +715,12 @@
 
       <form onsubmit={handleSaveAi} class="{SUBCARD} space-y-4">
         <div>
-          <label for="ai-provider" class={LABEL}>{t('settings.ai.provider')}</label>
-          <select
-            id="ai-provider"
-            bind:value={aiSettings.provider}
-            class={INPUT}
-          >
-            <option value="openai">OpenAI / OpenAI-Compatible (9Router, OpenRouter, PBS)</option>
-            <option value="anthropic">Anthropic Claude</option>
-            <option value="ollama">Ollama (Local / Private)</option>
-            <option value="hosted">Hosted Fathforce Proxy</option>
-          </select>
-        </div>
-
-        <div>
           <label for="ai-endpoint" class={LABEL}>{t('settings.ai.endpoint')}</label>
           <input
             id="ai-endpoint"
             type="text"
-            bind:value={aiSettings.endpoint}
-            placeholder="https://api.openai.com/v1"
+            bind:value={aiSettings.base_url}
+            placeholder="http://localhost:20128/v1"
             class="{INPUT} font-mono"
           />
         </div>
@@ -724,8 +732,8 @@
               <input
                 id="ai-key"
                 type={showAiApiKey ? 'text' : 'password'}
-                bind:value={aiSettings.api_key}
-                placeholder="sk-..."
+                bind:value={aiApiKeyInput}
+                placeholder={aiSettings.has_api_key ? '•••••••• (Tersimpan)' : 'sk-...'}
                 class="{INPUT} font-mono pr-10"
               />
               <button
@@ -753,7 +761,7 @@
               id="ai-model"
               type="text"
               bind:value={aiSettings.model}
-              placeholder="gpt-4o-mini"
+              placeholder="ZA126_PRO"
               class="{INPUT} font-mono"
             />
           </div>
@@ -773,7 +781,15 @@
           </label>
         </div>
 
-        <div class="flex justify-end pt-2">
+        <div class="flex justify-end pt-2 gap-2">
+          <button
+            type="button"
+            disabled={isTestingAi}
+            class="px-4 py-2 border border-cyan-600/40 hover:bg-cyan-600/5 disabled:opacity-50 text-cyan-700 dark:text-cyan-400 text-xs font-semibold rounded-lg transition-colors cursor-pointer"
+            onclick={handleTestAi}
+          >
+            {isTestingAi ? t('settings.ai.testing') : t('settings.ai.testButton')}
+          </button>
           <button
             type="submit"
             disabled={isSavingAi}
@@ -782,6 +798,12 @@
             {isSavingAi ? t('settings.ai.saving') : t('settings.ai.saveButton')}
           </button>
         </div>
+
+        {#if aiTestResult}
+          <div class="mt-3 p-3 rounded-lg text-xs border {aiTestResult.ok ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-900 text-emerald-700 dark:text-emerald-300' : 'bg-red-50 dark:bg-red-950/40 border-red-200 dark:border-red-900 text-red-700 dark:text-red-300'}">
+            {aiTestResult.message}
+          </div>
+        {/if}
       </form>
     </div>
   {:else if activeTab === 'backup'}

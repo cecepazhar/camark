@@ -2193,6 +2193,12 @@
           "markdownDescription": "Enables the submit_feedback command without any pre-configured scope."
         },
         {
+          "description": "Enables the test_ai_connection command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-test-ai-connection",
+          "markdownDescription": "Enables the test_ai_connection command without any pre-configured scope."
+        },
+        {
           "description": "Enables the validate_vault_password command without any pre-configured scope.",
           "type": "string",
           "const": "allow-validate-vault-password",
@@ -2479,6 +2485,12 @@
           "type": "string",
           "const": "deny-submit-feedback",
           "markdownDescription": "Denies the submit_feedback command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the test_ai_connection command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-test-ai-connection",
+          "markdownDescription": "Denies the test_ai_connection command without any pre-configured scope."
         },
         {
           "description": "Denies the validate_vault_password command without any pre-configured scope.",

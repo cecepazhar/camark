@@ -1,11 +1,15 @@
 [package]
-name = "caf-app"
+name = "camark"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 authors.workspace = true
 license.workspace = true
 description = "CAMark v2 desktop shell — thin Tauri binding layer over caf-core. No business logic here (K2-1)."
+
+[[bin]]
+name = "camark"
+path = "src/main.rs"
 
 [lib]
 name = "caf_app_lib"

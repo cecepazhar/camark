@@ -48,11 +48,16 @@ export interface ContextPayload {
 }
 
 export interface AiSettings {
-  enabled: boolean;
-  provider: string;
-  api_key: string;
+  mode: 'off' | 'byo' | 'hosted';
+  base_url: string;
   model: string;
-  endpoint?: string | null;
+  temperature?: number;
+  response_language?: string;
+  tone?: string;
+  custom_instructions?: string;
+  privacy_level_default?: 'summary' | 'detailed' | 'full';
+  allow_full_detail_for_local?: boolean;
+  has_api_key?: boolean;
 }
 
 export interface AiChatResponse {
@@ -167,6 +172,18 @@ export async function cmdAiChat(args: {
     prompt: args.prompt,
     privacy_level: args.privacyLevel,
     consent_given: args.consentGiven,
+  });
+}
+
+export async function cmdTestAiConnection(args: {
+  baseUrl: string;
+  model: string;
+  apiKey?: string | null;
+}): Promise<string> {
+  return await invoke<string>('test_ai_connection', {
+    base_url: args.baseUrl,
+    model: args.model,
+    api_key: args.apiKey ?? null,
   });
 }
 

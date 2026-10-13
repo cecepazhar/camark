@@ -138,6 +138,15 @@ pub async fn save_ai_settings(settings: ai::AiSettings) -> Result<(), CafError> 
 }
 
 #[tauri::command]
+pub async fn test_ai_connection(
+    base_url: String,
+    model: String,
+    api_key: Option<String>
+) -> Result<String, CafError> {
+    run_blocking(move || ai::test_connection(&base_url, &model, api_key.as_deref())).await
+}
+
+#[tauri::command]
 pub async fn set_ai_api_key(api_key: String) -> Result<(), CafError> {
     run_blocking(move || ai::set_ai_api_key(&api_key)).await
 }
