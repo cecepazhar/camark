@@ -456,7 +456,18 @@ export const en: Dictionary = {
     fileStorageLabel: '📁 Plaintext File',
     untitledDocument: 'Untitled Document.md',
     defaultNewFileName: 'new_document.md',
-    defaultNewFolderName: 'new_folder'
+    defaultNewFolderName: 'new_folder',
+    setupVaultTitle: 'Setup Master Password',
+    setupVaultDesc: 'Set a strong master password (min. 8 characters) to encrypt your SQLCipher vault.',
+    unlockVaultTitle: 'Unlock Secret Vault',
+    unlockVaultDesc: 'Enter your master password to access encrypted notes.',
+    masterPasswordPlaceholder: 'Master Password',
+    confirmPasswordPlaceholder: 'Confirm Master Password',
+    unlockVaultBtn: 'Unlock Vault',
+    setupVaultBtn: 'Set Password & Unlock',
+    passwordMismatch: 'Passwords do not match.',
+    passwordMinLength: 'Master password must be at least 8 characters.',
+    cancelBtn: 'Cancel'
   }
 };
 

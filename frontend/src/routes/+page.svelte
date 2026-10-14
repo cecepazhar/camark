@@ -54,6 +54,13 @@
   );
   let currentFilePath = $state<string | null>(null);
   let isVaultMode = $state<boolean>(false);
+  let isVaultUnlocked = $state<boolean>(false);
+  let vaultModalOpen = $state<boolean>(false);
+  let vaultPassword = $state<string>('');
+  let vaultConfirmPassword = $state<string>('');
+  let isVaultSetup = $state<boolean>(false);
+  let vaultPasswordError = $state<string>('');
+  let isVaultModalLoading = $state<boolean>(false);
   let vaultDocs = $state<any[]>([]);
   let currentDocTitle = $state<string>('Untitled Document.md');
   const DEMO_MD_EN = `# Welcome to CAMark Pro
@@ -152,6 +159,23 @@ graph TD;
 
   // Custom marked renderer for Pro Markdown (Zebra tables, code block headers with copy buttons)
   const proRenderer = new marked.Renderer();
+
+  // Custom heading renderer: inject id slugs so internal anchor links (e.g. #3-core-architecture)
+  // resolve within the scrollable preview container.
+  const originalHeading = proRenderer.heading;
+  proRenderer.heading = function (token: any) {
+    const text = typeof token === 'object' ? token.text : arguments[0];
+    const depth = typeof token === 'object' ? token.depth : arguments[1];
+    const plain = String(text).replace(/<[^>]+>/g, '');
+    const slug = plain
+      .toLowerCase()
+      .replace(/\/\s*$/, '')
+      .replace(/[^\w\s-]/g, '')
+      .trim()
+      .replace(/\s+/g, '-');
+    const html = originalHeading.call(this, token);
+    return html.replace(/^<h(\d)/, `<h$1 id="${slug}">`);
+  };
 
   // Custom Table with modern wrapper
   const originalTable = proRenderer.table;
@@ -770,7 +794,77 @@ graph TD;
     }, 600);
   }
 
+  async function enterVaultMode() {
+    isVaultMode = true;
+    try {
+      const initialized = await invoke<boolean>('is_vault_initialized');
+      isVaultSetup = !initialized;
+      if (!isVaultUnlocked) {
+        vaultModalOpen = true;
+        vaultPassword = '';
+        vaultConfirmPassword = '';
+        vaultPasswordError = '';
+        return;
+      }
+      await loadVaultDocs();
+    } catch (e) {
+      console.warn('Vault status check error:', e);
+    }
+  }
+
+  async function leaveVaultMode() {
+    isVaultMode = false;
+    isVaultUnlocked = false;
+    vaultDocs = [];
+    try {
+      await invoke('lock_vault');
+    } catch (e) {
+      console.warn('Failed to lock vault:', e);
+    }
+  }
+
+  async function handleVaultPasswordSubmit() {
+    vaultPasswordError = '';
+    const pass = vaultPassword.trim();
+    if (pass.length < 8) {
+      vaultPasswordError = t('editor.passwordMinLength');
+      return;
+    }
+    if (isVaultSetup) {
+      if (pass !== vaultConfirmPassword.trim()) {
+        vaultPasswordError = t('editor.passwordMismatch');
+        return;
+      }
+    }
+
+    isVaultModalLoading = true;
+    try {
+      await invoke('validate_vault_password', { password: pass });
+      isVaultUnlocked = true;
+      vaultModalOpen = false;
+      vaultPassword = '';
+      vaultConfirmPassword = '';
+      await loadVaultDocs();
+      showToast(isVaultSetup ? 'Master password set & vault unlocked' : 'Vault unlocked', 'success');
+    } catch (e: any) {
+      vaultPasswordError = typeof e === 'string' ? e : (e?.message || 'Master password salah');
+    } finally {
+      isVaultModalLoading = false;
+    }
+  }
+
+  function closeVaultModal() {
+    vaultModalOpen = false;
+    vaultPassword = '';
+    vaultConfirmPassword = '';
+    vaultPasswordError = '';
+    if (!isVaultUnlocked) {
+      isVaultMode = false;
+    }
+  }
+
   async function loadVaultDocs() {
+    if (!isVaultUnlocked) return;
     try {
       vaultDocs = await invoke<any[]>('vault_list_documents', { callerProfileId: 'default' });
       if (vaultDocs.length > 0 && !currentFilePath?.startsWith('vault://')) {
@@ -782,6 +876,10 @@ graph TD;
   }
 
   async function openVaultDoc(doc: any) {
+    if (!isVaultUnlocked) {
+      await enterVaultMode();
+      return;
+    }
     const tabId = `vault://${doc.id}`;
     const title = `🔒 ${doc.title}`;
     openTab(tabId, title, true);
@@ -800,7 +898,7 @@ graph TD;
   }
 
   async function saveVaultDoc() {
-    if (!currentFilePath?.startsWith('vault://')) return;
+    if (!currentFilePath?.startsWith('vault://') || !isVaultUnlocked) return;
     const docId = currentFilePath.replace('vault://', '');
     const title = currentDocTitle.replace(/^🔒\s*/, '');
     try {
@@ -815,8 +913,17 @@ graph TD;
 
   async function createNewFile() {
     if (isVaultMode) {
-      const title = prompt(t('editor.vaultNotePrompt'), t('editor.vaultNoteDefaultTitle'));
+      if (!isVaultUnlocked) {
+        await enterVaultMode();
+        return;
+      }
+      const nextIndex = vaultDocs.length + 1;
+      const defaultVaultTitle = `files-${nextIndex}.md`;
+      let title = prompt(t('editor.vaultNotePrompt'), defaultVaultTitle);
       if (!title) return;
+      if (!title.endsWith('.md')) {
+        title = `${title}.md`;
+      }
       try {
         const newDoc: any = await invoke('vault_save_document', {
           input: { title, content: '# ' + title + '\n\n', tags: [] },
@@ -935,6 +1042,58 @@ graph TD;
           autoSave();
         }
       }
+      return;
+    }
+
+    // Markdown Links & Anchors (TOC internal headings, relative .md, external web)
+    const anchor = target.closest('a') as HTMLAnchorElement | null;
+    if (anchor) {
+      const href = anchor.getAttribute('href');
+      if (href) {
+        e.preventDefault();
+        e.stopPropagation();
+
+        if (href.startsWith('#')) {
+          const targetId = decodeURIComponent(href.slice(1));
+          if (previewElement) {
+            let el = previewElement.querySelector(`#${CSS.escape(targetId)}`);
+            if (!el) {
+              const normalized = targetId.toLowerCase().replace(/[^\w\s-]/g, '').trim().replace(/\s+/g, '-');
+              el = previewElement.querySelector(`#${CSS.escape(normalized)}`);
+              if (!el) {
+                const headings = Array.from(previewElement.querySelectorAll('h1, h2, h3, h4, h5, h6'));
+                el = headings.find((h) => {
+                  const hText = (h.textContent || '').toLowerCase().replace(/[^\w\s-]/g, '').trim().replace(/\s+/g, '-');
+                  return hText === normalized || hText.includes(normalized) || normalized.includes(hText);
+                }) || null;
+              }
+            }
+            if (el) {
+              el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+          }
+        } else if (href.startsWith('http://') || href.startsWith('https://') || href.startsWith('mailto:')) {
+          try {
+            await invoke('workspace_reveal_file', { filePath: href });
+          } catch {
+            window.open(href, '_blank');
+          }
+        } else if (href.endsWith('.md') || href.includes('.md#') || !href.includes('://')) {
+          let targetPath = href.split('#')[0];
+          if (currentFilePath && !currentFilePath.startsWith('vault://')) {
+            const currentDir = currentFilePath.includes('/') ? currentFilePath.substring(0, currentFilePath.lastIndexOf('/')) : '.';
+            if (targetPath.startsWith('./')) {
+              targetPath = `${currentDir}/${targetPath.slice(2)}`;
+            } else if (!targetPath.startsWith('/')) {
+              targetPath = `${currentDir}/${targetPath}`;
+            }
+          }
+          const parts = targetPath.split('/');
+          const name = parts[parts.length - 1] || 'document.md';
+          openFile({ name, path: targetPath, is_dir: false });
+        }
+      }
+      return;
     }
   }
 </script>
@@ -954,12 +1113,6 @@ graph TD;
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
         </svg>
       </button>
-
-      {#if isSaving}
-        <span class="text-[10px] px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/20 shrink-0 font-mono">
-          {t('editor.saving')}
-        </span>
-      {/if}
 
       <div class="h-4 w-px bg-neutral-300 dark:bg-neutral-800 mx-0.5"></div>
     </div>
@@ -1031,6 +1184,12 @@ graph TD;
 
     <!-- Right: Exporters & Mode Switcher -->
     <div class="flex items-center gap-2 shrink-0">
+      {#if isSaving}
+        <span class="text-[10px] px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/20 shrink-0 font-mono animate-pulse">
+          {t('editor.saving')}
+        </span>
+      {/if}
+
       <!-- PDF Print Exporter -->
       <button
         onclick={exportPdf}
@@ -1084,17 +1243,20 @@ graph TD;
   <!-- Main Multi-Pane Body -->
   <div class="flex-1 flex overflow-hidden min-h-0 relative">
     <!-- Workspace Files / Vault Explorer Sidebar -->
-    <aside class="{showFileTree ? 'w-60 sm:w-64' : 'hidden'} border-r border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-[#111111] flex flex-col shrink-0 select-none file-tree-sidebar no-print">
+    <aside
+      oncontextmenu={(e) => e.preventDefault()}
+      class="{showFileTree ? 'w-60 sm:w-64' : 'hidden'} border-r border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-[#111111] flex flex-col shrink-0 select-none file-tree-sidebar no-print"
+    >
       <!-- Mode Switcher Tabs: Files vs Encrypted Vault -->
       <div class="grid grid-cols-2 p-1.5 border-b border-neutral-200 dark:border-neutral-800/80 gap-1 bg-neutral-100/80 dark:bg-neutral-950/60">
         <button
-          onclick={() => { isVaultMode = false; }}
+          onclick={leaveVaultMode}
           class="py-1 px-2 rounded-md text-[11px] font-semibold transition-all {(!isVaultMode) ? 'bg-white dark:bg-neutral-800 text-cyan-600 dark:text-cyan-400 shadow-2xs' : 'text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'}"
         >
           📁 {t('editor.filesTab')}
         </button>
         <button
-          onclick={() => { isVaultMode = true; loadVaultDocs(); }}
+          onclick={enterVaultMode}
           class="py-1 px-2 rounded-md text-[11px] font-semibold transition-all {isVaultMode ? 'bg-white dark:bg-neutral-800 text-amber-600 dark:text-amber-400 shadow-2xs' : 'text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'}"
         >
           🔒 {t('editor.vaultTab')}
@@ -1376,6 +1538,88 @@ graph TD;
           <span>{t('editor.revealInFileManager')}</span>
         </button>
       {/if}
+    </div>
+  {/if}
+
+  <!-- Secret Vault Setup / Unlock Password Modal -->
+  {#if vaultModalOpen}
+    <div
+      role="presentation"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-xs p-4 select-none animate-in fade-in duration-100"
+      onclick={(e) => {
+        if (e.target === e.currentTarget) closeVaultModal();
+      }}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="vault-modal-title"
+        class="w-full max-w-sm rounded-2xl bg-neutral-900 border border-neutral-700/80 p-5 shadow-2xl shadow-black text-neutral-200"
+      >
+        <div class="flex items-center gap-2 mb-2 text-amber-400">
+          <svg class="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+          </svg>
+          <h2 id="vault-modal-title" class="text-sm font-bold text-white tracking-wide">
+            {isVaultSetup ? t('editor.setupVaultTitle') : t('editor.unlockVaultTitle')}
+          </h2>
+        </div>
+
+        <p class="text-xs text-neutral-400 mb-4 leading-relaxed">
+          {isVaultSetup ? t('editor.setupVaultDesc') : t('editor.unlockVaultDesc')}
+        </p>
+
+        <form
+          onsubmit={(e) => {
+            e.preventDefault();
+            handleVaultPasswordSubmit();
+          }}
+          class="space-y-3"
+        >
+          <div>
+            <input
+              type="password"
+              bind:value={vaultPassword}
+              placeholder={t('editor.masterPasswordPlaceholder')}
+              class="w-full px-3 py-2 rounded-xl bg-neutral-950 border border-neutral-700 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-amber-500 transition-colors"
+            />
+          </div>
+
+          {#if isVaultSetup}
+            <div>
+              <input
+                type="password"
+                bind:value={vaultConfirmPassword}
+                placeholder={t('editor.confirmPasswordPlaceholder')}
+                class="w-full px-3 py-2 rounded-xl bg-neutral-950 border border-neutral-700 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-amber-500 transition-colors"
+              />
+            </div>
+          {/if}
+
+          {#if vaultPasswordError}
+            <div class="text-[11px] text-rose-400 font-mono">
+              {vaultPasswordError}
+            </div>
+          {/if}
+
+          <div class="flex items-center justify-end gap-2 pt-2">
+            <button
+              type="button"
+              onclick={closeVaultModal}
+              class="px-3 py-1.5 rounded-lg text-xs font-medium text-neutral-400 hover:text-white hover:bg-neutral-800 transition-colors"
+            >
+              {t('editor.cancelBtn')}
+            </button>
+            <button
+              type="submit"
+              disabled={isVaultModalLoading || !vaultPassword.trim()}
+              class="px-4 py-1.5 rounded-lg text-xs font-semibold bg-amber-500 hover:bg-amber-400 text-neutral-950 disabled:opacity-40 transition-colors shadow-md shadow-amber-500/20"
+            >
+              {isVaultModalLoading ? '...' : (isVaultSetup ? t('editor.setupVaultBtn') : t('editor.unlockVaultBtn'))}
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   {/if}
 </div>

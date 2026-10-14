@@ -454,7 +454,18 @@ export const id: Dictionary = {
     fileStorageLabel: '📁 Plaintext File',
     untitledDocument: 'Dokumen Tanpa Judul.md',
     defaultNewFileName: 'dokumen_baru.md',
-    defaultNewFolderName: 'folder_baru'
+    defaultNewFolderName: 'folder_baru',
+    setupVaultTitle: 'Setup Master Password',
+    setupVaultDesc: 'Tentukan master password yang kuat (min. 8 karakter) untuk mengenkripsi brankas SQLCipher Anda.',
+    unlockVaultTitle: 'Buka Brankas Rahasia',
+    unlockVaultDesc: 'Masukkan master password untuk mengakses catatan terenkripsi.',
+    masterPasswordPlaceholder: 'Master Password',
+    confirmPasswordPlaceholder: 'Konfirmasi Master Password',
+    unlockVaultBtn: 'Buka Brankas',
+    setupVaultBtn: 'Simpan Password & Buka',
+    passwordMismatch: 'Password dan konfirmasi tidak cocok.',
+    passwordMinLength: 'Master password minimal 8 karakter.',
+    cancelBtn: 'Batal'
   }
 };
 
