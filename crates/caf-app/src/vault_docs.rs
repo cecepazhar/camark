@@ -17,9 +17,11 @@ pub struct VaultDocument {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VaultDocInput {
+    #[serde(default)]
     pub id: Option<String>,
     pub title: String,
     pub content: String,
+    #[serde(default)]
     pub tags: Vec<String>,
 }
 

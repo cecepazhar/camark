@@ -805,7 +805,7 @@ graph TD;
     const title = currentDocTitle.replace(/^🔒\s*/, '');
     try {
       await invoke('vault_save_document', {
-        input: { id: docId, title, content: rawMarkdown },
+        input: { id: docId, title, content: rawMarkdown, tags: [] },
         callerProfileId: 'default',
       });
     } catch (e) {
@@ -819,7 +819,7 @@ graph TD;
       if (!title) return;
       try {
         const newDoc: any = await invoke('vault_save_document', {
-          input: { title, content: '# ' + title + '\n\n' },
+          input: { title, content: '# ' + title + '\n\n', tags: [] },
           callerProfileId: 'default',
         });
         await loadVaultDocs();
