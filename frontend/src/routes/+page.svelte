@@ -20,6 +20,9 @@
     getActiveTab,
     openTab,
     closeTab,
+    closeOtherTabs,
+    closeTabsToRight,
+    closeAllTabs,
     setActiveTab,
     setDirty,
     restoreTabs,
@@ -553,6 +556,90 @@
     }
   }
 
+  // Tab Context Menu State
+  let tabContextMenu = $state<{
+    open: boolean;
+    x: number;
+    y: number;
+    tab: DocTab | null;
+  }>({
+    open: false,
+    x: 0,
+    y: 0,
+    tab: null,
+  });
+
+  function handleTabContextMenu(e: MouseEvent, tab: DocTab) {
+    e.preventDefault();
+    e.stopPropagation();
+    const menuWidth = 220;
+    const menuHeight = 240;
+    const x = Math.min(e.clientX, window.innerWidth - menuWidth - 8);
+    const y = Math.min(e.clientY, window.innerHeight - menuHeight - 8);
+    tabContextMenu = {
+      open: true,
+      x: Math.max(8, x),
+      y: Math.max(8, y),
+      tab,
+    };
+  }
+
+  function closeTabContextMenu() {
+    tabContextMenu.open = false;
+    tabContextMenu.tab = null;
+  }
+
+  async function handleContextMenuAction(action: 'close' | 'closeOthers' | 'closeRight' | 'closeAll' | 'copyPath' | 'copyName' | 'reveal') {
+    const target = tabContextMenu.tab;
+    closeTabContextMenu();
+    if (!target) return;
+
+    switch (action) {
+      case 'close':
+        await handleCloseTab(target.id);
+        break;
+      case 'closeOthers':
+        closeOtherTabs(target.id);
+        await loadTabContent(target);
+        break;
+      case 'closeRight':
+        closeTabsToRight(target.id);
+        const cur = getActiveTab();
+        if (cur) await loadTabContent(cur);
+        break;
+      case 'closeAll':
+        closeAllTabs();
+        currentFilePath = null;
+        currentDocTitle = 'Untitled Document.md';
+        rawMarkdown = '';
+        if (editorView) {
+          editorView.dispatch({
+            changes: { from: 0, to: editorView.state.doc.length, insert: '' },
+          });
+        }
+        renderedHtml = '';
+        break;
+      case 'copyPath':
+        await navigator.clipboard.writeText(target.path);
+        showToast('Path berkas berhasil disalin!', 'success');
+        break;
+      case 'copyName':
+        await navigator.clipboard.writeText(target.title.replace(/^🔒\s*/, ''));
+        showToast('Nama berkas berhasil disalin!', 'success');
+        break;
+      case 'reveal':
+        if (!target.isVault) {
+          try {
+            await invoke('workspace_reveal_file', { filePath: target.path });
+          } catch (err) {
+            console.warn('Failed to reveal file:', err);
+            showToast('Gagal membuka file manager', 'error');
+          }
+        }
+        break;
+    }
+  }
+
   async function handleCloseTab(id: string) {
     closeTab(id);
     const nextActive = getActiveTab();
@@ -829,6 +916,7 @@
           role="button"
           tabindex="0"
           onclick={() => handleSelectTab(tab.id)}
+          oncontextmenu={(e) => handleTabContextMenu(e, tab)}
           onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleSelectTab(tab.id); }}
           class="group relative h-8 px-3 rounded-t-md flex items-center gap-2 text-xs font-mono transition-all cursor-pointer border-t border-x shrink-0 {isActive ? 'bg-white dark:bg-[#1a1a1a] text-cyan-600 dark:text-cyan-400 border-neutral-300 dark:border-neutral-700/80 shadow-2xs font-semibold' : 'bg-transparent border-transparent text-neutral-500 hover:text-neutral-800 dark:text-neutral-400 dark:hover:text-neutral-200 hover:bg-neutral-200/50 dark:hover:bg-neutral-800/40'}"
           title={tab.path}
@@ -1147,6 +1235,97 @@
       </span>
     </div>
   </footer>
+
+  <!-- Custom Floating Tab Context Menu -->
+  {#if tabContextMenu.open && tabContextMenu.tab}
+    <!-- Backdrop for dismissing -->
+    <div
+      role="presentation"
+      class="fixed inset-0 z-50 bg-transparent cursor-default"
+      onclick={closeTabContextMenu}
+      oncontextmenu={(e) => { e.preventDefault(); closeTabContextMenu(); }}
+    ></div>
+
+    <!-- Menu Panel (CAUI Theme) -->
+    <div
+      role="menu"
+      tabindex="-1"
+      class="fixed z-50 w-52 py-1 bg-neutral-900 border border-neutral-700/80 rounded-xl shadow-2xl shadow-black/80 text-xs font-sans text-neutral-300 select-none animate-in fade-in duration-75 overflow-hidden"
+      style="left: {tabContextMenu.x}px; top: {tabContextMenu.y}px;"
+      onclick={(e) => e.stopPropagation()}
+      onkeydown={(e) => { if (e.key === 'Escape') closeTabContextMenu(); }}
+    >
+      <button
+        type="button"
+        role="menuitem"
+        onclick={() => handleContextMenuAction('close')}
+        class="w-full px-3 py-1.5 flex items-center justify-between text-left hover:bg-cyan-500/15 hover:text-cyan-400 transition-colors"
+      >
+        <span>Tutup Tab</span>
+        <span class="text-[10px] text-neutral-500 font-mono">Ctrl+W</span>
+      </button>
+
+      {#if tabs.length > 1}
+        <button
+          type="button"
+          role="menuitem"
+          onclick={() => handleContextMenuAction('closeOthers')}
+          class="w-full px-3 py-1.5 flex items-center justify-between text-left hover:bg-cyan-500/15 hover:text-cyan-400 transition-colors"
+        >
+          <span>Tutup Tab Lain</span>
+        </button>
+
+        <button
+          type="button"
+          role="menuitem"
+          onclick={() => handleContextMenuAction('closeRight')}
+          class="w-full px-3 py-1.5 flex items-center justify-between text-left hover:bg-cyan-500/15 hover:text-cyan-400 transition-colors"
+        >
+          <span>Tutup Tab ke Kanan</span>
+        </button>
+      {/if}
+
+      <button
+        type="button"
+        role="menuitem"
+        onclick={() => handleContextMenuAction('closeAll')}
+        class="w-full px-3 py-1.5 flex items-center justify-between text-left hover:bg-rose-500/15 hover:text-rose-400 transition-colors text-rose-300"
+      >
+        <span>Tutup Semua Tab</span>
+      </button>
+
+      <div class="h-px bg-neutral-800 my-1"></div>
+
+      <button
+        type="button"
+        role="menuitem"
+        onclick={() => handleContextMenuAction('copyPath')}
+        class="w-full px-3 py-1.5 flex items-center justify-between text-left hover:bg-cyan-500/15 hover:text-cyan-400 transition-colors"
+      >
+        <span>Salin Path Berkas</span>
+      </button>
+
+      <button
+        type="button"
+        role="menuitem"
+        onclick={() => handleContextMenuAction('copyName')}
+        class="w-full px-3 py-1.5 flex items-center justify-between text-left hover:bg-cyan-500/15 hover:text-cyan-400 transition-colors"
+      >
+        <span>Salin Nama Berkas</span>
+      </button>
+
+      {#if !tabContextMenu.tab.isVault}
+        <button
+          type="button"
+          role="menuitem"
+          onclick={() => handleContextMenuAction('reveal')}
+          class="w-full px-3 py-1.5 flex items-center justify-between text-left hover:bg-cyan-500/15 hover:text-cyan-400 transition-colors"
+        >
+          <span>Buka di File Manager</span>
+        </button>
+      {/if}
+    </div>
+  {/if}
 </div>
 
 <style>

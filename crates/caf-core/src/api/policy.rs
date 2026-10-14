@@ -211,6 +211,11 @@ pub const COMMAND_POLICIES: &[CommandPolicy] = &[
         returns_list: false,
     },
     CommandPolicy {
+        name: "workspace_reveal_file",
+        policy: Policy::Public,
+        returns_list: false,
+    },
+    CommandPolicy {
         name: "get_initial_file_path",
         policy: Policy::Public,
         returns_list: false,

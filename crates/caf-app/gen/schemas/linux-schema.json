@@ -2289,6 +2289,12 @@
           "markdownDescription": "Enables the workspace_rename_file command without any pre-configured scope."
         },
         {
+          "description": "Enables the workspace_reveal_file command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-workspace-reveal-file",
+          "markdownDescription": "Enables the workspace_reveal_file command without any pre-configured scope."
+        },
+        {
           "description": "Enables the workspace_write_file command without any pre-configured scope.",
           "type": "string",
           "const": "allow-workspace-write-file",
@@ -2581,6 +2587,12 @@
           "type": "string",
           "const": "deny-workspace-rename-file",
           "markdownDescription": "Denies the workspace_rename_file command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the workspace_reveal_file command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-workspace-reveal-file",
+          "markdownDescription": "Denies the workspace_reveal_file command without any pre-configured scope."
         },
         {
           "description": "Denies the workspace_write_file command without any pre-configured scope.",

@@ -18,7 +18,10 @@
   let { tabs, activeTabId, onSelectTab, onCloseTab, onNewTab }: Props = $props();
 </script>
 
-<div class="h-9 border-b border-neutral-200 dark:border-neutral-800 bg-neutral-100/90 dark:bg-[#141414] px-2 flex items-center gap-1 overflow-x-auto scrollbar-none select-none shrink-0 no-print">
+<div
+  oncontextmenu={(e) => e.preventDefault()}
+  class="h-9 border-b border-neutral-200 dark:border-neutral-800 bg-neutral-100/90 dark:bg-[#141414] px-2 flex items-center gap-1 overflow-x-auto scrollbar-none select-none shrink-0 no-print"
+>
   {#each tabs as tab (tab.id)}
     {@const isActive = tab.id === activeTabId}
     <div

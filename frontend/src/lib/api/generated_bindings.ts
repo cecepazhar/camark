@@ -145,6 +145,10 @@ export async function invoke_workspaceDeleteFile(filePath: string): Promise<any>
   return invoke('workspace_delete_file', { file_path: filePath });
 }
 
+export async function invoke_workspaceRevealFile(filePath: string): Promise<any> {
+  return invoke('workspace_reveal_file', { file_path: filePath });
+}
+
 export async function invoke_getInitialFilePath(): Promise<string | null> {
   return invoke('get_initial_file_path');
 }

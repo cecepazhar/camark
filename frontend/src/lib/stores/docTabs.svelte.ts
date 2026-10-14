@@ -93,6 +93,30 @@ export function closeTab(id: string): void {
   persist();
 }
 
+export function closeOtherTabs(id: string): void {
+  const target = tabs.find((t) => t.id === id);
+  if (!target) return;
+  tabs = [target];
+  activeTabId = id;
+  persist();
+}
+
+export function closeTabsToRight(id: string): void {
+  const idx = tabs.findIndex((t) => t.id === id);
+  if (idx === -1) return;
+  tabs = tabs.slice(0, idx + 1);
+  if (!tabs.some((t) => t.id === activeTabId)) {
+    activeTabId = id;
+  }
+  persist();
+}
+
+export function closeAllTabs(): void {
+  tabs = [];
+  activeTabId = null;
+  persist();
+}
+
 export function setActiveTab(id: string): void {
   activeTabId = id;
   persist();
