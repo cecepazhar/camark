@@ -2,7 +2,7 @@
 name = "CAMark"
 slug = "camark"
 bundle_id = "com.fathforce.camark"
-version = "1.0.12"
+version = "1.0.13"
 accent_color = "cyan"
 error_prefix = "CMRK"
 description = "High-Performance, Local-First & Zero-Knowledge Markdown Studio"

@@ -594,10 +594,77 @@ graph TD;
     }
   }
 
+  async function saveVaultDoc() {
+    if (!currentFilePath?.startsWith('vault://') || !isVaultUnlocked) return;
+    const docId = currentFilePath.replace('vault://', '');
+    const title = currentDocTitle.replace(/^🔒\s*/, '');
+    try {
+      await invoke('vault_save_document', {
+        input: { id: docId, title, content: rawMarkdown, tags: [] },
+        callerProfileId: 'default',
+      });
+      const existing = vaultDocs.find((d) => String(d.id) === String(docId));
+      if (existing) {
+        existing.content = rawMarkdown;
+        existing.title = title;
+      }
+    } catch (e) {
+      console.error('Failed to save vault doc:', e);
+    }
+  }
+
+  let saveTimeout: any;
+  function autoSave() {
+    if (!currentFilePath) return;
+    clearTimeout(saveTimeout);
+    saveTimeout = setTimeout(async () => {
+      isSaving = true;
+      try {
+        if (currentFilePath?.startsWith('vault://')) {
+          await saveVaultDoc();
+          if (activeTabId) setDirty(activeTabId, false);
+        } else if (currentFilePath) {
+          await invoke('workspace_write_file', { filePath: currentFilePath, content: rawMarkdown });
+          if (activeTabId) setDirty(activeTabId, false);
+        }
+      } catch (e) {
+        console.error('Save failed:', e);
+      } finally {
+        setTimeout(() => {
+          isSaving = false;
+        }, 300);
+      }
+    }, 600);
+  }
+
+  async function flushCurrentSave() {
+    if (saveTimeout) {
+      clearTimeout(saveTimeout);
+      saveTimeout = null;
+    }
+    if (currentFilePath?.startsWith('vault://')) {
+      await saveVaultDoc();
+    } else if (currentFilePath) {
+      try {
+        await invoke('workspace_write_file', { filePath: currentFilePath, content: rawMarkdown });
+      } catch (e) {
+        console.error('Failed writing file on flush:', e);
+      }
+    }
+    if (activeTabId) setDirty(activeTabId, false);
+  }
+
   async function loadTabContent(tab: DocTab) {
     if (tab.isVault) {
       const docId = tab.path.replace('vault://', '');
-      const doc = vaultDocs.find((d) => String(d.id) === docId);
+      if (!isVaultUnlocked) {
+        await enterVaultMode();
+        return;
+      }
+      if (!vaultDocs.find((d) => String(d.id) === String(docId))) {
+        vaultDocs = await invoke<any[]>('vault_list_documents', { callerProfileId: 'default' });
+      }
+      const doc = vaultDocs.find((d) => String(d.id) === String(docId));
       const content = doc?.content ?? '';
       currentFilePath = tab.path;
       currentDocTitle = tab.title;
@@ -631,9 +698,12 @@ graph TD;
   async function handleSelectTab(id: string) {
     setActiveTab(id);
     const target = tabs.find((t) => t.id === id);
-    if (target) {
-      await loadTabContent(target);
+    if (!target) return;
+    const prevActive = getActiveTab();
+    if (prevActive && prevActive.isDirty) {
+      await flushCurrentSave();
     }
+    await loadTabContent(target);
   }
 
   // Tab Context Menu State
@@ -768,30 +838,6 @@ graph TD;
     }
   }
 
-  let saveTimeout: any;
-  function autoSave() {
-    if (!currentFilePath) return;
-    clearTimeout(saveTimeout);
-    saveTimeout = setTimeout(async () => {
-      isSaving = true;
-      try {
-        if (currentFilePath?.startsWith('vault://')) {
-          await saveVaultDoc();
-          if (activeTabId) setDirty(activeTabId, false);
-        } else if (currentFilePath) {
-          await invoke('workspace_write_file', { filePath: currentFilePath, content: rawMarkdown });
-          if (activeTabId) setDirty(activeTabId, false);
-        }
-      } catch (e) {
-        console.error('Save failed:', e);
-      } finally {
-        setTimeout(() => {
-          isSaving = false;
-        }, 300);
-      }
-    }, 600);
-  }
-
   async function enterVaultMode() {
     isVaultMode = true;
     try {
@@ -878,12 +924,13 @@ graph TD;
       await enterVaultMode();
       return;
     }
-    const tabId = `vault://${doc.id}`;
-    const title = `🔒 ${doc.title}`;
+    const freshDoc = vaultDocs.find((d) => String(d.id) === String(doc.id)) || doc;
+    const tabId = `vault://${freshDoc.id}`;
+    const title = `🔒 ${freshDoc.title}`;
     openTab(tabId, title, true);
     currentFilePath = tabId;
     currentDocTitle = title;
-    rawMarkdown = doc.content || '';
+    rawMarkdown = freshDoc.content || '';
     await tick();
     if (editorView) {
       editorView.dispatch({
@@ -891,20 +938,6 @@ graph TD;
       });
     }
     renderMarkdown(rawMarkdown);
-  }
-
-  async function saveVaultDoc() {
-    if (!currentFilePath?.startsWith('vault://') || !isVaultUnlocked) return;
-    const docId = currentFilePath.replace('vault://', '');
-    const title = currentDocTitle.replace(/^🔒\s*/, '');
-    try {
-      await invoke('vault_save_document', {
-        input: { id: docId, title, content: rawMarkdown, tags: [] },
-        callerProfileId: 'default',
-      });
-    } catch (e) {
-      console.error('Failed to save vault doc:', e);
-    }
   }
 
   async function createNewFile() {
