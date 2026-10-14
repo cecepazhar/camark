@@ -24,15 +24,6 @@
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 fn main() {
-    #[cfg(target_os = "linux")]
-    {
-        // Prevent WebKitGTK Mesa/GBM/DMABUF double-free crash on Linux Intel Iris / Wayland
-        if std::env::var("WEBKIT_DISABLE_DMABUF_RENDERER").is_err() {
-            unsafe {
-                std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
-            }
-        }
-    }
     let start = std::time::Instant::now();
     caf_app_lib::run_with_start(start);
 }

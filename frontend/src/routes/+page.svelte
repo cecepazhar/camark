@@ -14,6 +14,19 @@
   import { showToast } from '$lib/stores/uiNotifications.svelte';
   import { t } from '$lib/i18n/index.svelte';
   import { page } from '$app/state';
+  import {
+    getDocTabs,
+    getActiveTabId,
+    getActiveTab,
+    openTab,
+    closeTab,
+    setActiveTab,
+    setDirty,
+    restoreTabs,
+    getViewMode,
+    setViewMode,
+    type DocTab,
+  } from '$lib/stores/docTabs.svelte';
 
   import FileTreeNode from '$lib/components/FileTreeNode.svelte';
   import MarkdownFormatToolbar from '$lib/components/MarkdownFormatToolbar.svelte';
@@ -45,8 +58,13 @@
   );
   let renderedHtml = $state<string>('');
 
-  // View mode: 'editor' | 'split' | 'preview' (default: open .md file = Preview)
-  let viewMode = $state<'editor' | 'split' | 'preview'>('preview');
+  // Multi-document tabs reactive state
+  const tabs = $derived(getDocTabs());
+  const activeTabId = $derived(getActiveTabId());
+  const activeTab = $derived(getActiveTab());
+
+  // View mode: 'editor' | 'split' | 'preview' (synchronized via docTabs store)
+  let viewMode = $state<'editor' | 'split' | 'preview'>(getViewMode());
   let isSaving = $state<boolean>(false);
 
   // Zen & Focus Mode
@@ -283,6 +301,12 @@
         e.preventDefault();
         exportPdf();
       }
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'w' || e.key === 'W')) {
+        e.preventDefault();
+        if (activeTabId) {
+          handleCloseTab(activeTabId);
+        }
+      }
     };
     window.addEventListener('keydown', handleKeyDown);
 
@@ -292,7 +316,14 @@
       securityLevel: 'loose',
     });
 
-    renderMarkdown(rawMarkdown);
+    // Restore saved tabs from local session storage
+    restoreTabs();
+    const restored = getActiveTab();
+    if (restored) {
+      loadTabContent(restored);
+    } else {
+      renderMarkdown(rawMarkdown);
+    }
 
     // Initialize CodeMirror 6 with oneDark theme and update listeners
     if (editorElement) {
@@ -312,6 +343,7 @@
             if (update.docChanged) {
               rawMarkdown = update.state.doc.toString();
               renderMarkdown(rawMarkdown);
+              if (activeTabId) setDirty(activeTabId, true);
               autoSave();
             }
             if (update.selectionSet) {
@@ -356,6 +388,7 @@
 
     // Listen for single instance open-file events
     listen<string>('open-file', (event) => {
+      console.log('>>> [FRONTEND] open-file event received:', event.payload);
       if (event.payload) {
         viewMode = 'preview';
         showFileTree = false;
@@ -478,23 +511,80 @@
     }
   }
 
-  async function openFile(node: FileNode) {
-    if (node.is_dir) return;
-    try {
-      const content = await invoke<string>('workspace_read_file', { filePath: node.path });
-      currentFilePath = node.path;
-      currentDocTitle = node.name;
+  async function loadTabContent(tab: DocTab) {
+    if (tab.isVault) {
+      const docId = tab.path.replace('vault://', '');
+      const doc = vaultDocs.find((d) => String(d.id) === docId);
+      const content = doc?.content ?? '';
+      currentFilePath = tab.path;
+      currentDocTitle = tab.title;
       rawMarkdown = content;
-      // Buka file = selalu Preview (jaga mode Preview saat ganti file, tidak revert ke Split)
-      viewMode = 'preview';
       await tick();
       if (editorView) {
         editorView.dispatch({
           changes: { from: 0, to: editorView.state.doc.length, insert: content },
         });
-        editorView.focus();
       }
       renderMarkdown(content);
+    } else {
+      try {
+        const content = await invoke<string>('workspace_read_file', { filePath: tab.path });
+        currentFilePath = tab.path;
+        currentDocTitle = tab.title;
+        rawMarkdown = content;
+        await tick();
+        if (editorView) {
+          editorView.dispatch({
+            changes: { from: 0, to: editorView.state.doc.length, insert: content },
+          });
+        }
+        renderMarkdown(content);
+      } catch (e) {
+        console.error('Failed reading tab file:', e);
+      }
+    }
+  }
+
+  async function handleSelectTab(id: string) {
+    setActiveTab(id);
+    const target = tabs.find((t) => t.id === id);
+    if (target) {
+      await loadTabContent(target);
+    }
+  }
+
+  async function handleCloseTab(id: string) {
+    closeTab(id);
+    const nextActive = getActiveTab();
+    if (nextActive) {
+      await loadTabContent(nextActive);
+    } else {
+      currentFilePath = null;
+      currentDocTitle = 'Untitled Document.md';
+      rawMarkdown = '';
+      if (editorView) {
+        editorView.dispatch({
+          changes: { from: 0, to: editorView.state.doc.length, insert: '' },
+        });
+      }
+      renderedHtml = '';
+    }
+  }
+
+  function handleNewTab() {
+    createNewFile();
+  }
+
+  async function openFile(node: FileNode) {
+    if (node.is_dir) return;
+    try {
+      openTab(node.path, node.name, false);
+      viewMode = 'preview';
+      setViewMode('preview');
+      const target = getActiveTab();
+      if (target) {
+        await loadTabContent(target);
+      }
 
       // Don't override workspacePath if opened file is already inside current workspacePath
       const lastSlash = node.path.lastIndexOf('/');
@@ -522,8 +612,10 @@
       try {
         if (currentFilePath?.startsWith('vault://')) {
           await saveVaultDoc();
+          if (activeTabId) setDirty(activeTabId, false);
         } else if (currentFilePath) {
           await invoke('workspace_write_file', { filePath: currentFilePath, content: rawMarkdown });
+          if (activeTabId) setDirty(activeTabId, false);
         }
       } catch (e) {
         console.error('Save failed:', e);
@@ -547,9 +639,15 @@
   }
 
   async function openVaultDoc(doc: any) {
-    currentFilePath = `vault://${doc.id}`;
-    currentDocTitle = `🔒 ${doc.title}`;
+    const tabId = `vault://${doc.id}`;
+    const title = `🔒 ${doc.title}`;
+    openTab(tabId, title, true);
+    viewMode = 'preview';
+    setViewMode('preview');
+    currentFilePath = tabId;
+    currentDocTitle = title;
     rawMarkdown = doc.content || '';
+    await tick();
     if (editorView) {
       editorView.dispatch({
         changes: { from: 0, to: editorView.state.doc.length, insert: rawMarkdown },
@@ -699,10 +797,10 @@
 </script>
 
 <div class="h-full flex flex-col bg-white dark:bg-[#161616] text-neutral-800 dark:text-neutral-200 overflow-hidden font-sans relative">
-  <!-- Sleek Studio Toolbar Bar (h-12 / 48px) -->
-  <header class="h-12 border-b border-neutral-200 dark:border-neutral-800 bg-neutral-50/80 dark:bg-[#121212]/90 backdrop-blur-md px-3 sm:px-4 flex items-center justify-between z-10 shrink-0 no-print">
-    <div class="flex items-center gap-2 sm:gap-3 min-w-0">
-      <!-- Toggle Files / Vault Explorer Rail -->
+  <!-- Unified Studio Header & Tab Bar (h-10 / 40px) -->
+  <header class="h-10 border-b border-neutral-200 dark:border-neutral-800 bg-neutral-100/90 dark:bg-[#121212] px-2 flex items-center justify-between gap-2 z-10 shrink-0 no-print select-none">
+    <!-- Left: File Tree Toggle & Saving State -->
+    <div class="flex items-center gap-1.5 shrink-0">
       <button
         onclick={toggleFileTree}
         class="p-1.5 rounded-lg transition-colors {showFileTree ? 'bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/20' : 'text-neutral-500 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-white hover:bg-neutral-200/70 dark:hover:bg-neutral-800'}"
@@ -714,22 +812,80 @@
         </svg>
       </button>
 
-      <div class="h-4 w-px bg-neutral-300 dark:bg-neutral-800 mx-0.5"></div>
-
-      <!-- Current Document Title Breadcrumb -->
-      <div class="flex items-center gap-2 min-w-0">
-        <span class="text-xs font-semibold font-mono text-neutral-800 dark:text-neutral-200 truncate max-w-[160px] sm:max-w-xs md:max-w-md">
-          {currentDocTitle}
+      {#if isSaving}
+        <span class="text-[10px] px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/20 shrink-0 font-mono">
+          Menyimpan...
         </span>
-        {#if isSaving}
-          <span class="text-[10px] px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/20 shrink-0 font-mono">
-            Menyimpan...
-          </span>
-        {/if}
-      </div>
+      {/if}
+
+      <div class="h-4 w-px bg-neutral-300 dark:bg-neutral-800 mx-0.5"></div>
     </div>
 
-    <!-- View Mode Switcher, PDF & HTML Exporters -->
+    <!-- Center/Fill: Document Tabs Strip -->
+    <div class="flex-1 min-w-0 flex items-center gap-1 overflow-x-auto scrollbar-none h-full pt-1">
+      {#each tabs as tab (tab.id)}
+        {@const isActive = tab.id === activeTabId}
+        <div
+          role="button"
+          tabindex="0"
+          onclick={() => handleSelectTab(tab.id)}
+          onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleSelectTab(tab.id); }}
+          class="group relative h-8 px-3 rounded-t-md flex items-center gap-2 text-xs font-mono transition-all cursor-pointer border-t border-x shrink-0 {isActive ? 'bg-white dark:bg-[#1a1a1a] text-cyan-600 dark:text-cyan-400 border-neutral-300 dark:border-neutral-700/80 shadow-2xs font-semibold' : 'bg-transparent border-transparent text-neutral-500 hover:text-neutral-800 dark:text-neutral-400 dark:hover:text-neutral-200 hover:bg-neutral-200/50 dark:hover:bg-neutral-800/40'}"
+          title={tab.path}
+        >
+          {#if isActive}
+            <span class="absolute top-0 left-0 right-0 h-[2px] bg-cyan-500 rounded-t" aria-hidden="true"></span>
+          {/if}
+
+          <span class="shrink-0 text-[11px]">
+            {#if tab.isVault}
+              🔒
+            {:else}
+              <svg class="w-3.5 h-3.5 opacity-70" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+            {/if}
+          </span>
+
+          <span class="truncate max-w-[120px] sm:max-w-[180px]">{tab.title}</span>
+
+          {#if tab.isDirty}
+            <span class="w-1.5 h-1.5 rounded-full bg-cyan-500 shrink-0" title="Ada perubahan belum tersimpan"></span>
+          {/if}
+
+          {#if tabs.length > 1}
+            <button
+              type="button"
+              onclick={(e) => {
+                e.stopPropagation();
+                handleCloseTab(tab.id);
+              }}
+              class="opacity-60 group-hover:opacity-100 p-0.5 rounded-sm hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-400 hover:text-rose-500 dark:hover:text-rose-400 transition-all shrink-0"
+              title="Tutup Tab (Ctrl+W)"
+              aria-label="Tutup Tab"
+            >
+              <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          {/if}
+        </div>
+      {/each}
+
+      <button
+        type="button"
+        onclick={handleNewTab}
+        class="h-7 w-7 rounded-md flex items-center justify-center text-neutral-400 hover:text-neutral-700 dark:hover:text-white hover:bg-neutral-200/60 dark:hover:bg-neutral-800/60 transition-colors shrink-0"
+        title="Buka Dokumen Baru (+)"
+        aria-label="Buka Dokumen Baru"
+      >
+        <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+        </svg>
+      </button>
+    </div>
+
+    <!-- Right: Exporters & Mode Switcher -->
     <div class="flex items-center gap-2 shrink-0">
       <!-- PDF Print Exporter -->
       <button
@@ -760,19 +916,19 @@
       <!-- Editor / Split / Preview View Switcher -->
       <div class="flex items-center p-0.5 bg-neutral-200/70 dark:bg-neutral-900 rounded-lg border border-neutral-300 dark:border-neutral-800 text-xs">
         <button
-          onclick={() => (viewMode = 'editor')}
+          onclick={() => { viewMode = 'editor'; setViewMode('editor'); }}
           class="px-2.5 py-1 rounded-md transition-all {viewMode === 'editor' ? 'bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white font-medium shadow-2xs' : 'text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'}"
         >
           Editor
         </button>
         <button
-          onclick={() => (viewMode = 'split')}
+          onclick={() => { viewMode = 'split'; setViewMode('split'); }}
           class="px-2.5 py-1 rounded-md transition-all {viewMode === 'split' ? 'bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white font-medium shadow-2xs' : 'text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'}"
         >
           Split
         </button>
         <button
-          onclick={() => (viewMode = 'preview')}
+          onclick={() => { viewMode = 'preview'; setViewMode('preview'); }}
           class="px-2.5 py-1 rounded-md transition-all {viewMode === 'preview' ? 'bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white font-medium shadow-2xs' : 'text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'}"
         >
           Preview
@@ -942,13 +1098,13 @@
       </main>
     {/if}
 
-    <!-- Live Preview Pane with Synchronized Scrolling -->
+    <!-- Live Preview Pane with Synchronized Scrolling (hardware-accelerated) -->
     {#if (viewMode === 'split' || viewMode === 'preview') && !isZenMode}
       <section
         bind:this={previewElement}
-        onscroll={syncScrollPreviewToEditor}
+        onscroll={viewMode === 'split' ? syncScrollPreviewToEditor : undefined}
         onclick={handlePreviewClick}
-        class="flex-1 overflow-y-auto bg-white dark:bg-[#0c1017] p-8 sm:p-10 markdown-preview max-w-none select-text bg-[linear-gradient(to_right,#00000006_1px,transparent_1px),linear-gradient(to_bottom,#00000006_1px,transparent_1px)] dark:bg-[linear-gradient(to_right,#ffffff05_1px,transparent_1px),linear-gradient(to_bottom,#ffffff05_1px,transparent_1px)] bg-[size:56px_56px]"
+        class="preview-scroll-accel flex-1 overflow-y-auto bg-white dark:bg-[#0c1017] p-8 sm:p-10 markdown-preview max-w-none select-text overscroll-contain will-change-[scroll-position] bg-[linear-gradient(to_right,#00000006_1px,transparent_1px),linear-gradient(to_bottom,#00000006_1px,transparent_1px)] dark:bg-[linear-gradient(to_right,#ffffff05_1px,transparent_1px),linear-gradient(to_bottom,#ffffff05_1px,transparent_1px)] bg-[size:56px_56px]"
       >
         {@html renderedHtml}
       </section>

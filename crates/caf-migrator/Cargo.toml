@@ -16,7 +16,7 @@ clap = { version = "4", features = ["derive"] }
 tempfile = "3"
 
 # Use caf-core for shared types if needed
-caf-core = { version = "0.1.3", path = "../caf-core" }
+caf-core = { version = "1.0.6", path = "../caf-core" }
 
 [[bin]]
 name = "caf-migrator"

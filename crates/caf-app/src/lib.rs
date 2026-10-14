@@ -47,6 +47,16 @@ fn normalize_cli_path(arg: &str, cwd: Option<&str>) -> Option<String> {
         raw.to_string()
     };
 
+    // Only accept document-like extensions. The single-instance plugin forwards the
+    // executable path as argv[0]; a binary/executable has no document extension, so it
+    // is rejected here and the real document argument (argv[1+]) is processed instead.
+    let ext_ok = decoded.to_lowercase().ends_with(".md")
+        || decoded.to_lowercase().ends_with(".markdown")
+        || decoded.to_lowercase().ends_with(".txt");
+    if !ext_ok {
+        return None;
+    }
+
     let path = std::path::Path::new(&decoded);
     let resolved = if path.is_absolute() {
         path.to_path_buf()
@@ -59,13 +69,8 @@ fn normalize_cli_path(arg: &str, cwd: Option<&str>) -> Option<String> {
     };
 
     if resolved.exists() {
-        Some(
-            resolved
-                .canonicalize()
-                .unwrap_or(resolved)
-                .to_string_lossy()
-                .to_string(),
-        )
+        let canonical = resolved.canonicalize().unwrap_or(resolved);
+        Some(canonical.to_string_lossy().to_string())
     } else {
         Some(resolved.to_string_lossy().to_string())
     }
@@ -111,17 +116,36 @@ pub fn run_with_start(start: std::time::Instant) {
     {
         builder = builder.plugin(tauri_plugin_single_instance::init(|app, args, cwd| {
             use tauri::{Emitter, Manager};
-            for arg in args.into_iter() {
-                if let Some(path_str) = normalize_cli_path(&arg, Some(&cwd)) {
-                    let _ = app.emit("open-file", path_str);
+            for arg in args.iter() {
+                if let Some(path_str) = normalize_cli_path(arg, Some(&cwd)) {
+                    let _ = app.emit("open-file", &path_str);
                     break;
                 }
             }
-            let _ = app.get_webview_window("main").map(|w| {
-                let _ = w.show();
-                let _ = w.unminimize();
-                let _ = w.set_focus();
-            });
+            if let Some(w) = app.get_webview_window("main") {
+                let window_clone = w.clone();
+                tauri::async_runtime::spawn(async move {
+                    let _ = window_clone.unminimize();
+                    let _ = window_clone.show();
+                    let _ = window_clone.set_always_on_top(true);
+                    let _ = window_clone.set_focus();
+                    tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+                    let _ = window_clone.set_always_on_top(false);
+                    let _ = window_clone.set_focus();
+                });
+
+                #[cfg(target_os = "linux")]
+                {
+                    // GNOME Shell on Wayland (Mutter) ignores direct set_focus() calls from
+                    // background apps. Use wmctrl -x -a to raise/activate the WMClass "camark"
+                    // window, which the window manager honors even when another app is focused.
+                    let _ = std::process::Command::new("wmctrl")
+                        .arg("-x")
+                        .arg("-a")
+                        .arg("camark")
+                        .spawn();
+                }
+            }
         }));
     }
 

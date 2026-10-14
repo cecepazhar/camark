@@ -20,6 +20,9 @@
   import { onMount, onDestroy } from 'svelte';
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import { invoke } from '@tauri-apps/api/core';
+  import { listen } from '@tauri-apps/api/event';
+  import { goto } from '$app/navigation';
+  import { openTab } from '$lib/stores/docTabs.svelte';
   import { t } from '$lib/i18n/index.svelte';
   import LanguageSwitcher from '$lib/components/LanguageSwitcher.svelte';
   import { APP_CONFIG } from '$lib/generated/app';
@@ -166,6 +169,19 @@
     };
 
     window.addEventListener('keydown', handleKeyDown);
+
+    // Global listener for single-instance / system open-file events
+    listen<string>('open-file', (event) => {
+      if (event.payload) {
+        const parts = event.payload.split('/');
+        const name = parts[parts.length - 1] || 'document.md';
+        openTab(event.payload, name, false);
+        if (page.url.pathname !== '/') {
+          goto('/');
+        }
+      }
+    }).catch((err) => console.warn('Global open-file listen error:', err));
+
     return () => window.removeEventListener('keydown', handleKeyDown);
   });
 
@@ -384,18 +400,35 @@
           <p class="px-5 pt-2 pb-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-neutral-500">{t('shell.workspace') || 'Navigasi'}</p>
           <nav class="px-2 space-y-0.5 overflow-y-auto scrollbar-none text-sm">
             {#each navItems as item}
-              <a
-                href={item.href}
-                onclick={() => (mobileDrawerOpen = false)}
-                title={item.label}
-                aria-current={isActive(item.href) ? 'page' : undefined}
-                class="px-2.5 py-2 rounded-lg flex items-center gap-3 transition-colors {isActive(item.href) ? 'bg-neutral-200/80 dark:bg-neutral-800/80 text-neutral-900 dark:text-white font-medium' : 'text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200/50 dark:hover:bg-neutral-800/40 hover:text-neutral-900 dark:hover:text-white'}"
-              >
-                <svg class="w-[18px] h-[18px] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d={item.path} />
-                </svg>
-                <span class="truncate">{item.label}</span>
-              </a>
+              {#if item.key === 'ai_copilot'}
+                <button
+                  type="button"
+                  onclick={() => {
+                    mobileDrawerOpen = false;
+                    toggleAiChat();
+                  }}
+                  title={item.label}
+                  class="w-full px-2.5 py-2 rounded-lg flex items-center gap-3 transition-colors text-left {aiChat.open ? 'bg-cyan-500/15 text-cyan-600 dark:text-cyan-400 font-medium' : 'text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200/50 dark:hover:bg-neutral-800/40 hover:text-neutral-900 dark:hover:text-white'}"
+                >
+                  <svg class="w-[18px] h-[18px] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d={item.path} />
+                  </svg>
+                  <span class="truncate">{item.label}</span>
+                </button>
+              {:else}
+                <a
+                  href={item.href}
+                  onclick={() => (mobileDrawerOpen = false)}
+                  title={item.label}
+                  aria-current={isActive(item.href) ? 'page' : undefined}
+                  class="px-2.5 py-2 rounded-lg flex items-center gap-3 transition-colors {isActive(item.href) ? 'bg-neutral-200/80 dark:bg-neutral-800/80 text-neutral-900 dark:text-white font-medium' : 'text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200/50 dark:hover:bg-neutral-800/40 hover:text-neutral-900 dark:hover:text-white'}"
+                >
+                  <svg class="w-[18px] h-[18px] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d={item.path} />
+                  </svg>
+                  <span class="truncate">{item.label}</span>
+                </a>
+              {/if}
             {/each}
           </nav>
         </div>
@@ -445,26 +478,49 @@
         <!-- Sidebar Navigation List -->
         <nav class="flex-1 min-h-0 overflow-y-auto scrollbar-none px-2 space-y-0.5 text-sm pt-1">
           {#each navItems as item}
-            {@const active = isActive(item.href)}
-            <a
-              href={item.href}
-              title={isCollapsed ? item.label : ''}
-              aria-current={active ? 'page' : undefined}
-              class="relative px-2.5 py-2 rounded-lg flex items-center gap-3 transition-colors overflow-hidden {active ? 'bg-neutral-200/80 dark:bg-neutral-800/80 text-neutral-900 dark:text-white font-medium' : 'text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200/50 dark:hover:bg-neutral-800/40 hover:text-neutral-900 dark:hover:text-white'}"
-            >
-              {#if active}
-                <!-- Active marker pinned to the window left edge -->
-                <span class="absolute -left-2 top-1.5 bottom-1.5 w-[3px] rounded-r bg-cyan-500" aria-hidden="true"></span>
-              {/if}
-              <div class="w-[20px] h-[20px] flex items-center justify-center shrink-0">
-                <svg class="w-[18px] h-[18px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d={item.path} />
-                </svg>
-              </div>
-              <span class="truncate whitespace-nowrap transition-all duration-150 {isCollapsed ? 'opacity-0 w-0 pointer-events-none hidden' : 'opacity-100 min-w-0'}">
-                {item.label}
-              </span>
-            </a>
+            {@const active = item.key === 'ai_copilot' ? aiChat.open : isActive(item.href)}
+            {#if item.key === 'ai_copilot'}
+              <!-- AI Assistant: opens the floating Hana AI drawer without leaving the current document -->
+              <button
+                type="button"
+                onclick={toggleAiChat}
+                title={item.label}
+                aria-pressed={aiChat.open}
+                class="relative w-full px-2.5 py-2 rounded-lg flex items-center gap-3 transition-colors overflow-hidden {active ? 'bg-cyan-500/15 text-cyan-600 dark:text-cyan-400 font-medium' : 'text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200/50 dark:hover:bg-neutral-800/40 hover:text-neutral-900 dark:hover:text-white'}"
+              >
+                {#if active}
+                  <span class="absolute -left-2 top-1.5 bottom-1.5 w-[3px] rounded-r bg-cyan-500" aria-hidden="true"></span>
+                {/if}
+                <div class="w-[20px] h-[20px] flex items-center justify-center shrink-0">
+                  <svg class="w-[18px] h-[18px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d={item.path} />
+                  </svg>
+                </div>
+                <span class="truncate whitespace-nowrap transition-all duration-150 {isCollapsed ? 'opacity-0 w-0 pointer-events-none hidden' : 'opacity-100 min-w-0'}">
+                  {item.label}
+                </span>
+              </button>
+            {:else}
+              <a
+                href={item.href}
+                title={isCollapsed ? item.label : ''}
+                aria-current={active ? 'page' : undefined}
+                class="relative px-2.5 py-2 rounded-lg flex items-center gap-3 transition-colors overflow-hidden {active ? 'bg-neutral-200/80 dark:bg-neutral-800/80 text-neutral-900 dark:text-white font-medium' : 'text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200/50 dark:hover:bg-neutral-800/40 hover:text-neutral-900 dark:hover:text-white'}"
+              >
+                {#if active}
+                  <!-- Active marker pinned to the window left edge -->
+                  <span class="absolute -left-2 top-1.5 bottom-1.5 w-[3px] rounded-r bg-cyan-500" aria-hidden="true"></span>
+                {/if}
+                <div class="w-[20px] h-[20px] flex items-center justify-center shrink-0">
+                  <svg class="w-[18px] h-[18px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d={item.path} />
+                  </svg>
+                </div>
+                <span class="truncate whitespace-nowrap transition-all duration-150 {isCollapsed ? 'opacity-0 w-0 pointer-events-none hidden' : 'opacity-100 min-w-0'}">
+                  {item.label}
+                </span>
+              </a>
+            {/if}
           {/each}
         </nav>
 

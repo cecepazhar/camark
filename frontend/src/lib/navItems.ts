@@ -19,12 +19,6 @@ const NAV_ICONS: Record<string, string> = {
 export function navItems(): NavItem[] {
   return [
     {
-      key: 'workspace',
-      href: '/workspace',
-      label: t('nav.workspace'),
-      path: NAV_ICONS.workspace
-    },
-    {
       key: 'editor',
       href: '/',
       label: t('nav.editor'),

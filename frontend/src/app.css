@@ -69,6 +69,15 @@ html.dark {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   line-height: 1.75;
   font-size: 0.95rem;
+  /* Contain layout/paint so content changes don't reflow ancestors */
+  contain: content;
+}
+
+/* GPU-Accelerated Scrolling: promote to its own compositor layer */
+.preview-scroll-accel {
+  -webkit-overflow-scrolling: touch;
+  transform: translateZ(0);
+  will-change: scroll-position;
 }
 
 .markdown-preview h1,
@@ -219,6 +228,7 @@ html.dark {
   border-radius: 0.65rem;
   overflow: hidden;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+  contain: paint;
 }
 
 .code-block-header {
@@ -292,6 +302,7 @@ html.dark {
   border-radius: 0.65rem;
   border: 1px solid rgba(255, 255, 255, 0.08);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  contain: paint;
 }
 
 .markdown-preview table {

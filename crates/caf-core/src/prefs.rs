@@ -14,7 +14,8 @@ const FILE_NAME: &str = "performance.json";
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct PerformancePrefs {
-    /// GPU-accelerated rendering for the WebView. Off by default to conserve memory.
+    /// GPU-accelerated rendering for the WebView. On by default: hardware compositing
+    /// keeps long preview scrolls at 60fps. The low-memory background trims still apply.
     pub gpu_acceleration: bool,
     /// Automatic trimming of memory working set when app is idle or minimized.
     pub background_memory_saving: bool,
@@ -29,7 +30,7 @@ pub struct PerformancePrefs {
 impl Default for PerformancePrefs {
     fn default() -> Self {
         Self {
-            gpu_acceleration: false,
+            gpu_acceleration: true,
             background_memory_saving: true,
             scrollback_lines: 5000,
             inactive_session_sleep: true,

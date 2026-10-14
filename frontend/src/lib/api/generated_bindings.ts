@@ -69,6 +69,10 @@ export async function invoke_saveAiSettings(settings: any): Promise<any> {
   return invoke('save_ai_settings', { settings: settings });
 }
 
+export async function invoke_testAiConnection(baseUrl: string, model: string, apiKey: string | null): Promise<string> {
+  return invoke('test_ai_connection', { base_url: baseUrl, model: model, api_key: apiKey });
+}
+
 export async function invoke_setAiApiKey(apiKey: string): Promise<any> {
   return invoke('set_ai_api_key', { api_key: apiKey });
 }

@@ -2,7 +2,7 @@
 name = "CAMark"
 slug = "camark"
 bundle_id = "com.fathforce.camark"
-version = "0.1.3"
+version = "1.0.6"
 accent_color = "cyan"
 error_prefix = "CMRK"
 description = "High-Performance, Local-First & Zero-Knowledge Markdown Studio"
@@ -32,15 +32,8 @@ default_role = "member"
 allowed_roles = ["owner", "partner", "member", "child"]
 
 [[menus]]
-key = "workspace"
-label = "Workspace"
-href = "/workspace"
-icon = "folder-tree"
-description = "Native Filesystem Tree & Markdown Workspace"
-
-[[menus]]
 key = "editor"
-label = "Markdown Studio"
+label = "Studio Markdown"
 href = "/"
 icon = "file-edit"
 description = "CodeMirror 6 Editor & Live Preview"

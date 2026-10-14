@@ -11,16 +11,8 @@ export interface GeneratedNavItem {
 
 export const GENERATED_NAV_ITEMS: GeneratedNavItem[] = [
   {
-    key: "workspace",
-    label: "Workspace",
-    href: "/workspace",
-    icon: "folder-tree",
-    description: "Native Filesystem Tree & Markdown Workspace",
-    path: "M4 6h16M4 12h16M4 18h16"
-  },
-  {
     key: "editor",
-    label: "Markdown Studio",
+    label: "Studio Markdown",
     href: "/",
     icon: "file-edit",
     description: "CodeMirror 6 Editor & Live Preview",
