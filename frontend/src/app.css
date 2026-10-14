@@ -65,12 +65,17 @@ html.dark {
    ======================================================== */
 
 .markdown-preview {
-  color: #d4d4d8;
+  color: #18181b; /* dark text for light mode */
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   line-height: 1.75;
   font-size: 0.95rem;
   /* Contain layout/paint so content changes don't reflow ancestors */
   contain: content;
+}
+
+:global(.dark) .markdown-preview,
+.dark .markdown-preview {
+  color: #d4d4d8; /* light text for dark mode */
 }
 
 /* GPU-Accelerated Scrolling: promote to its own compositor layer */
@@ -86,7 +91,7 @@ html.dark {
 .markdown-preview h4,
 .markdown-preview h5,
 .markdown-preview h6 {
-  color: #fafafa;
+  color: #09090b; /* dark for light mode */
   font-weight: 700;
   letter-spacing: -0.02em;
   margin-top: 1.75rem;
@@ -94,16 +99,39 @@ html.dark {
   line-height: 1.3;
 }
 
+:global(.dark) .markdown-preview h1,
+:global(.dark) .markdown-preview h2,
+:global(.dark) .markdown-preview h3,
+:global(.dark) .markdown-preview h4,
+:global(.dark) .markdown-preview h5,
+:global(.dark) .markdown-preview h6,
+.dark .markdown-preview h1,
+.dark .markdown-preview h2,
+.dark .markdown-preview h3,
+.dark .markdown-preview h4,
+.dark .markdown-preview h5,
+.dark .markdown-preview h6 {
+  color: #fafafa;
+}
+
 .markdown-preview h1 {
   font-size: 1.85rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
   padding-bottom: 0.5rem;
+}
+:global(.dark) .markdown-preview h1,
+.dark .markdown-preview h1 {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .markdown-preview h2 {
   font-size: 1.45rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
   padding-bottom: 0.35rem;
+}
+:global(.dark) .markdown-preview h2,
+.dark .markdown-preview h2 {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .markdown-preview h3 {
@@ -120,41 +148,67 @@ html.dark {
 }
 
 .markdown-preview strong {
-  color: #f4f4f5;
+  color: #09090b;
   font-weight: 600;
+}
+:global(.dark) .markdown-preview strong,
+.dark .markdown-preview strong {
+  color: #f4f4f5;
 }
 
 .markdown-preview em {
+  color: #27272a;
+}
+:global(.dark) .markdown-preview em,
+.dark .markdown-preview em {
   color: #e4e4e7;
 }
 
 .markdown-preview a {
-  color: #22d3ee;
+  color: #0891b2;
   text-decoration: none;
   font-weight: 500;
   transition: color 0.15s ease;
 }
+:global(.dark) .markdown-preview a,
+.dark .markdown-preview a {
+  color: #22d3ee;
+}
 
 .markdown-preview a:hover {
-  color: #67e8f9;
+  color: #0e7490;
   text-decoration: underline;
+}
+:global(.dark) .markdown-preview a:hover,
+.dark .markdown-preview a:hover {
+  color: #67e8f9;
 }
 
 .markdown-preview hr {
   border: 0;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
   margin: 2rem 0;
+}
+:global(.dark) .markdown-preview hr,
+.dark .markdown-preview hr {
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 /* Blockquote: Sleek modern border with cyan highlight */
 .markdown-preview blockquote {
   margin: 1.25rem 0;
   padding: 0.6rem 1.25rem;
+  border-left: 3px solid #0891b2;
+  background: rgba(8, 145, 178, 0.06);
+  border-radius: 0 0.5rem 0.5rem 0;
+  color: #4b5563;
+  font-style: normal;
+}
+:global(.dark) .markdown-preview blockquote,
+.dark .markdown-preview blockquote {
   border-left: 3px solid #06b6d4;
   background: rgba(6, 182, 212, 0.04);
-  border-radius: 0 0.5rem 0.5rem 0;
   color: #a1a1aa;
-  font-style: normal;
 }
 
 .markdown-preview blockquote p {
@@ -182,17 +236,27 @@ html.dark {
   appearance: none;
   width: 1rem;
   height: 1rem;
-  border: 1px solid rgba(255, 255, 255, 0.25);
+  border: 1px solid rgba(0, 0, 0, 0.25);
   border-radius: 0.25rem;
-  background-color: rgba(255, 255, 255, 0.05);
+  background-color: rgba(0, 0, 0, 0.05);
   vertical-align: middle;
   margin-right: 0.5rem;
   position: relative;
   cursor: pointer;
   transition: all 0.15s ease;
 }
+:global(.dark) .markdown-preview li input[type="checkbox"],
+.dark .markdown-preview li input[type="checkbox"] {
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background-color: rgba(255, 255, 255, 0.05);
+}
 
 .markdown-preview li input[type="checkbox"]:checked {
+  background-color: #0891b2;
+  border-color: #0891b2;
+}
+:global(.dark) .markdown-preview li input[type="checkbox"]:checked,
+.dark .markdown-preview li input[type="checkbox"]:checked {
   background-color: #06b6d4;
   border-color: #06b6d4;
 }
@@ -214,21 +278,33 @@ html.dark {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
   font-size: 0.85em;
   padding: 0.15rem 0.4rem;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.35rem;
+  color: #0e7490;
+}
+:global(.dark) .markdown-preview :not(pre) > code,
+.dark .markdown-preview :not(pre) > code {
   background: rgba(255, 255, 255, 0.08);
   border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 0.35rem;
   color: #22d3ee;
 }
 
 /* Code Block Wrapper with Header Bar */
 .code-block-wrapper {
   margin: 1.25rem 0;
-  background: #0d1117;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
   border-radius: 0.65rem;
   overflow: hidden;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
   contain: paint;
+}
+:global(.dark) .code-block-wrapper,
+.dark .code-block-wrapper {
+  background: #0d1117;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
 }
 
 .code-block-header {
@@ -236,10 +312,15 @@ html.dark {
   align-items: center;
   justify-content: space-between;
   padding: 0.45rem 0.85rem;
-  background: rgba(255, 255, 255, 0.03);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  background: #f1f5f9;
+  border-bottom: 1px solid #e2e8f0;
   font-size: 0.72rem;
   user-select: none;
+}
+:global(.dark) .code-block-header,
+.dark .code-block-header {
+  background: rgba(255, 255, 255, 0.03);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .code-lang-pill {
@@ -247,16 +328,21 @@ html.dark {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: #38bdf8;
-  background: rgba(56, 189, 248, 0.12);
+  color: #0284c7;
+  background: rgba(2, 132, 199, 0.1);
   padding: 0.15rem 0.5rem;
   border-radius: 0.35rem;
 }
+:global(.dark) .code-lang-pill,
+.dark .code-lang-pill {
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.12);
+}
 
 .code-copy-btn {
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  color: #a1a1aa;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  color: #64748b;
   padding: 0.2rem 0.55rem;
   border-radius: 0.35rem;
   font-size: 0.72rem;
@@ -266,14 +352,31 @@ html.dark {
   align-items: center;
   gap: 0.3rem;
 }
-
 .code-copy-btn:hover {
+  background: #f1f5f9;
+  color: #0f172a;
+  border-color: #94a3b8;
+}
+:global(.dark) .code-copy-btn,
+.dark .code-copy-btn {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #a1a1aa;
+}
+:global(.dark) .code-copy-btn:hover,
+.dark .code-copy-btn:hover {
   background: rgba(255, 255, 255, 0.12);
   color: #fafafa;
   border-color: rgba(255, 255, 255, 0.2);
 }
 
 .code-copy-btn.copied {
+  background: rgba(16, 185, 129, 0.15);
+  color: #059669;
+  border-color: rgba(16, 185, 129, 0.3);
+}
+:global(.dark) .code-copy-btn.copied,
+.dark .code-copy-btn.copied {
   background: rgba(16, 185, 129, 0.2);
   color: #34d399;
   border-color: rgba(16, 185, 129, 0.4);
@@ -289,10 +392,14 @@ html.dark {
 }
 
 .code-block-wrapper code {
-  color: #e4e4e7;
+  color: #1e293b;
   background: transparent;
   padding: 0;
   border: none;
+}
+:global(.dark) .code-block-wrapper code,
+.dark .code-block-wrapper code {
+  color: #e4e4e7;
 }
 
 /* Modern Rounded Zebra Tables */
@@ -300,9 +407,14 @@ html.dark {
   overflow-x: auto;
   margin: 1.25rem 0;
   border-radius: 0.65rem;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  contain: paint;
+}
+:global(.dark) .markdown-table-wrapper,
+.dark .markdown-table-wrapper {
   border: 1px solid rgba(255, 255, 255, 0.08);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
-  contain: paint;
 }
 
 .markdown-preview table {
@@ -314,27 +426,46 @@ html.dark {
 }
 
 .markdown-preview th {
-  background: rgba(6, 182, 212, 0.08);
-  color: #22d3ee;
+  background: #ecfeff;
+  color: #0891b2;
   font-weight: 600;
   padding: 0.65rem 1rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid #cffafe;
   text-transform: uppercase;
   font-size: 0.75rem;
   letter-spacing: 0.04em;
 }
+:global(.dark) .markdown-preview th,
+.dark .markdown-preview th {
+  background: rgba(6, 182, 212, 0.08);
+  color: #22d3ee;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
 
 .markdown-preview td {
   padding: 0.65rem 1rem;
+  border-bottom: 1px solid #f1f5f9;
+  color: #334155;
+}
+:global(.dark) .markdown-preview td,
+.dark .markdown-preview td {
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
   color: #d4d4d8;
 }
 
 .markdown-preview tr:nth-child(even) td {
+  background: #f8fafc;
+}
+:global(.dark) .markdown-preview tr:nth-child(even) td,
+.dark .markdown-preview tr:nth-child(even) td {
   background: rgba(255, 255, 255, 0.02);
 }
 
 .markdown-preview tr:hover td {
+  background: #f0fdfa;
+}
+:global(.dark) .markdown-preview tr:hover td,
+.dark .markdown-preview tr:hover td {
   background: rgba(6, 182, 212, 0.04);
 }
 
@@ -342,15 +473,24 @@ html.dark {
 .markdown-preview .katex-display {
   margin: 1.25rem 0;
   padding: 0.75rem;
-  background: rgba(255, 255, 255, 0.02);
+  background: #f8fafc;
   border-radius: 0.5rem;
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  border: 1px solid #e2e8f0;
   overflow-x: auto;
   overflow-y: hidden;
+}
+:global(.dark) .markdown-preview .katex-display,
+.dark .markdown-preview .katex-display {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .markdown-preview .katex {
   font-size: 1.05em;
+  color: #0369a1;
+}
+:global(.dark) .markdown-preview .katex,
+.dark .markdown-preview .katex {
   color: #e0f2fe;
 }
 

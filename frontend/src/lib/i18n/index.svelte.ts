@@ -25,16 +25,7 @@ function detectInitialLocale(): Locale {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored === 'en' || stored === 'id') return stored;
   } catch {
-    // Private mode / blocked storage: fall through to detection below.
-  }
-  try {
-    // First run only: if the OS/browser is set to Indonesian, greet in Indonesian: after that,
-    // the explicit choice in localStorage above always wins.
-    if (typeof navigator !== 'undefined' && navigator.language?.toLowerCase().startsWith('id')) {
-      return 'id';
-    }
-  } catch {
-    // Ignore — default below.
+    // Private mode / blocked storage: default to English below.
   }
   return 'en';
 }

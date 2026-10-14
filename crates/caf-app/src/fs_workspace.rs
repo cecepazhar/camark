@@ -107,21 +107,51 @@ pub async fn delete_file(file_path: String) -> Result<(), String> {
 pub async fn reveal_file(file_path: String) -> Result<(), String> {
     tokio::task::spawn_blocking(move || {
         let path = Path::new(&file_path);
-        let target = if path.is_file() {
-            path.parent().unwrap_or(path)
-        } else {
-            path
-        };
+        let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
         #[cfg(target_os = "linux")]
         {
-            let _ = std::process::Command::new("xdg-open")
-                .arg(target)
+            if std::process::Command::new("nautilus")
+                .arg("-s")
+                .arg(&canonical)
+                .spawn()
+                .is_ok()
+            {
+                return Ok(());
+            }
+
+            let uri = format!("['file://{}']", canonical.to_string_lossy());
+            if std::process::Command::new("gdbus")
+                .args([
+                    "call",
+                    "--session",
+                    "--dest",
+                    "org.freedesktop.FileManager1",
+                    "--object-path",
+                    "/org/freedesktop/FileManager1",
+                    "--method",
+                    "org.freedesktop.FileManager1.ShowItems",
+                    &uri,
+                    "",
+                ])
+                .spawn()
+                .is_ok()
+            {
+                return Ok(());
+            }
+
+            std::process::Command::new("xdg-open")
+                .arg(canonical.parent().unwrap_or(&canonical))
                 .spawn()
                 .map_err(|e| format!("Failed to open file manager: {e}"))?;
             Ok(())
         }
         #[cfg(windows)]
         {
+            let target = if canonical.is_file() {
+                canonical.parent().unwrap_or(&canonical)
+            } else {
+                &canonical
+            };
             let _ = std::process::Command::new("explorer")
                 .arg(target)
                 .spawn()
@@ -130,6 +160,11 @@ pub async fn reveal_file(file_path: String) -> Result<(), String> {
         }
         #[cfg(target_os = "macos")]
         {
+            let target = if canonical.is_file() {
+                canonical.parent().unwrap_or(&canonical)
+            } else {
+                &canonical
+            };
             let _ = std::process::Command::new("open")
                 .arg(target)
                 .spawn()

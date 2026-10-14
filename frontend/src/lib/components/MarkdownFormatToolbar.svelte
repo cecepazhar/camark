@@ -95,7 +95,7 @@
 </script>
 
 <div
-  class="h-9 px-2 bg-[#121217] border-b border-[#262626] flex items-center justify-between text-neutral-400 select-none overflow-x-auto scrollbar-none z-10 shrink-0"
+  class="h-9 px-2 bg-neutral-100 dark:bg-[#121217] border-b border-neutral-200 dark:border-[#262626] flex items-center justify-between text-neutral-600 dark:text-neutral-400 select-none overflow-x-auto scrollbar-none z-10 shrink-0"
 >
   <!-- Left Formatting Tools -->
   <div class="flex items-center gap-0.5">
@@ -104,7 +104,7 @@
       type="button"
       onclick={handleUndo}
       title="Urungkan (Ctrl+Z)"
-      class="p-1 rounded hover:bg-[#1f1f28] hover:text-white transition-colors"
+      class="p-1 rounded hover:bg-neutral-200 dark:hover:bg-[#1f1f28] hover:text-neutral-900 dark:hover:text-white transition-colors"
     >
       <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M3 7v6h6"></path>
@@ -115,7 +115,7 @@
       type="button"
       onclick={handleRedo}
       title="Ulangi (Ctrl+Y)"
-      class="p-1 rounded hover:bg-[#1f1f28] hover:text-white transition-colors"
+      class="p-1 rounded hover:bg-neutral-200 dark:hover:bg-[#1f1f28] hover:text-neutral-900 dark:hover:text-white transition-colors"
     >
       <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M21 7v6h-6"></path>
@@ -123,14 +123,14 @@
       </svg>
     </button>
 
-    <span class="w-[1px] h-3.5 bg-[#262626] mx-1"></span>
+    <span class="w-[1px] h-3.5 bg-neutral-300 dark:bg-[#262626] mx-1"></span>
 
     <!-- Headings -->
     <button
       type="button"
       onclick={applyH1}
       title="Heading 1"
-      class="px-1.5 py-0.5 rounded text-xs font-bold hover:bg-[#1f1f28] hover:text-white transition-colors"
+      class="px-1.5 py-0.5 rounded text-xs font-bold hover:bg-neutral-200 dark:hover:bg-[#1f1f28] hover:text-neutral-900 dark:hover:text-white transition-colors"
     >
       H1
     </button>
@@ -138,7 +138,7 @@
       type="button"
       onclick={applyH2}
       title="Heading 2"
-      class="px-1.5 py-0.5 rounded text-xs font-bold hover:bg-[#1f1f28] hover:text-white transition-colors"
+      class="px-1.5 py-0.5 rounded text-xs font-bold hover:bg-neutral-200 dark:hover:bg-[#1f1f28] hover:text-neutral-900 dark:hover:text-white transition-colors"
     >
       H2
     </button>
@@ -146,19 +146,19 @@
       type="button"
       onclick={applyH3}
       title="Heading 3"
-      class="px-1.5 py-0.5 rounded text-xs font-bold hover:bg-[#1f1f28] hover:text-white transition-colors"
+      class="px-1.5 py-0.5 rounded text-xs font-bold hover:bg-neutral-200 dark:hover:bg-[#1f1f28] hover:text-neutral-900 dark:hover:text-white transition-colors"
     >
       H3
     </button>
 
-    <span class="w-[1px] h-3.5 bg-[#262626] mx-1"></span>
+    <span class="w-[1px] h-3.5 bg-neutral-300 dark:bg-[#262626] mx-1"></span>
 
     <!-- Text Formatting -->
     <button
       type="button"
       onclick={applyBold}
       title="Tebal (Ctrl+B)"
-      class="p-1 rounded hover:bg-[#1f1f28] hover:text-white font-serif font-black text-xs transition-colors"
+      class="p-1 rounded hover:bg-neutral-200 dark:hover:bg-[#1f1f28] hover:text-neutral-900 dark:hover:text-white font-serif font-black text-xs transition-colors"
     >
       B
     </button>
@@ -166,7 +166,7 @@
       type="button"
       onclick={applyItalic}
       title="Miring (Ctrl+I)"
-      class="p-1 rounded hover:bg-[#1f1f28] hover:text-white italic font-serif text-xs transition-colors"
+      class="p-1 rounded hover:bg-neutral-200 dark:hover:bg-[#1f1f28] hover:text-neutral-900 dark:hover:text-white italic font-serif text-xs transition-colors"
     >
       I
     </button>
@@ -174,19 +174,19 @@
       type="button"
       onclick={applyStrike}
       title="Coret"
-      class="p-1 rounded hover:bg-[#1f1f28] hover:text-white line-through text-xs transition-colors"
+      class="p-1 rounded hover:bg-neutral-200 dark:hover:bg-[#1f1f28] hover:text-neutral-900 dark:hover:text-white line-through text-xs transition-colors"
     >
       S
     </button>
 
-    <span class="w-[1px] h-3.5 bg-[#262626] mx-1"></span>
+    <span class="w-[1px] h-3.5 bg-neutral-300 dark:bg-[#262626] mx-1"></span>
 
     <!-- Lists -->
     <button
       type="button"
       onclick={applyBulletList}
       title="Bullet List"
-      class="p-1 rounded hover:bg-[#1f1f28] hover:text-white transition-colors"
+      class="p-1 rounded hover:bg-neutral-200 dark:hover:bg-[#1f1f28] hover:text-neutral-900 dark:hover:text-white transition-colors"
     >
       <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <line x1="8" y1="6" x2="21" y2="6"></line>
@@ -201,7 +201,7 @@
       type="button"
       onclick={applyNumberList}
       title="Numbered List"
-      class="p-1 rounded hover:bg-[#1f1f28] hover:text-white transition-colors"
+      class="p-1 rounded hover:bg-neutral-200 dark:hover:bg-[#1f1f28] hover:text-neutral-900 dark:hover:text-white transition-colors"
     >
       <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <line x1="10" y1="6" x2="21" y2="6"></line>
@@ -216,7 +216,7 @@
       type="button"
       onclick={applyTaskList}
       title="Task Checkbox List"
-      class="p-1 rounded hover:bg-[#1f1f28] hover:text-white transition-colors"
+      class="p-1 rounded hover:bg-neutral-200 dark:hover:bg-[#1f1f28] hover:text-neutral-900 dark:hover:text-white transition-colors"
     >
       <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <rect x="3" y="5" width="6" height="6" rx="1"></rect>
@@ -226,14 +226,14 @@
       </svg>
     </button>
 
-    <span class="w-[1px] h-3.5 bg-[#262626] mx-1"></span>
+    <span class="w-[1px] h-3.5 bg-neutral-300 dark:bg-[#262626] mx-1"></span>
 
     <!-- Blockquote & Code -->
     <button
       type="button"
       onclick={applyQuote}
       title="Kutipan (Blockquote)"
-      class="p-1 rounded hover:bg-[#1f1f28] hover:text-white transition-colors"
+      class="p-1 rounded hover:bg-neutral-200 dark:hover:bg-[#1f1f28] hover:text-neutral-900 dark:hover:text-white transition-colors"
     >
       <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M3 21c3 0 7-1 7-8V5c0-1.25-.756-2.017-2-2H4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2 1 0 1 0 1 1v1c0 1-1 2-2 2s-1 .008-1 1.031V20c0 1 0 1 1 1z"></path>
@@ -244,7 +244,7 @@
       type="button"
       onclick={applyCode}
       title="Inline Code"
-      class="p-1 rounded hover:bg-[#1f1f28] hover:text-white font-mono text-[11px] transition-colors"
+      class="p-1 rounded hover:bg-neutral-200 dark:hover:bg-[#1f1f28] hover:text-neutral-900 dark:hover:text-white font-mono text-[11px] transition-colors"
     >
       &lt;/&gt;
     </button>
@@ -252,7 +252,7 @@
       type="button"
       onclick={applyCodeBlock}
       title="Code Block"
-      class="p-1 rounded hover:bg-[#1f1f28] hover:text-white font-mono text-[11px] transition-colors"
+      class="p-1 rounded hover:bg-neutral-200 dark:hover:bg-[#1f1f28] hover:text-neutral-900 dark:hover:text-white font-mono text-[11px] transition-colors"
     >
       {'{ }'}
     </button>
@@ -260,7 +260,7 @@
       type="button"
       onclick={applyLink}
       title="Sisipkan Tautan"
-      class="p-1 rounded hover:bg-[#1f1f28] hover:text-white transition-colors"
+      class="p-1 rounded hover:bg-neutral-200 dark:hover:bg-[#1f1f28] hover:text-neutral-900 dark:hover:text-white transition-colors"
     >
       <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
@@ -268,16 +268,16 @@
       </svg>
     </button>
 
-    <span class="w-[1px] h-3.5 bg-[#262626] mx-1"></span>
+    <span class="w-[1px] h-3.5 bg-neutral-300 dark:bg-[#262626] mx-1"></span>
 
     <!-- Table Tools -->
     <button
       type="button"
       onclick={applyTable}
       title="Sisipkan Tabel 3x3"
-      class="p-1 rounded hover:bg-[#1f1f28] hover:text-white flex items-center gap-1 transition-colors"
+      class="p-1 rounded hover:bg-neutral-200 dark:hover:bg-[#1f1f28] hover:text-neutral-900 dark:hover:text-white flex items-center gap-1 transition-colors"
     >
-      <svg class="w-3.5 h-3.5 text-cyan-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <svg class="w-3.5 h-3.5 text-cyan-500 dark:text-cyan-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <rect x="3" y="3" width="18" height="18" rx="2"></rect>
         <path d="M3 9h18"></path>
         <path d="M3 15h18"></path>
@@ -289,7 +289,7 @@
       type="button"
       onclick={onFormatDocumentTable}
       title="Format & Auto-Align Kolom Tabel (|)"
-      class="px-2 py-0.5 rounded text-[10px] font-semibold bg-[#18181F] hover:bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 flex items-center gap-1 transition-colors"
+      class="px-2 py-0.5 rounded text-[10px] font-semibold bg-neutral-200/80 dark:bg-[#18181F] hover:bg-cyan-500/20 text-cyan-700 dark:text-cyan-400 border border-cyan-500/30 flex items-center gap-1 transition-colors"
     >
       <span>Align Tabel</span>
     </button>
@@ -301,7 +301,7 @@
     <button
       type="button"
       onclick={onToggleOutline}
-      class="px-2 py-0.5 rounded text-[11px] font-medium flex items-center gap-1 transition-colors {isOutlineOpen ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30' : 'hover:bg-[#1f1f28] text-neutral-400 hover:text-white'}"
+      class="px-2 py-0.5 rounded text-[11px] font-medium flex items-center gap-1 transition-colors {isOutlineOpen ? 'bg-cyan-500/20 text-cyan-700 dark:text-cyan-300 border border-cyan-500/30' : 'hover:bg-neutral-200 dark:hover:bg-[#1f1f28] text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'}"
       title="Tampilkan / Sembunyikan Struktur Dokumen (Outline)"
     >
       <span>📑</span>
@@ -312,7 +312,7 @@
     <button
       type="button"
       onclick={onTogglePresentation}
-      class="px-2 py-0.5 rounded text-[11px] font-bold flex items-center gap-1 bg-gradient-to-r from-amber-500/20 to-orange-500/20 text-amber-300 border border-amber-500/40 hover:from-amber-500/30 hover:to-orange-500/30 transition-all shadow-xs"
+      class="px-2 py-0.5 rounded text-[11px] font-bold flex items-center gap-1 bg-gradient-to-r from-amber-500/20 to-orange-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/40 hover:from-amber-500/30 hover:to-orange-500/30 transition-all shadow-xs"
       title="Mode Presentasi / Slideshow Layar Penuh (PRO)"
     >
       <span>📽️</span>
@@ -323,7 +323,7 @@
     <button
       type="button"
       onclick={onToggleZen}
-      class="px-2 py-0.5 rounded text-[11px] font-medium flex items-center gap-1 transition-colors {isZenMode ? 'bg-cyan-500 text-black font-bold' : 'hover:bg-[#1f1f28] text-neutral-400 hover:text-white'}"
+      class="px-2 py-0.5 rounded text-[11px] font-medium flex items-center gap-1 transition-colors {isZenMode ? 'bg-cyan-500 text-black font-bold' : 'hover:bg-neutral-200 dark:hover:bg-[#1f1f28] text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'}"
       title="Zen Mode / Typewriter Scrolling (fokus tanpa distraksi)"
     >
       <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
