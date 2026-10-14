@@ -23,6 +23,7 @@
   import { listen } from '@tauri-apps/api/event';
   import { goto } from '$app/navigation';
   import { openTab } from '$lib/stores/docTabs.svelte';
+  import { Button } from '@cecepazhar/caui';
   import { t } from '$lib/i18n/index.svelte';
   import LanguageSwitcher from '$lib/components/LanguageSwitcher.svelte';
   import { APP_CONFIG } from '$lib/generated/app';
@@ -269,26 +270,28 @@
           </a>
         {/if}
 
-        <button
-          type="button"
+        <Button
+          variant="ghost"
+          size="icon"
           onclick={() => openPalette('all')}
-          class="p-1.5 hover:text-neutral-900 dark:hover:text-white hover:bg-neutral-200/70 dark:hover:bg-neutral-800 rounded-md transition-colors"
+          class="!p-1.5 text-neutral-500 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-white hover:bg-neutral-200/70 dark:hover:bg-neutral-800 rounded-md transition-colors"
           title="Search / Command Palette (Ctrl+K)"
           aria-label="Command Palette"
         >
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
           </svg>
-        </button>
+        </Button>
 
         <!-- Language Switcher -->
         <LanguageSwitcher />
 
         <!-- Theme Toggle (Dark / Light) -->
-        <button
-          type="button"
+        <Button
+          variant="ghost"
+          size="icon"
           onclick={() => toggleTheme()}
-          class="p-1.5 rounded-md text-neutral-500 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-white hover:bg-neutral-200/70 dark:hover:bg-neutral-800 transition-colors"
+          class="!p-1.5 rounded-md text-neutral-500 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-white hover:bg-neutral-200/70 dark:hover:bg-neutral-800 transition-colors"
           title={theme.name === 'dark' ? t('shell.lightTheme') : t('shell.darkTheme')}
           aria-label={t('shell.theme')}
         >
@@ -301,46 +304,49 @@
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
             </svg>
           {/if}
-        </button>
+        </Button>
 
         <!-- Divider -->
         <div class="h-3.5 w-px bg-neutral-300 dark:bg-neutral-800 mx-0.5"></div>
 
         <!-- Frameless Window Controls -->
         <div class="flex items-center">
-          <button
-            type="button"
+          <Button
+            variant="ghost"
+            size="icon"
             onclick={minimizeWindow}
-            class="p-1.5 rounded-md text-neutral-500 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-white hover:bg-neutral-200/70 dark:hover:bg-neutral-800 transition-colors"
+            class="!p-1.5 rounded-md text-neutral-500 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-white hover:bg-neutral-200/70 dark:hover:bg-neutral-800 transition-colors"
             title="Minimize"
             aria-label="Minimize"
           >
             <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4" />
             </svg>
-          </button>
-          <button
-            type="button"
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
             onclick={maximizeWindow}
-            class="p-1.5 rounded-md text-neutral-500 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-white hover:bg-neutral-200/70 dark:hover:bg-neutral-800 transition-colors"
+            class="!p-1.5 rounded-md text-neutral-500 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-white hover:bg-neutral-200/70 dark:hover:bg-neutral-800 transition-colors"
             title="Maximize"
             aria-label="Maximize"
           >
             <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <rect x="4" y="4" width="16" height="16" rx="2" stroke-width="2" />
             </svg>
-          </button>
-          <button
-            type="button"
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
             onclick={closeWindow}
-            class="p-1.5 rounded-md text-neutral-500 dark:text-neutral-400 hover:bg-rose-500 hover:text-white transition-colors"
+            class="!p-1.5 rounded-md text-neutral-500 hover:text-white dark:text-neutral-400 hover:!bg-rose-600 transition-colors"
             title="Close"
             aria-label="Close"
           >
             <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
             </svg>
-          </button>
+          </Button>
         </div>
       </div>
     </header>

@@ -3,7 +3,7 @@
   import { page } from '$app/state';
   import { goto } from '$app/navigation';
   import { t } from '$lib/i18n/index.svelte';
-  import PageHeader from '$lib/components/PageHeader.svelte';
+  import { Button, Input, Badge, ProGate, Avatar, AvatarGroup, PageHeader } from '@cecepazhar/caui';
   import Logo from '$lib/components/Logo.svelte';
   import ProfileAvatar from '$lib/components/ProfileAvatar.svelte';
   import AvatarPicker from '$lib/components/AvatarPicker.svelte';
@@ -58,12 +58,13 @@
   let licenseKeyInput = $state('');
   let isActivatingLicense = $state(false);
 
-  async function handleActivateLicense() {
-    if (!licenseKeyInput.trim()) return;
+  async function handleActivateLicense(customKey?: string) {
+    const key = (customKey || licenseKeyInput).trim();
+    if (!key) return;
     isActivatingLicense = true;
     try {
-      const status = await proActivateLicense(licenseKeyInput.trim());
-      showToast('Lisensi Pro berhasil diaktivasi!', 'success');
+      await proActivateLicense(key);
+      showToast('Lisensi Pro berhasil diaktivasi! Semua fitur Pro aktif.', 'success');
       licenseKeyInput = '';
       window.location.reload();
     } catch (e: any) {
@@ -425,48 +426,116 @@
           <div class="flex items-center gap-2">
             <h2 class="text-lg font-semibold text-neutral-900 dark:text-white">CAMark Pro & Lisensi GCC Cloud</h2>
             {#if pro.isPro || profile.plan === 'pro'}
-              <span class="text-xs font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/30 uppercase">
-                Aktif ✓
-              </span>
+              <Badge variant="success" size="sm">PRO AKTIF ✓</Badge>
             {:else}
-              <span class="text-xs font-semibold px-2 py-0.5 rounded-full bg-neutral-200 dark:bg-neutral-800 text-neutral-500 uppercase">
-                Free Edition
-              </span>
+              <Badge variant="neutral" size="sm">FREE EDITION</Badge>
             {/if}
           </div>
           <p class="{MUTED} text-sm mt-1">
-            Fitur Pro mencakup Native PDF Print, AI Contextual Copilot, Table Tools, dan Sync Brankas SQLCipher.
+            Membuka enkripsi brankas cloud E2EE, PDF & HTML beresolusi tinggi, AI Markdown Copilot, dan fitur produktivitas profesional.
           </p>
         </div>
       </div>
 
-      <!-- License Key Activation Box -->
-      <div class="{SUBCARD} space-y-3">
-        <h3 class="text-sm font-bold text-neutral-900 dark:text-white flex items-center gap-2">
-          <span>🔑</span>
-          <span>Aktivasi License Key</span>
-        </h3>
-        <p class="text-xs {MUTED}">
-          Masukkan kode lisensi resmi dari Ko-fi, Mayar, atau Admin untuk membuka seluruh fitur Pro.
-        </p>
+      {#if pro.isPro || profile.plan === 'pro'}
+        <!-- Active Pro Lifetime Card (Matching CATerm Pro) -->
+        <div class="rounded-xl border border-cyan-500/40 bg-gradient-to-br from-cyan-500/10 via-neutral-50 dark:via-neutral-900/60 to-transparent p-6 space-y-5">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-neutral-200 dark:border-neutral-800">
+            <div>
+              <div class="flex items-center gap-2">
+                <span class="text-xl font-bold text-neutral-900 dark:text-white">CAMark Pro Lifetime</span>
+                <span class="px-2 py-0.5 rounded-full text-[10px] font-black tracking-wider bg-amber-400 dark:bg-amber-500 text-neutral-950 shadow-xs border border-white dark:border-neutral-900">FOUNDER</span>
+              </div>
+              <p class="text-xs text-neutral-500 dark:text-neutral-400 mt-1">Status lisensi terverifikasi permanen untuk perangkat ini.</p>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onclick={handleProLogout}
+              class="text-rose-600 dark:text-rose-400 border-rose-500/30 hover:bg-rose-500/10"
+            >
+              Nonaktifkan Lisensi
+            </Button>
+          </div>
 
-        <div class="flex items-center gap-2 pt-1 max-w-lg">
-          <input
-            type="text"
-            bind:value={licenseKeyInput}
-            placeholder="CMRK-PRO-XXXX-XXXX-XXXX"
-            class="{INPUT} font-mono uppercase"
-          />
-          <button
-            type="button"
-            disabled={isActivatingLicense || !licenseKeyInput.trim()}
-            onclick={handleActivateLicense}
-            class="px-4 py-2.5 bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-white text-xs font-bold rounded-lg transition-colors shrink-0 cursor-pointer"
-          >
-            {isActivatingLicense ? 'Aktivasi...' : 'Aktivasi'}
-          </button>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+            <div class="flex items-center gap-2.5 text-neutral-700 dark:text-neutral-300">
+              <span class="text-emerald-500">✓</span>
+              <span>Enkripsi Brankas SQLCipher (Zero-Knowledge)</span>
+            </div>
+            <div class="flex items-center gap-2.5 text-neutral-700 dark:text-neutral-300">
+              <span class="text-emerald-500">✓</span>
+              <span>Ekspor PDF & Standalone HTML Tanpa Batas</span>
+            </div>
+            <div class="flex items-center gap-2.5 text-neutral-700 dark:text-neutral-300">
+              <span class="text-emerald-500">✓</span>
+              <span>Hana AI Assistant & Markdown Copilot</span>
+            </div>
+            <div class="flex items-center gap-2.5 text-neutral-700 dark:text-neutral-300">
+              <span class="text-emerald-500">✓</span>
+              <span>Ambient Glow & Mode Mengetik Reaktif</span>
+            </div>
+            <div class="flex items-center gap-2.5 text-neutral-700 dark:text-neutral-300">
+              <span class="text-emerald-500">✓</span>
+              <span>Mode Presentasi Slide Deck Interaktif</span>
+            </div>
+            <div class="flex items-center gap-2.5 text-neutral-700 dark:text-neutral-300">
+              <span class="text-emerald-500">✓</span>
+              <span>Koleksi Avatar Pro & Efek Halo Cahaya</span>
+            </div>
+          </div>
         </div>
-      </div>
+      {:else}
+        <!-- License Key Activation Box -->
+        <div class="{SUBCARD} space-y-4">
+          <div>
+            <h3 class="text-sm font-bold text-neutral-900 dark:text-white flex items-center gap-2">
+              <span>🔑</span>
+              <span>Aktivasi License Key</span>
+            </h3>
+            <p class="text-xs {MUTED} mt-1">
+              Masukkan kode lisensi resmi dari Mayar, Ko-fi, atau Founder Lifetime untuk membuka seluruh kapabilitas Pro.
+            </p>
+          </div>
+
+          <div class="flex flex-col sm:flex-row gap-2 max-w-lg">
+            <Input
+              type="text"
+              bind:value={licenseKeyInput}
+              placeholder="e.g. CAMARK-LIFE-FOUNDER-CECEP"
+              class="font-mono uppercase flex-1"
+            />
+            <Button
+              type="button"
+              variant="primary"
+              size="md"
+              disabled={isActivatingLicense || !licenseKeyInput.trim()}
+              loading={isActivatingLicense}
+              onclick={() => handleActivateLicense()}
+              class="shrink-0 bg-cyan-600 hover:bg-cyan-500 text-white"
+            >
+              Aktivasi Lisensi
+            </Button>
+          </div>
+
+          <!-- Quick Creator Unlock Matching CATerm -->
+          <div class="pt-3 border-t border-neutral-200 dark:border-neutral-800 flex flex-wrap items-center justify-between gap-2">
+            <span class="text-xs text-neutral-500">Creator / Owner Quick Unlock:</span>
+            <Button
+              type="button"
+              variant="warning"
+              size="sm"
+              disabled={isActivatingLicense}
+              onclick={() => handleActivateLicense('CAMARK-LIFE-FOUNDER-CECEP')}
+              class="flex items-center gap-1.5"
+            >
+              <svg class="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 16L3 5l5.5 5L12 4l3.5 6L21 5l-2 11H5zm14 3c0 .6-.4 1-1 1H6c-.6 0-1-.4-1-1v-1h14v1z"/></svg>
+              <span>Activate Founder Lifetime (Cecep Azhar)</span>
+            </Button>
+          </div>
+        </div>
+      {/if}
 
       <!-- GCC Cloud Account Section -->
       <div class="{SUBCARD} space-y-4">
@@ -481,13 +550,15 @@
               <p class="text-xs font-bold text-neutral-900 dark:text-white">{pro.status.account.name}</p>
               <p class="text-xs {MUTED}">{pro.status.account.email}</p>
             </div>
-            <button
+            <Button
               type="button"
+              variant="outline"
+              size="sm"
               onclick={handleProLogout}
-              class="px-3 py-1.5 rounded-lg border border-red-500/30 text-red-500 hover:bg-red-500/10 text-xs font-medium cursor-pointer"
+              class="text-rose-600 dark:text-rose-400 border-rose-500/30"
             >
               Keluar Akun
-            </button>
+            </Button>
           </div>
         {:else}
           <ProLoginForm onSignedIn={handleProSignedIn} />

@@ -10,6 +10,7 @@
   import DOMPurify from 'dompurify';
   import katex from 'katex';
   import mermaid from 'mermaid';
+  import { Button, Input, Badge } from '@cecepazhar/caui';
 
   import { showToast } from '$lib/stores/uiNotifications.svelte';
   import { t, getLocale } from '$lib/i18n/index.svelte';
@@ -1220,9 +1221,11 @@ graph TD;
       {/if}
 
       <!-- PDF Print Exporter -->
-      <button
+      <Button
+        variant="secondary"
+        size="sm"
         onclick={exportPdf}
-        class="px-2.5 py-1 rounded-lg bg-neutral-100 hover:bg-neutral-200/80 dark:bg-neutral-800/80 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-200 text-xs font-medium border border-neutral-300 dark:border-neutral-700/80 transition-colors flex items-center gap-1.5"
+        class="flex items-center gap-1.5"
         title={t('editor.printPdf')}
       >
         <svg class="w-3.5 h-3.5 text-rose-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1231,19 +1234,21 @@ graph TD;
           <path d="M6 14h12v8H6z"></path>
         </svg>
         <span class="hidden sm:inline">PDF</span>
-      </button>
+      </Button>
 
       <!-- HTML Exporter -->
-      <button
+      <Button
+        variant="secondary"
+        size="sm"
         onclick={exportHtml}
-        class="px-2.5 py-1 rounded-lg bg-neutral-100 hover:bg-neutral-200/80 dark:bg-neutral-800/80 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-200 text-xs font-medium border border-neutral-300 dark:border-neutral-700/80 transition-colors flex items-center gap-1.5"
+        class="flex items-center gap-1.5"
         title={t('editor.exportHtml')}
       >
         <svg class="w-3.5 h-3.5 text-cyan-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
         </svg>
         <span class="hidden sm:inline">HTML</span>
-      </button>
+      </Button>
 
       <!-- Editor / Split / Preview View Switcher -->
       <div class="flex items-center p-0.5 bg-neutral-200/70 dark:bg-neutral-900 rounded-lg border border-neutral-300 dark:border-neutral-800 text-xs">
@@ -1606,21 +1611,21 @@ graph TD;
           class="space-y-3"
         >
           <div>
-            <input
+            <Input
               type="password"
               bind:value={vaultPassword}
               placeholder={t('editor.masterPasswordPlaceholder')}
-              class="w-full px-3 py-2 rounded-xl bg-neutral-950 border border-neutral-700 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-amber-500 transition-colors"
+              class="w-full font-mono text-xs"
             />
           </div>
 
           {#if isVaultSetup}
             <div>
-              <input
+              <Input
                 type="password"
                 bind:value={vaultConfirmPassword}
                 placeholder={t('editor.confirmPasswordPlaceholder')}
-                class="w-full px-3 py-2 rounded-xl bg-neutral-950 border border-neutral-700 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-amber-500 transition-colors"
+                class="w-full font-mono text-xs"
               />
             </div>
           {/if}
@@ -1632,20 +1637,25 @@ graph TD;
           {/if}
 
           <div class="flex items-center justify-end gap-2 pt-2">
-            <button
+            <Button
               type="button"
+              variant="ghost"
+              size="sm"
               onclick={closeVaultModal}
-              class="px-3 py-1.5 rounded-lg text-xs font-medium text-neutral-400 hover:text-white hover:bg-neutral-800 transition-colors"
+              class="text-neutral-400 hover:text-white"
             >
               {t('editor.cancelBtn')}
-            </button>
-            <button
+            </Button>
+            <Button
               type="submit"
+              variant="warning"
+              size="sm"
               disabled={isVaultModalLoading || !vaultPassword.trim()}
-              class="px-4 py-1.5 rounded-lg text-xs font-semibold bg-amber-500 hover:bg-amber-400 text-neutral-950 disabled:opacity-40 transition-colors shadow-md shadow-amber-500/20"
+              loading={isVaultModalLoading}
+              class="bg-amber-500 hover:bg-amber-400 text-neutral-950 font-semibold"
             >
-              {isVaultModalLoading ? '...' : (isVaultSetup ? t('editor.setupVaultBtn') : t('editor.unlockVaultBtn'))}
-            </button>
+              {isVaultSetup ? t('editor.setupVaultBtn') : t('editor.unlockVaultBtn')}
+            </Button>
           </div>
         </form>
       </div>
