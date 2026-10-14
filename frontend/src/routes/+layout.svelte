@@ -170,15 +170,10 @@
 
     window.addEventListener('keydown', handleKeyDown);
 
-    // Global listener for single-instance / system open-file events
+    // Global listener for single-instance / system open-file events: ensure we are on the main editor page
     listen<string>('open-file', (event) => {
-      if (event.payload) {
-        const parts = event.payload.split('/');
-        const name = parts[parts.length - 1] || 'document.md';
-        openTab(event.payload, name, false);
-        if (page.url.pathname !== '/') {
-          goto('/');
-        }
+      if (event.payload && page.url.pathname !== '/') {
+        goto('/');
       }
     }).catch((err) => console.warn('Global open-file listen error:', err));
 

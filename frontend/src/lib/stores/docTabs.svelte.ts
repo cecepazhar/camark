@@ -13,9 +13,34 @@ const STORAGE_KEY = 'camark_open_tabs_v1';
 const ACTIVE_TAB_KEY = 'camark_active_tab_v1';
 const VIEW_MODE_KEY = 'camark_view_mode_v1';
 
-let tabs = $state<DocTab[]>([]);
-let activeTabId = $state<string | null>(null);
-let viewMode = $state<'editor' | 'split' | 'preview'>('preview');
+function getInitialViewMode(): 'editor' | 'split' | 'preview' {
+  if (typeof localStorage === 'undefined') return 'split';
+  try {
+    const vm = localStorage.getItem(VIEW_MODE_KEY);
+    if (vm === 'editor' || vm === 'split' || vm === 'preview') return vm;
+  } catch {}
+  return 'split';
+}
+
+function getInitialTabs(): { tabs: DocTab[]; activeTabId: string | null } {
+  if (typeof localStorage === 'undefined') return { tabs: [], activeTabId: null };
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    const activeRaw = localStorage.getItem(ACTIVE_TAB_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw) as Array<{ id: string; path: string; title: string; isVault: boolean }>;
+      const t = parsed.map((p) => ({ ...p, isDirty: false }));
+      const a = activeRaw && t.some((tab) => tab.id === activeRaw) ? activeRaw : (t[0]?.id ?? null);
+      return { tabs: t, activeTabId: a };
+    }
+  } catch {}
+  return { tabs: [], activeTabId: null };
+}
+
+const initialSession = getInitialTabs();
+let tabs = $state<DocTab[]>(initialSession.tabs);
+let activeTabId = $state<string | null>(initialSession.activeTabId);
+let viewMode = $state<'editor' | 'split' | 'preview'>(getInitialViewMode());
 
 function persist() {
   if (typeof localStorage === 'undefined') return;
@@ -49,17 +74,21 @@ export function restoreTabs() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     const activeRaw = localStorage.getItem(ACTIVE_TAB_KEY);
-    const vm = (localStorage.getItem(VIEW_MODE_KEY) || 'preview') as 'editor' | 'split' | 'preview';
+    const vm = localStorage.getItem(VIEW_MODE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw) as Array<{ id: string; path: string; title: string; isVault: boolean }>;
       tabs = parsed.map((p) => ({ ...p, isDirty: false }));
     }
     activeTabId = activeRaw && tabs.some((t) => t.id === activeRaw) ? activeRaw : (tabs[0]?.id ?? null);
-    viewMode = vm === 'editor' || vm === 'split' ? vm : 'preview';
+    if (vm === 'editor' || vm === 'split' || vm === 'preview') {
+      viewMode = vm;
+    } else {
+      viewMode = 'split';
+    }
   } catch {
     tabs = [];
     activeTabId = null;
-    viewMode = 'preview';
+    viewMode = 'split';
   }
 }
 
@@ -67,18 +96,15 @@ export function openTab(path: string, title: string, isVault = false): void {
   const id = path;
   const existing = tabs.find((t) => t.id === id);
   if (existing) {
-    // refresh title/content flag
     existing.title = title;
     existing.isVault = isVault;
     activeTabId = id;
-    viewMode = 'preview';
     persist();
     return;
   }
   const newTab: DocTab = { id, path, title, isVault, isDirty: false };
   tabs = [...tabs, newTab];
   activeTabId = id;
-  viewMode = 'preview';
   persist();
 }
 

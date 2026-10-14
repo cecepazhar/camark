@@ -121,7 +121,8 @@ graph TD;
 > "Privasi dan kecepatan bukanlah kompromi, melainkan fondasi setiap perkakas produktivitas modern."
 `;
 
-  let rawMarkdown = $state<string>(getLocale() === 'id' ? DEMO_MD_ID : DEMO_MD_EN);
+  const initialActiveTab = getActiveTab();
+  let rawMarkdown = $state<string>(initialActiveTab ? '' : (getLocale() === 'id' ? DEMO_MD_ID : DEMO_MD_EN));
   let renderedHtml = $state<string>('');
 
   // Multi-document tabs reactive state
@@ -401,6 +402,7 @@ graph TD;
 
     // Restore saved tabs from local session storage
     restoreTabs();
+    viewMode = getViewMode();
     const restored = getActiveTab();
     if (restored) {
       loadTabContent(restored);
@@ -460,7 +462,6 @@ graph TD;
     invoke<string | null>('get_initial_file_path')
       .then(async (path) => {
         if (path) {
-          viewMode = 'preview';
           showFileTree = false;
           const parts = path.split('/');
           const name = parts[parts.length - 1] || 'document.md';
@@ -473,7 +474,6 @@ graph TD;
     listen<string>('open-file', (event) => {
       console.log('>>> [FRONTEND] open-file event received:', event.payload);
       if (event.payload) {
-        viewMode = 'preview';
         showFileTree = false;
         const parts = event.payload.split('/');
         const name = parts[parts.length - 1] || 'document.md';
@@ -746,8 +746,6 @@ graph TD;
     if (node.is_dir) return;
     try {
       openTab(node.path, node.name, false);
-      viewMode = 'preview';
-      setViewMode('preview');
       const target = getActiveTab();
       if (target) {
         await loadTabContent(target);
@@ -883,8 +881,6 @@ graph TD;
     const tabId = `vault://${doc.id}`;
     const title = `🔒 ${doc.title}`;
     openTab(tabId, title, true);
-    viewMode = 'preview';
-    setViewMode('preview');
     currentFilePath = tabId;
     currentDocTitle = title;
     rawMarkdown = doc.content || '';
