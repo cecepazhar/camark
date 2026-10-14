@@ -371,6 +371,12 @@ export const id: Dictionary = {
   ai: {
     hanaTitle: 'Hana AI 🌸',
     hanaTagline: 'Asisten AI Markdown tenang, presisi & siap membantu',
+    greeting: 'Halo! Saya asisten AI CAMark. Ada yang bisa saya bantu dengan dokumen markdown atau analisis teks Anda?',
+    processing: 'Sedang memproses...',
+    activeStatus: 'Hana AI Aktif 🌸',
+    callFailed: 'Gagal memanggil AI Assistant',
+    errorMessage: 'Maaf, terjadi kendala: {error}',
+    checkSettings: 'Periksa konfigurasi API AI di menu Pengaturan',
     minimizeBubble: 'Kecilkan ke pojok',
     minimize: 'Kecilkan',
     floatingCardMode: 'Mode Kartu Mengambang',

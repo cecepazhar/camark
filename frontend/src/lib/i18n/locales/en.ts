@@ -373,6 +373,12 @@ export const en: Dictionary = {
   ai: {
     hanaTitle: 'Hana AI 🌸',
     hanaTagline: 'Calm, sharp & actionable Markdown AI Assistant',
+    greeting: 'Hello! I am CAMark AI Assistant. How can I help you with your markdown documents or text analysis today?',
+    processing: 'Processing...',
+    activeStatus: 'Hana AI Active 🌸',
+    callFailed: 'Failed to contact AI Assistant',
+    errorMessage: 'Sorry, an error occurred: {error}',
+    checkSettings: 'Please check your AI API configuration in Settings',
     minimizeBubble: 'Minimize to bubble',
     minimize: 'Minimize',
     floatingCardMode: 'Floating Card Mode',

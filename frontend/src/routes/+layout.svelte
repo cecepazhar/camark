@@ -274,18 +274,6 @@
           </a>
         {/if}
 
-        <!-- Quick Hana AI Trigger Pill -->
-        <button
-          type="button"
-          onclick={() => toggleAiChat()}
-          class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-600 dark:text-rose-400 hover:bg-rose-500/20 hover:text-rose-700 dark:hover:text-rose-300 transition-colors text-xs font-medium cursor-pointer"
-          title={t('ai.askAi') || 'Hana AI'}
-        >
-          <span class="text-xs">🌸</span>
-          <span class="hidden sm:inline">Hana AI</span>
-        </button>
-
-        <!-- Command Palette Quick Search Button -->
         <button
           type="button"
           onclick={() => openPalette('all')}

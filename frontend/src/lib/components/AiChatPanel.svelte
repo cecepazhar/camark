@@ -8,12 +8,15 @@
   let inputPrompt = $state('');
   let isMinimized = $state(false);
   let isFullHeight = $state(false);
-  let messages = $state<{ role: 'user' | 'assistant'; content: string }[]>([
-    {
-      role: 'assistant',
-      content: 'Halo! Saya asisten AI CAMark. Ada yang bisa saya bantu dengan dokumen markdown atau analisis teks Anda?'
+  let messages = $state<{ role: 'user' | 'assistant'; content: string }[]>([]);
+
+  $effect(() => {
+    if (messages.length === 0) {
+      messages = [{ role: 'assistant', content: t('ai.greeting') }];
+    } else if (messages.length === 1 && messages[0].role === 'assistant') {
+      messages[0].content = t('ai.greeting');
     }
-  ]);
+  });
   let isSending = $state(false);
 
   async function handleSend() {
@@ -27,10 +30,10 @@
       const response = await chatWithAi(prompt);
       messages.push({ role: 'assistant', content: response.message });
     } catch (e: any) {
-      showToast(e?.message || 'Gagal memanggil AI Assistant', 'error');
+      showToast(e?.message || t('ai.callFailed'), 'error');
       messages.push({
         role: 'assistant',
-        content: `Maaf, terjadi kendala: ${e?.message || 'Periksa konfigurasi API AI di menu Pengaturan'}`
+        content: `${t('ai.errorMessage', { error: e?.message || t('ai.checkSettings') })}`
       });
     } finally {
       isSending = false;
@@ -55,7 +58,7 @@
         class="flex items-center gap-2 px-3.5 py-2 rounded-full bg-rose-600 hover:bg-rose-500 text-white shadow-xl shadow-rose-600/30 font-medium text-xs border border-rose-400/30 transition-transform hover:scale-105 cursor-pointer"
       >
         <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-        <span>Hana AI Aktif 🌸</span>
+        <span>{t('ai.activeStatus')}</span>
         <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" />
         </svg>
@@ -143,7 +146,7 @@
               <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
               <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
             </svg>
-            <span>Sedang memproses...</span>
+            <span>{t('ai.processing')}</span>
           </div>
         {/if}
       </div>
