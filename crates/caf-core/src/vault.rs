@@ -32,13 +32,8 @@ pub fn is_unlocked() -> Result<bool, CatermError> {
 }
 
 pub fn ensure_unlocked_key() -> Result<String, CatermError> {
-    let guard = ACTIVE_VAULT_KEY.read();
-    if let Some(key) = *guard {
-        Ok(hex::encode(key))
-    } else {
-        let data_dir = crate::paths::resolve_data_dir()?.path;
-        load_or_create_local_key(&data_dir)
-    }
+    let data_dir = crate::paths::resolve_data_dir()?.path;
+    load_or_create_local_key(&data_dir)
 }
 
 pub fn is_vault_initialized() -> Result<bool, CatermError> {

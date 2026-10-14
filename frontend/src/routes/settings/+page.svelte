@@ -9,7 +9,7 @@
   import AvatarPicker from '$lib/components/AvatarPicker.svelte';
   import AmbientSettingsCard from '$lib/components/AmbientSettingsCard.svelte';
   import { getProfile, saveProfile } from '$lib/stores/profile.svelte';
-  import { getPro } from '$lib/stores/pro.svelte';
+  import { getPro, refreshProStatus } from '$lib/stores/pro.svelte';
   import { showToast, confirmModal } from '$lib/stores/uiNotifications.svelte';
   import { changeMasterPassword, MIN_VAULT_PASSWORD_LEN } from '$lib/api/vault';
   import { getAiSettings, saveAiSettings, testAiConnection, type AiSettings } from '$lib/api/ai';
@@ -64,9 +64,9 @@
     isActivatingLicense = true;
     try {
       await proActivateLicense(key);
+      await refreshProStatus();
       showToast('Lisensi Pro berhasil diaktivasi! Semua fitur Pro aktif.', 'success');
       licenseKeyInput = '';
-      window.location.reload();
     } catch (e: any) {
       alert(`Gagal aktivasi lisensi: ${e?.message || e}`);
     } finally {
@@ -76,14 +76,14 @@
 
   async function handleProSignedIn(account: ProAccount) {
     showToast(`Berhasil masuk sebagai ${account.name}!`, 'success');
-    window.location.reload();
+    await refreshProStatus();
   }
 
   async function handleProLogout() {
     try {
       await proLogout();
+      await refreshProStatus();
       showToast('Berhasil keluar akun Pro', 'info');
-      window.location.reload();
     } catch (e: any) {
       alert(`Gagal keluar: ${e}`);
     }
@@ -315,6 +315,7 @@
 
   onMount(async () => {
     try {
+      refreshProStatus().catch(() => {});
       const [ai, profs] = await Promise.all([
         getAiSettings().catch(() => aiSettings),
         listProfiles().catch(() => [])
@@ -513,7 +514,7 @@
               disabled={isActivatingLicense || !licenseKeyInput.trim()}
               loading={isActivatingLicense}
               onclick={() => handleActivateLicense()}
-              class="shrink-0 bg-cyan-600 hover:bg-cyan-500 text-white"
+              class="shrink-0 !bg-cyan-600 hover:!bg-cyan-500 !text-white border-cyan-600 font-semibold"
             >
               Aktivasi Lisensi
             </Button>

@@ -33,7 +33,7 @@
 
   import AmbientGlow from '$lib/components/AmbientGlow.svelte';
   import { getAmbientStore } from '$lib/stores/ambient.svelte';
-  import { getPro } from '$lib/stores/pro.svelte';
+  import { getPro, refreshProStatus } from '$lib/stores/pro.svelte';
 
   let isCollapsed = $state(true);
   let isVaultUnlocked = $state(true); // Open directly without blocking lockscreen
@@ -148,6 +148,7 @@
   onMount(() => {
     initTheme();
     isVaultUnlocked = true;
+    refreshProStatus().catch(() => {});
 
     if (!import.meta.env.DEV) {
       checkForUpdates({ silent: true }).catch(() => {});
