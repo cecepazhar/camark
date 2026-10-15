@@ -4,7 +4,14 @@
   import { listen } from '@tauri-apps/api/event';
   import { open } from '@tauri-apps/plugin-dialog';
   import { EditorView, basicSetup } from 'codemirror';
+  import { Compartment } from '@codemirror/state';
   import { markdown } from '@codemirror/lang-markdown';
+  import { rust } from '@codemirror/lang-rust';
+  import { python } from '@codemirror/lang-python';
+  import { javascript } from '@codemirror/lang-javascript';
+  import { json } from '@codemirror/lang-json';
+  import { html } from '@codemirror/lang-html';
+  import { css } from '@codemirror/lang-css';
   import { oneDark } from '@codemirror/theme-one-dark';
   import { marked } from 'marked';
   import DOMPurify from 'dompurify';
@@ -161,6 +168,45 @@ graph TD;
   let editorElement = $state<HTMLDivElement | null>(null);
   let previewElement = $state<HTMLElement | null>(null);
   let editorView = $state<EditorView | null>(null);
+
+  const languageCompartment = new Compartment();
+
+  function getLanguageExtension(filename: string) {
+    const lower = (filename || '').toLowerCase();
+    if (lower.endsWith('.rs')) return rust();
+    if (lower.endsWith('.py') || lower.endsWith('.pyw')) return python();
+    if (lower.endsWith('.js') || lower.endsWith('.mjs') || lower.endsWith('.cjs')) return javascript();
+    if (lower.endsWith('.ts') || lower.endsWith('.mts') || lower.endsWith('.cts')) return javascript({ typescript: true });
+    if (lower.endsWith('.jsx')) return javascript({ jsx: true });
+    if (lower.endsWith('.tsx')) return javascript({ jsx: true, typescript: true });
+    if (lower.endsWith('.json') || lower.endsWith('.jsonc') || lower.endsWith('.json5')) return json();
+    if (lower.endsWith('.html') || lower.endsWith('.htm') || lower.endsWith('.svg') || lower.endsWith('.svelte') || lower.endsWith('.vue')) return html();
+    if (lower.endsWith('.css') || lower.endsWith('.scss') || lower.endsWith('.sass') || lower.endsWith('.less')) return css();
+    return markdown();
+  }
+
+  function isMarkdownFile(pathOrTitle: string | null): boolean {
+    if (!pathOrTitle) return true;
+    if (pathOrTitle.startsWith('vault://')) return true;
+    const lower = pathOrTitle.toLowerCase();
+    return (
+      lower.endsWith('.md') ||
+      lower.endsWith('.markdown') ||
+      lower.endsWith('.mdown') ||
+      lower.endsWith('.mkd') ||
+      lower.endsWith('.txt') ||
+      lower.endsWith('.text')
+    );
+  }
+
+  function escapeHtml(str: string): string {
+    return str
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
 
   // Custom marked renderer for Pro Markdown (Zebra tables, code block headers with copy buttons)
   const proRenderer = new marked.Renderer();
@@ -424,7 +470,7 @@ graph TD;
         doc: rawMarkdown,
         extensions: [
           basicSetup,
-          markdown(),
+          languageCompartment.of(getLanguageExtension(currentDocTitle || currentFilePath || '')),
           oneDark,
           EditorView.lineWrapping,
           EditorView.domEventHandlers({
@@ -503,6 +549,41 @@ graph TD;
 
   async function renderMarkdown(content: string) {
     try {
+      if (!isMarkdownFile(currentFilePath)) {
+        const ext = (currentFilePath?.split('.').pop() || 'text').toLowerCase();
+        const encoded = encodeURIComponent(content);
+        renderedHtml = DOMPurify.sanitize(
+          `
+          <div class="code-block-wrapper" data-lang="${ext}">
+            <div class="code-block-header">
+              <span class="code-lang-pill">${ext}</span>
+              <button type="button" class="code-copy-btn" data-code="${encoded}">
+                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+                ${t('common.copy')}
+              </button>
+            </div>
+            <pre><code class="language-${ext}">${escapeHtml(content)}</code></pre>
+          </div>
+        `,
+          {
+            ADD_TAGS: ['button', 'span', 'div', 'svg', 'path', 'pre', 'code'],
+            ADD_ATTR: [
+              'data-lang',
+              'data-code',
+              'type',
+              'd',
+              'stroke',
+              'fill',
+              'viewBox',
+              'stroke-width',
+              'stroke-linecap',
+              'stroke-linejoin',
+            ],
+          }
+        );
+        return;
+      }
+
       // 1. Process math blocks ($$...$$ and $...$)
       let processed = content.replace(/\$\$([\s\S]+?)\$\$/g, (_, math) => {
         try {
@@ -681,6 +762,7 @@ graph TD;
       if (editorView) {
         editorView.dispatch({
           changes: { from: 0, to: editorView.state.doc.length, insert: content },
+          effects: languageCompartment.reconfigure(getLanguageExtension(tab.title || tab.path)),
         });
       }
       renderMarkdown(content);
@@ -694,6 +776,7 @@ graph TD;
         if (editorView) {
           editorView.dispatch({
             changes: { from: 0, to: editorView.state.doc.length, insert: content },
+            effects: languageCompartment.reconfigure(getLanguageExtension(tab.title || tab.path)),
           });
         }
         renderMarkdown(content);
@@ -1179,9 +1262,21 @@ graph TD;
             <span class="absolute top-0 left-0 right-0 h-[2px] bg-cyan-500 rounded-t" aria-hidden="true"></span>
           {/if}
 
-          <span class="shrink-0 text-[11px]">
+          <span class="shrink-0 text-[11px] flex items-center justify-center">
             {#if tab.isVault}
               🔒
+            {:else if tab.path.endsWith('.rs')}
+              <span class="text-orange-500 font-bold text-[9px] font-mono">RS</span>
+            {:else if tab.path.endsWith('.py') || tab.path.endsWith('.pyw')}
+              <span class="text-yellow-500 font-bold text-[9px] font-mono">PY</span>
+            {:else if tab.path.endsWith('.js') || tab.path.endsWith('.ts') || tab.path.endsWith('.jsx') || tab.path.endsWith('.tsx')}
+              <span class="text-cyan-400 font-bold text-[9px] font-mono">JS</span>
+            {:else if tab.path.endsWith('.json')}
+              <span class="text-amber-400 font-bold text-[9px] font-mono">{`{}`}</span>
+            {:else if tab.path.endsWith('.toml') || tab.path.endsWith('.yaml') || tab.path.endsWith('.yml')}
+              <span class="text-purple-400 font-bold text-[9px] font-mono">⚙</span>
+            {:else if tab.path.endsWith('.html') || tab.path.endsWith('.css') || tab.path.endsWith('.svelte')}
+              <span class="text-rose-400 font-bold text-[9px] font-mono">&lt;&gt;</span>
             {:else}
               <svg class="w-3.5 h-3.5 opacity-70" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />

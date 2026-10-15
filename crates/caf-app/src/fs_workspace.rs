@@ -5,6 +5,56 @@ use std::fs;
 use std::path::Path;
 use std::sync::Mutex;
 
+pub const SUPPORTED_TEXT_EXTENSIONS: &[&str] = &[
+    // Markdown & Documentation
+    "md", "markdown", "mdown", "mkd", "txt", "text", "org", "rst", "adoc", "asciidoc",
+    // Config & Data
+    "json", "jsonc", "json5", "yaml", "yml", "toml", "xml", "csv", "tsv", "ini", "conf", "cfg", "env", "properties",
+    // Web
+    "html", "htm", "css", "scss", "sass", "less", "js", "mjs", "cjs", "jsx", "ts", "mts", "cts", "tsx", "svelte", "vue", "svg",
+    // Programming Languages
+    "rs", "py", "pyw", "go", "sh", "bash", "zsh", "fish", "sql", "c", "cpp", "cc", "cxx", "h", "hpp", "hxx",
+    "java", "php", "rb", "lua", "r", "swift", "kt", "kts", "dart", "zig", "ex", "exs", "erl", "clj",
+    // Scripts & Build
+    "dockerfile", "makefile", "cmake", "diff", "patch", "log",
+];
+
+pub fn is_supported_file(name: &str) -> bool {
+    let lower = name.to_lowercase();
+    if lower.starts_with('.') {
+        let stem = lower.trim_start_matches('.');
+        if matches!(
+            stem,
+            "env"
+                | "gitignore"
+                | "gitattributes"
+                | "editorconfig"
+                | "dockerignore"
+                | "bashrc"
+                | "zshrc"
+                | "profile"
+                | "npmrc"
+                | "prettierrc"
+                | "eslintrc"
+        ) || stem.starts_with("env.")
+        {
+            return true;
+        }
+    }
+    if matches!(
+        lower.as_str(),
+        "dockerfile" | "makefile" | "license" | "licence" | "readme" | "changelog"
+    ) {
+        return true;
+    }
+    if let Some(ext) = lower.rsplit('.').next() {
+        if ext != lower && SUPPORTED_TEXT_EXTENSIONS.contains(&ext) {
+            return true;
+        }
+    }
+    false
+}
+
 static INITIAL_FILE: Mutex<Option<String>> = Mutex::new(None);
 
 pub fn set_initial_file(path: String) {
@@ -222,8 +272,7 @@ fn read_dir_recursive(path: &Path, depth: u8) -> Result<Vec<FileNode>, String> {
             (None, None)
         };
 
-        if is_dir || name.ends_with(".md") || name.ends_with(".txt") || name.ends_with(".markdown")
-        {
+        if is_dir || is_supported_file(&name) {
             entries.push(FileNode {
                 name,
                 path: p.to_string_lossy().to_string(),

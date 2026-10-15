@@ -47,16 +47,6 @@ fn normalize_cli_path(arg: &str, cwd: Option<&str>) -> Option<String> {
         raw.to_string()
     };
 
-    // Only accept document-like extensions. The single-instance plugin forwards the
-    // executable path as argv[0]; a binary/executable has no document extension, so it
-    // is rejected here and the real document argument (argv[1+]) is processed instead.
-    let ext_ok = decoded.to_lowercase().ends_with(".md")
-        || decoded.to_lowercase().ends_with(".markdown")
-        || decoded.to_lowercase().ends_with(".txt");
-    if !ext_ok {
-        return None;
-    }
-
     let path = std::path::Path::new(&decoded);
     let resolved = if path.is_absolute() {
         path.to_path_buf()
@@ -67,6 +57,14 @@ fn normalize_cli_path(arg: &str, cwd: Option<&str>) -> Option<String> {
     } else {
         path.to_path_buf()
     };
+
+    let filename = resolved
+        .file_name()
+        .map(|f| f.to_string_lossy().to_string())
+        .unwrap_or_default();
+    if !fs_workspace::is_supported_file(&filename) {
+        return None;
+    }
 
     if resolved.exists() {
         let canonical = resolved.canonicalize().unwrap_or(resolved);
