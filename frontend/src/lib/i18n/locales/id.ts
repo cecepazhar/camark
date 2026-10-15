@@ -130,7 +130,8 @@ export const id: Dictionary = {
     continue: 'Lanjutkan'
   },
   avatars: {
-    pickerLabel: 'Pilih Avatar Profil'
+    pickerLabel: 'Pilih Avatar Profil',
+    exclusivePrompt: 'Avatar ini eksklusif untuk CAMark Pro'
   },
   language: {
     label: 'Bahasa',
@@ -183,6 +184,11 @@ export const id: Dictionary = {
     close: 'Tutup'
   },
   pro: {
+    avatarExclusive: 'Avatar ini eksklusif untuk pengguna CAMark Pro.',
+    exportExclusive: 'Ekspor Dokumen (HTML/PDF) membutuhkan lisensi CAMark Pro.',
+    presentationExclusive: 'Mode Presentasi adalah fitur eksklusif CAMark Pro.',
+    zenExclusive: 'Mode Zen adalah fitur eksklusif CAMark Pro.',
+    aiExclusive: 'Aksi AI Copilot membutuhkan lisensi CAMark Pro.',
     lock: {
       vaultTab: 'Workspace Lokal',
       proTab: 'Akun GCC Pro',

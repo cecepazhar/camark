@@ -30,10 +30,11 @@
       const response = await chatWithAi(prompt);
       messages.push({ role: 'assistant', content: response.message });
     } catch (e: any) {
-      showToast(e?.message || t('ai.callFailed'), 'error');
+      const errStr = typeof e === 'string' ? e : (e?.message || e?.code || t('ai.checkSettings'));
+      showToast(errStr, 'error');
       messages.push({
         role: 'assistant',
-        content: `${t('ai.errorMessage', { error: e?.message || t('ai.checkSettings') })}`
+        content: `${t('ai.errorMessage', { error: errStr })}`
       });
     } finally {
       isSending = false;

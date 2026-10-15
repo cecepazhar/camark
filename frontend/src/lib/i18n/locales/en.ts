@@ -132,7 +132,8 @@ export const en: Dictionary = {
     continue: 'Continue'
   },
   avatars: {
-    pickerLabel: 'Choose Profile Avatar'
+    pickerLabel: 'Choose Profile Avatar',
+    exclusivePrompt: 'This avatar is exclusive to CAMark Pro'
   },
   language: {
     label: 'Language',
@@ -185,6 +186,11 @@ export const en: Dictionary = {
     close: 'Close'
   },
   pro: {
+    avatarExclusive: 'This avatar is exclusive to CAMark Pro users.',
+    exportExclusive: 'Document export (HTML/PDF) requires a CAMark Pro license.',
+    presentationExclusive: 'Presentation Mode is a CAMark Pro exclusive feature.',
+    zenExclusive: 'Zen Mode is a CAMark Pro exclusive feature.',
+    aiExclusive: 'AI Copilot actions require a CAMark Pro license.',
     lock: {
       vaultTab: 'Local Workspace',
       proTab: 'GCC Pro Account',

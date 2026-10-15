@@ -5,7 +5,7 @@ import { version } from '../../package.json';
 
 export const APP_VERSION: string = version;
 export const REPO_URL = 'https://github.com/cecepazhar/camark';
-export const WEBSITE_URL = 'https://www.cecepazhar.com';
+export const WEBSITE_URL = 'https://camark.fathforce.com';
 export const AUTHOR_NAME = 'Cecep Saeful Azhar Hidayat, ST';
 export const AUTHOR_URL = 'https://www.cecepazhar.com';
 export const CONTACT_EMAIL = 'hi@cecepazhar.com';

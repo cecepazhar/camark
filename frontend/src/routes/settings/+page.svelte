@@ -3,7 +3,7 @@
   import { page } from '$app/state';
   import { goto } from '$app/navigation';
   import { t } from '$lib/i18n/index.svelte';
-  import { Button, Input, Badge, ProGate, Avatar, AvatarGroup, PageHeader } from '@cecepazhar/caui';
+  import { Button, Input, Badge, ProGate, PageHeader } from '@cecepazhar/caui';
   import Logo from '$lib/components/Logo.svelte';
   import ProfileAvatar from '$lib/components/ProfileAvatar.svelte';
   import AvatarPicker from '$lib/components/AvatarPicker.svelte';
@@ -13,7 +13,6 @@
   import { showToast, confirmModal } from '$lib/stores/uiNotifications.svelte';
   import { changeMasterPassword, MIN_VAULT_PASSWORD_LEN } from '$lib/api/vault';
   import { getAiSettings, saveAiSettings, testAiConnection, type AiSettings } from '$lib/api/ai';
-  import { listProfiles, saveProfile as saveFamilyProfile, type ProfileRecord } from '$lib/api/profiles';
   import { exportEncryptedBackup, importEncryptedBackup } from '$lib/api/prefs';
   import { proActivateLicense, proLogout, type ProAccount } from '$lib/api/pro';
   import ProLoginForm from '$lib/components/ProLoginForm.svelte';
@@ -39,7 +38,7 @@
   const INPUT = 'w-full px-3.5 py-2.5 bg-neutral-50 dark:bg-neutral-950 border border-neutral-300 dark:border-neutral-800 rounded-lg text-sm text-neutral-900 dark:text-white placeholder-neutral-400 dark:placeholder-neutral-600 focus:outline-none focus:border-cyan-500 transition-colors';
   const EYE_BUTTON = 'absolute right-2.5 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-900 dark:hover:text-white transition-colors p-1.5 cursor-pointer';
 
-  const TABS = ['profile', 'pro', 'security', 'appearance', 'profiles', 'ai', 'backup', 'about'] as const;
+  const TABS = ['profile', 'pro', 'security', 'appearance', 'ai', 'backup', 'about'] as const;
   type SettingsTab = (typeof TABS)[number];
 
   const requestedTab = page.url.searchParams.get('tab') ?? '';
@@ -163,38 +162,6 @@
     }
   }
 
-  // Family Profiles State
-  let profilesList = $state<ProfileRecord[]>([]);
-  let isAddProfileOpen = $state(false);
-  let newProfileName = $state('');
-  let newProfileRole = $state<'owner' | 'partner' | 'member' | 'child'>('member');
-  let newProfilePin = $state('');
-
-  async function handleAddProfile() {
-    if (!newProfileName.trim()) {
-      showToast(t('settings.profilesTab.nameRequired'), 'error');
-      return;
-    }
-    try {
-      await saveFamilyProfile(
-        {
-          name: newProfileName.trim(),
-          role: newProfileRole,
-          pin: newProfilePin.trim() || undefined,
-          avatar: ''
-        },
-        '00000000-0000-0000-0000-000000000000'
-      );
-      showToast(t('settings.profilesTab.addedToast'), 'success');
-      newProfileName = '';
-      newProfilePin = '';
-      isAddProfileOpen = false;
-      profilesList = await listProfiles();
-    } catch (e: any) {
-      showToast(e?.message || 'Failed to add profile', 'error');
-    }
-  }
-
   // AI Configuration State
   let aiSettings = $state<AiSettings>({
     mode: 'byo',
@@ -234,7 +201,8 @@
       aiTestResult = { ok: true, message: msg };
       showToast(t('settings.ai.testOk'), 'success');
     } catch (e: any) {
-      aiTestResult = { ok: false, message: e?.message || 'Connection failed' };
+      const errMsg = typeof e === 'string' ? e : (e?.message || e?.code || 'Connection failed');
+      aiTestResult = { ok: false, message: errMsg };
       showToast(t('settings.ai.testFail'), 'error');
     } finally {
       isTestingAi = false;
@@ -305,7 +273,6 @@
       restorePassphrase = '';
       selectedBackupFile = null;
       showToast(t('settings.backup.restoreSuccess'), 'success');
-      profilesList = await listProfiles().catch(() => []);
     } catch (e: any) {
       showToast(e?.message || 'Failed to restore backup', 'error');
     } finally {
@@ -316,12 +283,8 @@
   onMount(async () => {
     try {
       refreshProStatus().catch(() => {});
-      const [ai, profs] = await Promise.all([
-        getAiSettings().catch(() => aiSettings),
-        listProfiles().catch(() => [])
-      ]);
+      const ai = await getAiSettings().catch(() => aiSettings);
       aiSettings = ai;
-      profilesList = profs;
     } catch {}
   });
 </script>
@@ -504,7 +467,7 @@
             <Input
               type="text"
               bind:value={licenseKeyInput}
-              placeholder="e.g. CAMARK-LIFE-FOUNDER-CECEP"
+              placeholder="CMRK-XXXX-XXXX-XXXX-XXXX"
               class="font-mono uppercase flex-1"
             />
             <Button
@@ -692,91 +655,6 @@
   {:else if activeTab === 'appearance'}
     <div class="space-y-6">
       <AmbientSettingsCard defaultAccent="#06b6d4" appName="CAMark" />
-    </div>
-  {:else if activeTab === 'profiles'}
-    <div class="{CARD} space-y-6">
-      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h2 class="text-lg font-semibold text-neutral-900 dark:text-white">{t('settings.profilesTab.title')}</h2>
-          <p class="{MUTED} text-sm mt-0.5">{t('settings.profilesTab.subtitle')}</p>
-        </div>
-        <button
-          type="button"
-          onclick={() => (isAddProfileOpen = !isAddProfileOpen)}
-          class="px-3.5 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-semibold rounded-lg transition-colors shadow-xs shrink-0 cursor-pointer"
-        >
-          {isAddProfileOpen ? t('common.cancel') : `+ ${t('settings.profilesTab.addMember')}`}
-        </button>
-      </div>
-
-      {#if isAddProfileOpen}
-        <div class="{SUBCARD} space-y-4 animate-in fade-in duration-150">
-          <h3 class="{LABEL_BASE} text-cyan-600 dark:text-cyan-400">{t('settings.profilesTab.newProfileTitle')}</h3>
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <input
-              type="text"
-              bind:value={newProfileName}
-              placeholder={t('settings.profilesTab.namePlaceholder')}
-              class={INPUT}
-            />
-            <select
-              bind:value={newProfileRole}
-              class={INPUT}
-            >
-              <option value="owner">{t('profiles.roles.owner')} (Ayah)</option>
-              <option value="partner">{t('profiles.roles.partner')} (Ibu)</option>
-              <option value="member">{t('profiles.roles.member')}</option>
-              <option value="child">{t('profiles.roles.child')} (Anak)</option>
-            </select>
-          </div>
-          <div>
-            <input
-              type="password"
-              bind:value={newProfilePin}
-              maxlength="6"
-              placeholder={t('settings.profilesTab.pinPlaceholder')}
-              class="{INPUT} font-mono"
-            />
-          </div>
-          <div class="flex justify-end gap-2.5 pt-1">
-            <button
-              type="button"
-              onclick={() => (isAddProfileOpen = false)}
-              class="px-3.5 py-1.5 bg-neutral-200 dark:bg-neutral-800 hover:bg-neutral-300 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300 text-xs font-medium rounded-lg cursor-pointer"
-            >
-              {t('common.cancel')}
-            </button>
-            <button
-              type="button"
-              onclick={handleAddProfile}
-              class="px-3.5 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-semibold rounded-lg cursor-pointer"
-            >
-              {t('settings.profilesTab.saveProfile')}
-            </button>
-          </div>
-        </div>
-      {/if}
-
-      <div class="space-y-2.5">
-        {#each profilesList as prof (prof.id)}
-          <div class="flex items-center justify-between p-3.5 bg-neutral-50 dark:bg-neutral-950/60 border border-neutral-200 dark:border-neutral-800 rounded-xl">
-            <div class="flex items-center gap-3 min-w-0">
-              <div class="w-9 h-9 rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-600 dark:text-cyan-400 flex items-center justify-center font-bold text-xs shrink-0">
-                {prof.name.slice(0, 2).toUpperCase()}
-              </div>
-              <div class="min-w-0">
-                <h3 class="text-sm font-medium text-neutral-900 dark:text-white truncate">{prof.name}</h3>
-                <span class="text-xs {MUTED} capitalize">{prof.role}</span>
-              </div>
-            </div>
-            <div class="flex items-center gap-2 shrink-0">
-              <span class="text-[11px] px-2.5 py-1 rounded-md bg-neutral-200/70 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 font-mono">
-                {prof.has_pin ? t('settings.profilesTab.pinSet') : t('settings.profilesTab.noPin')}
-              </span>
-            </div>
-          </div>
-        {/each}
-      </div>
     </div>
   {:else if activeTab === 'ai'}
     <div class="{CARD} space-y-6">

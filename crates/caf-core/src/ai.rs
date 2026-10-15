@@ -55,11 +55,11 @@ pub struct AiSettings {
 }
 
 fn default_base_url() -> String {
-    "http://localhost:11434/v1".to_string()
+    "http://localhost:20128/v1".to_string()
 }
 
 fn default_model() -> String {
-    "llama3.2".to_string()
+    "ZA126_PRO".to_string()
 }
 
 fn default_temperature() -> u8 {
@@ -139,19 +139,20 @@ pub struct ContextPayload {
 }
 
 fn get_stored_config() -> Result<StoredAiConfig, CatermError> {
-    let conn = crate::db::open()?;
-    let row: Option<String> = conn
-        .query_row(
-            "SELECT value FROM app_kv WHERE key = 'ai_settings'",
-            [],
-            |r| r.get(0),
-        )
-        .ok();
+    if let Ok(conn) = crate::db::open() {
+        let row: Option<String> = conn
+            .query_row(
+                "SELECT value FROM app_kv WHERE key = 'ai_settings'",
+                [],
+                |r| r.get(0),
+            )
+            .ok();
 
-    if let Some(json_str) = row
-        && let Ok(cfg) = serde_json::from_str::<StoredAiConfig>(&json_str)
-    {
-        return Ok(cfg);
+        if let Some(json_str) = row
+            && let Ok(cfg) = serde_json::from_str::<StoredAiConfig>(&json_str)
+        {
+            return Ok(cfg);
+        }
     }
 
     Ok(StoredAiConfig {
@@ -330,13 +331,18 @@ pub fn build_context(
     match level {
         PrivacyLevel::Summary => {
             // Aggregate only: profile count, enabled modules, note count
-            let conn = crate::db::open()?;
-            let note_count: i64 = conn
-                .query_row("SELECT COUNT(*) FROM notes", [], |r| r.get(0))
-                .unwrap_or(0);
-            let profile_count: i64 = conn
-                .query_row("SELECT COUNT(*) FROM profiles", [], |r| r.get(0))
-                .unwrap_or(1);
+            let (note_count, profile_count) = match crate::db::open() {
+                Ok(conn) => {
+                    let note_count: i64 = conn
+                        .query_row("SELECT COUNT(*) FROM notes", [], |r| r.get(0))
+                        .unwrap_or(0);
+                    let profile_count: i64 = conn
+                        .query_row("SELECT COUNT(*) FROM profiles", [], |r| r.get(0))
+                        .unwrap_or(1);
+                    (note_count, profile_count)
+                }
+                Err(_) => (0, 1),
+            };
 
             let content = format!(
                 "Application Summary:\n- Active Profiles: {}\n- Total Notes: {}\n- Modules: Notes, AI",
@@ -482,7 +488,8 @@ pub fn chat(
             {"role": "system", "content": system_msg},
             {"role": "user", "content": user_msg}
         ],
-        "temperature": (cfg.temperature as f32) / 100.0
+        "temperature": (cfg.temperature as f32) / 100.0,
+        "stream": false
     });
 
     let mut req = ureq::post(&url);
@@ -501,21 +508,11 @@ pub fn chat(
         _ => CatermError::Ai(AiError::Timeout),
     })?;
 
-    let json_val: serde_json::Value = resp
+    let raw_text = resp
         .body_mut()
-        .read_json()
+        .read_to_string()
         .map_err(|_| CatermError::Ai(AiError::ProviderUnavailable))?;
-
-    let text = json_val
-        .pointer("/choices/0/message/content")
-        .and_then(|v| v.as_str())
-        .unwrap_or("")
-        .to_string();
-
-    let tokens = json_val
-        .pointer("/usage/total_tokens")
-        .and_then(|v| v.as_u64())
-        .map(|t| t as u32);
+    let (text, tokens) = parse_completions_response(&raw_text)?;
 
     Ok(AiChatResponse {
         message: text,
@@ -524,9 +521,81 @@ pub fn chat(
     })
 }
 
+/// Robust parser for OpenAI-compatible completions response:
+/// Handles both standard JSON and SSE fallback (text/event-stream chunks).
+fn parse_completions_response(raw: &str) -> Result<(String, Option<u32>), CatermError> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return Err(CatermError::Ai(AiError::ProviderUnavailable));
+    }
+
+    // Standard JSON object response
+    if let Ok(json_val) = serde_json::from_str::<serde_json::Value>(trimmed) {
+        if let Some(err_msg) = json_val.pointer("/error/message").and_then(|v| v.as_str()) {
+            return Err(CatermError::Ai(AiError::Generic(err_msg.to_string())));
+        }
+
+        let text = json_val
+            .pointer("/choices/0/message/content")
+            .and_then(|v| v.as_str())
+            .or_else(|| json_val.pointer("/choices/0/text").and_then(|v| v.as_str()))
+            .unwrap_or("")
+            .to_string();
+
+        let tokens = json_val
+            .pointer("/usage/total_tokens")
+            .and_then(|v| v.as_u64())
+            .map(|t| t as u32);
+
+        return Ok((text, tokens));
+    }
+
+    // SSE streaming fallback: lines starting with `data: `
+    let mut collected = String::new();
+    let mut total_tokens = None;
+
+    for line in trimmed.lines() {
+        let line = line.trim();
+        if let Some(data) = line.strip_prefix("data:") {
+            let data = data.trim();
+            if data == "[DONE]" || data.is_empty() {
+                continue;
+            }
+            if let Ok(chunk) = serde_json::from_str::<serde_json::Value>(data) {
+                if let Some(content) = chunk
+                    .pointer("/choices/0/delta/content")
+                    .and_then(|v| v.as_str())
+                {
+                    collected.push_str(content);
+                } else if let Some(content) = chunk
+                    .pointer("/choices/0/message/content")
+                    .and_then(|v| v.as_str())
+                {
+                    collected.push_str(content);
+                }
+                if let Some(tokens) =
+                    chunk.pointer("/usage/total_tokens").and_then(|v| v.as_u64())
+                {
+                    total_tokens = Some(tokens as u32);
+                }
+            }
+        }
+    }
+
+    if !collected.is_empty() {
+        return Ok((collected, total_tokens));
+    }
+
+    Err(CatermError::Ai(AiError::ProviderUnavailable))
+}
+
 /// Tests a lightweight connection to a user-provided OpenAI-compatible endpoint without
 /// persisting anything. `api_key` is optional; if `None`, we read the currently stored key.
-pub fn test_connection(base_url: &str, model: &str, api_key: Option<&str>) -> Result<String, CatermError> {
+pub fn test_connection(
+    base_url: &str,
+    model: &str,
+    api_key: Option<&str>,
+) -> Result<String, CatermError> {
     let resolved_key: String = api_key
         .map(|k| k.trim().to_string())
         .filter(|k| !k.is_empty())
@@ -545,7 +614,8 @@ pub fn test_connection(base_url: &str, model: &str, api_key: Option<&str>) -> Re
         "messages": [
             {"role": "user", "content": "ping"}
         ],
-        "max_tokens": 1
+        "max_tokens": 10,
+        "stream": false
     });
 
     let mut req = ureq::post(&url);
@@ -557,18 +627,22 @@ pub fn test_connection(base_url: &str, model: &str, api_key: Option<&str>) -> Re
 
     match result {
         Ok(mut resp) => {
-            let json_val: serde_json::Value = resp
+            let raw_text = resp
                 .body_mut()
-                .read_json()
+                .read_to_string()
                 .map_err(|_| CatermError::Ai(AiError::ProviderUnavailable))?;
 
-            let text = json_val
-                .pointer("/choices/0/message/content")
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .to_string();
+            let (text, _) = parse_completions_response(&raw_text)?;
+            let preview = if text.trim().is_empty() {
+                "OK".to_string()
+            } else {
+                text.trim().to_string()
+            };
 
-            Ok(format!("Koneksi berhasil. Model '{}' merespon: \"{}\"", model, text))
+            Ok(format!(
+                "Koneksi berhasil. Model '{}' merespon: \"{}\"",
+                model, preview
+            ))
         }
         Err(ureq::Error::StatusCode(401)) | Err(ureq::Error::StatusCode(403)) => {
             Err(CatermError::Ai(AiError::ApiKeyMissing))
@@ -576,9 +650,7 @@ pub fn test_connection(base_url: &str, model: &str, api_key: Option<&str>) -> Re
         Err(ureq::Error::StatusCode(402)) | Err(ureq::Error::StatusCode(429)) => {
             Err(CatermError::Ai(AiError::QuotaExceeded))
         }
-        Err(ureq::Error::StatusCode(_)) => {
-            Err(CatermError::Ai(AiError::ProviderUnavailable))
-        }
+        Err(ureq::Error::StatusCode(_)) => Err(CatermError::Ai(AiError::ProviderUnavailable)),
         Err(_) => Err(CatermError::Ai(AiError::Timeout)),
     }
 }
@@ -697,5 +769,48 @@ pub mod tests {
 
         let res = chat(&session, "ping", None, false);
         assert!(matches!(res, Err(CatermError::Ai(AiError::Disabled))));
+    }
+
+    #[test]
+    fn test_parse_completions_json_and_sse() {
+        let json_sample = r#"{"choices":[{"message":{"content":"Hello from JSON!"}}],"usage":{"total_tokens":42}}"#;
+        let (text, tokens) = parse_completions_response(json_sample).expect("parse json");
+        assert_eq!(text, "Hello from JSON!");
+        assert_eq!(tokens, Some(42));
+
+        let sse_sample = "data: {\"choices\":[{\"delta\":{\"content\":\"Hello \"}}]}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\"SSE!\"}}]}\n\ndata: [DONE]\n";
+        let (text, _) = parse_completions_response(sse_sample).expect("parse sse");
+        assert_eq!(text, "Hello SSE!");
+    }
+
+    #[test]
+    fn test_live_connection_to_local_proxy() {
+        if std::net::TcpStream::connect_timeout(
+            &std::net::SocketAddr::from(([127, 0, 0, 1], 20128)),
+            std::time::Duration::from_millis(50),
+        )
+        .is_ok()
+        {
+            let res = test_connection("http://127.0.0.1:20128/v1", "ZA126_PRO", None);
+            assert!(res.is_ok(), "Live test_connection failed: {:?}", res);
+        }
+    }
+
+    #[test]
+    fn test_live_chat_to_local_proxy() {
+        if std::net::TcpStream::connect_timeout(
+            &std::net::SocketAddr::from(([127, 0, 0, 1], 20128)),
+            std::time::Duration::from_millis(50),
+        )
+        .is_ok()
+        {
+            let _guard = crate::test_support::isolated_data_dir("ai_live_chat_test");
+            let _key = crate::vault::ensure_unlocked_key().expect("vault key");
+            let session = crate::session::Session::new("prof-1", "member");
+            let res = chat(&session, "ping", None, false);
+            assert!(res.is_ok(), "Live chat failed: {:?}", res);
+            let resp = res.unwrap();
+            assert!(!resp.message.is_empty());
+        }
     }
 }

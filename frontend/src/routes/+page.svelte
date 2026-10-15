@@ -43,6 +43,8 @@
     htmlTableToMarkdown,
     tsvToMarkdown,
   } from '$lib/utils/markdownTools';
+  import { getPro } from '$lib/stores/pro.svelte';
+  import { goto } from '$app/navigation';
 
   // State
   let workspacePath = $state<string>('.');
@@ -130,6 +132,7 @@ graph TD;
   const tabs = $derived(getDocTabs());
   const activeTabId = $derived(getActiveTabId());
   const activeTab = $derived(getActiveTab());
+  const pro = getPro();
 
   // View mode: 'editor' | 'split' | 'preview' (synchronized via docTabs store)
   let viewMode = $state<'editor' | 'split' | 'preview'>(getViewMode());
@@ -332,6 +335,10 @@ graph TD;
   }
 
   function handleToggleZen() {
+    if (!pro.isPro && !isZenMode) {
+      showToast(t('pro.zenExclusive'), 'info');
+      return;
+    }
     isZenMode = !isZenMode;
     if (isZenMode) {
       viewMode = 'editor';
@@ -1002,6 +1009,10 @@ graph TD;
   }
 
   async function exportHtml() {
+    if (!pro.isPro) {
+      showToast(t('pro.exportExclusive'), 'error');
+      return;
+    }
     const defaultName = currentDocTitle.replace(/\.md$/, '.html').replace('🔒 ', '');
     const targetPath = prompt(t('editor.saveHtmlAs'), `/tmp/${defaultName}`);
     if (!targetPath) return;
@@ -1019,6 +1030,10 @@ graph TD;
   }
 
   async function exportPdf() {
+    if (!pro.isPro) {
+      showToast(t('pro.exportExclusive'), 'error');
+      return;
+    }
     // Native print dialog (WebView Print -> Save as PDF)
     window.print();
   }
@@ -1411,7 +1426,13 @@ graph TD;
         {isOutlineOpen}
         onToggleZen={handleToggleZen}
         onToggleOutline={() => (isOutlineOpen = !isOutlineOpen)}
-        onTogglePresentation={() => (isPresentationOpen = true)}
+        onTogglePresentation={() => {
+          if (!pro.isPro) {
+            showToast(t('pro.presentationExclusive'), 'error');
+            return;
+          }
+          isPresentationOpen = true;
+        }}
         onFormatDocumentTable={handleFormatDocumentTable}
       />
 

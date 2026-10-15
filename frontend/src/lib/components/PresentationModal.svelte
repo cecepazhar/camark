@@ -3,6 +3,7 @@
   import DOMPurify from 'dompurify';
   import katex from 'katex';
   import { onMount, onDestroy } from 'svelte';
+  import { getPro } from '$lib/stores/pro.svelte';
 
   interface Props {
     isOpen: boolean;
@@ -12,6 +13,9 @@
   }
 
   let { isOpen, rawMarkdown, docTitle, onClose }: Props = $props();
+
+  const pro = getPro();
+  const effectiveOpen = $derived(isOpen && pro.isPro);
 
   let currentSlideIndex = $state(0);
   let slides = $derived.by(() => {
@@ -78,7 +82,7 @@
   }
 
   function handleKeyDown(e: KeyboardEvent) {
-    if (!isOpen) return;
+    if (!effectiveOpen) return;
     if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') {
       e.preventDefault();
       nextSlide();
@@ -106,7 +110,7 @@
   });
 </script>
 
-{#if isOpen}
+{#if effectiveOpen}
   <div
     class="fixed inset-0 z-50 bg-[#0A0A0C] text-[#EDEDED] flex flex-col justify-between p-6 sm:p-12 select-none font-sans animate-in fade-in zoom-in-95 duration-200"
   >

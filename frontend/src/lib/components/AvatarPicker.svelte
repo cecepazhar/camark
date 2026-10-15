@@ -1,12 +1,15 @@
 <script lang="ts">
   import { t } from '$lib/i18n/index.svelte';
   import ProfileAvatar, { AVATARS } from './ProfileAvatar.svelte';
+  import { getPro } from '$lib/stores/pro.svelte';
+  import { showToast } from '$lib/stores/uiNotifications.svelte';
   import { onMount } from 'svelte';
 
   let { value = $bindable('rocket'), size = 48, centered = true }: { value: string; size?: number; centered?: boolean } = $props();
 
   let isOpen = $state(false);
   let containerRef = $state<HTMLDivElement | null>(null);
+  const pro = getPro();
 
   function togglePicker(e: MouseEvent) {
     e.stopPropagation();
@@ -15,9 +18,22 @@
 
   function selectAvatar(id: string, e: MouseEvent) {
     e.stopPropagation();
+    const option = AVATARS.find((o) => o.id === id);
+    if (option?.pro && !pro.isPro) {
+      showToast(t('pro.avatarExclusive'), 'info');
+      return;
+    }
     value = id;
     isOpen = false;
   }
+
+  // ponytail: reset the bound value in-place; the parent's saveProfile already persists.
+  $effect(() => {
+    const current = AVATARS.find((o) => o.id === value);
+    if (current?.pro && !pro.isPro) {
+      value = 'rocket';
+    }
+  });
 
   function handleClickOutside(e: MouseEvent) {
     if (isOpen && containerRef && !containerRef.contains(e.target as Node)) {
@@ -81,14 +97,15 @@
       </div>
       <div class="grid grid-cols-5 gap-2" role="radiogroup">
         {#each AVATARS as option (option.id)}
+          {@const isProLocked = option.pro && !pro.isPro}
           <button
             type="button"
             role="radio"
             aria-checked={value === option.id}
-            aria-label={t(`avatars.${option.id}`)}
-            title={t(`avatars.${option.id}`)}
+            aria-label={option.label}
+            title={isProLocked ? `${option.label} (Pro Only)` : option.label}
             onclick={(e) => selectAvatar(option.id, e)}
-            class="justify-self-center flex items-center justify-center rounded-full p-1 ring-2 ring-offset-2 ring-offset-white dark:ring-offset-neutral-900 transition-all cursor-pointer {value === option.id ? 'ring-sky-500 scale-105 shadow-sm' : 'ring-transparent hover:ring-neutral-300 dark:hover:ring-neutral-700 hover:scale-105'}"
+            class="justify-self-center flex items-center justify-center rounded-full p-1 ring-2 ring-offset-2 ring-offset-white dark:ring-offset-neutral-900 transition-all cursor-pointer {value === option.id ? 'ring-sky-500 scale-105 shadow-sm' : 'ring-transparent hover:ring-neutral-300 dark:hover:ring-neutral-700 hover:scale-105'} {isProLocked ? 'opacity-50 cursor-not-allowed' : ''}"
           >
             <ProfileAvatar avatar={option.id} size={32} />
           </button>

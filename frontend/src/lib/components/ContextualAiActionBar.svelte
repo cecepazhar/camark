@@ -2,6 +2,8 @@
   import { invoke } from '@tauri-apps/api/core';
   import { showToast } from '$lib/stores/uiNotifications.svelte';
   import { generateToc } from '$lib/utils/markdownTools';
+  import { getPro } from '$lib/stores/pro.svelte';
+  import { t } from '$lib/i18n/index.svelte';
 
   interface Props {
     selectedText: string;
@@ -11,6 +13,7 @@
 
   let { selectedText, onApplyResult, onClose }: Props = $props();
 
+  const pro = getPro();
   let isProcessing = $state(false);
   let activeAction = $state<string | null>(null);
 
@@ -26,6 +29,11 @@
       return;
     }
 
+    if (!pro.isPro) {
+      showToast(t('pro.aiExclusive'), 'error');
+      return;
+    }
+
     isProcessing = true;
     activeAction = actionKey;
     try {
@@ -37,7 +45,8 @@
       showToast('AI Copilot berhasil memperbarui teks!', 'success');
       onClose();
     } catch (e: any) {
-      alert(`Gagal memproses AI Action: ${e}`);
+      const errStr = typeof e === 'string' ? e : (e?.message || 'Gagal memproses AI Action');
+      showToast(`Gagal memproses AI Action: ${errStr}`, 'error');
     } finally {
       isProcessing = false;
       activeAction = null;
