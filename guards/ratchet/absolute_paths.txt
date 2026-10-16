@@ -1,5 +1,8 @@
 # Absolute paths baseline
 # resolves-in: F2
+PRD_AUDIT.md
+PROMPT_DEV_STUDIO.md
+PROMPT_QA_STUDIO.md
 caterm-execution-prompts-v2-addendum.md:37
 caterm-execution-prompts-v2-addendum.md:105
 caterm-execution-prompts-v2-addendum.md:168

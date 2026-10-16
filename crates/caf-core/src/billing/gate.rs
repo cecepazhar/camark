@@ -1,6 +1,5 @@
 //! Feature-level Pro access guards.
 
-use super::client::GccBillingClient;
 use super::state::{EffectiveState, EffectiveTier, compute_effective_state};
 use super::store;
 use super::token::verify_and_parse_token;
