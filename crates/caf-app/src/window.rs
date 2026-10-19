@@ -26,8 +26,11 @@ pub fn create_main_window(app: &tauri::App) -> tauri::Result<WebviewWindow> {
         .map(|p| p.gpu_acceleration)
         .unwrap_or(false)
     {
-        let base = config.additional_browser_args.clone().unwrap_or_default();
-        builder = builder.additional_browser_args(&format!("{base} {NO_GPU_ARGS}"));
+        #[cfg(target_os = "windows")]
+        {
+            let base = config.additional_browser_args.clone().unwrap_or_default();
+            builder = builder.additional_browser_args(&format!("{base} {NO_GPU_ARGS}"));
+        }
     }
 
     let window = builder.build()?;

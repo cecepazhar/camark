@@ -9,9 +9,7 @@ const host = process.env.TAURI_DEV_HOST;
 export default defineConfig(() => ({
   plugins: [tailwindcss(), sveltekit()],
   build: {
-    rollupOptions: {
-      external: ["@tauri-apps/api/window"],
-    },
+    target: ["chrome61", "es2018"],
   },
   test: {
     environment: "jsdom",
