@@ -9,6 +9,7 @@ use tauri::WebviewWindow;
 
 /// Appended to configured browser args when user turned GPU acceleration off in
 /// Settings -> Performance: software rendering, less memory, more CPU.
+#[cfg(target_os = "windows")]
 const NO_GPU_ARGS: &str = " --disable-gpu --disable-gpu-compositing";
 
 pub fn create_main_window(app: &tauri::App) -> tauri::Result<WebviewWindow> {
@@ -21,6 +22,7 @@ pub fn create_main_window(app: &tauri::App) -> tauri::Result<WebviewWindow> {
         .cloned()
         .ok_or(tauri::Error::WindowNotFound)?;
 
+    #[allow(unused_mut)]
     let mut builder = tauri::WebviewWindowBuilder::from_config(app.handle(), &config)?;
     if !prefs::load_performance_prefs()
         .map(|p| p.gpu_acceleration)
