@@ -573,7 +573,7 @@ dependencies = [
 
 [[package]]
 name = "caf-cli"
-version = "1.0.23"
+version = "1.0.24"
 dependencies = [
  "caf-core",
  "clap",
@@ -585,7 +585,7 @@ dependencies = [
 
 [[package]]
 name = "caf-core"
-version = "1.0.23"
+version = "1.0.24"
 dependencies = [
  "aes-gcm",
  "argon2",
@@ -638,7 +638,7 @@ dependencies = [
 
 [[package]]
 name = "caf-xtask"
-version = "1.0.23"
+version = "1.0.24"
 dependencies = [
  "axum",
  "base64 0.23.1",
@@ -689,7 +689,7 @@ dependencies = [
 
 [[package]]
 name = "camark"
-version = "1.0.23"
+version = "1.0.24"
 dependencies = [
  "async-trait",
  "caf-core",

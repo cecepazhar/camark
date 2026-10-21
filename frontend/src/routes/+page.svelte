@@ -170,6 +170,15 @@ graph TD;
   let editorView = $state<EditorView | null>(null);
 
   const languageCompartment = new Compartment();
+  const lineWrappingCompartment = new Compartment();
+
+  $effect(() => {
+    if (editorView) {
+      editorView.dispatch({
+        effects: lineWrappingCompartment.reconfigure(isZenMode ? EditorView.lineWrapping : []),
+      });
+    }
+  });
 
   function getLanguageExtension(filename: string) {
     const lower = (filename || '').toLowerCase();
@@ -470,7 +479,7 @@ graph TD;
           basicSetup,
           languageCompartment.of(getLanguageExtension(currentDocTitle || currentFilePath || '')),
           oneDark,
-          EditorView.lineWrapping,
+          lineWrappingCompartment.of(isZenMode ? EditorView.lineWrapping : []),
           EditorView.domEventHandlers({
             paste(event) {
               return handleEditorPaste(event);
@@ -515,10 +524,13 @@ graph TD;
       }
     }
 
+    let lastOpenFileEvent: { path: string; timestamp: number } | null = null;
+
     // Check initial file passed via CLI or Open With
     invoke<string | null>('get_initial_file_path')
       .then(async (path) => {
         if (path) {
+          lastOpenFileEvent = { path, timestamp: Date.now() };
           showFileTree = false;
           const parts = path.split('/');
           const name = parts[parts.length - 1] || 'document.md';
@@ -529,8 +541,16 @@ graph TD;
 
     // Listen for single instance open-file events
     listen<string>('open-file', (event) => {
-      console.log('>>> [FRONTEND] open-file event received:', event.payload);
       if (event.payload) {
+        const now = Date.now();
+        if (
+          lastOpenFileEvent &&
+          lastOpenFileEvent.path === event.payload &&
+          now - lastOpenFileEvent.timestamp < 500
+        ) {
+          return;
+        }
+        lastOpenFileEvent = { path: event.payload, timestamp: now };
         showFileTree = false;
         const parts = event.payload.split('/');
         const name = parts[parts.length - 1] || 'document.md';
@@ -747,6 +767,13 @@ graph TD;
   }
 
   async function loadTabContent(tab: DocTab) {
+    // Skip if same file already loaded
+    if (currentFilePath === tab.path && editorView && editorView.state.doc.length > 0) {
+      // Already showing this file — just make sure scroll is at top
+      editorView.dispatch({ effects: EditorView.scrollIntoView(0, { y: 'start' }) });
+      return;
+    }
+
     if (tab.isVault) {
       const docId = tab.path.replace('vault://', '');
       if (!isVaultUnlocked) {
@@ -763,10 +790,15 @@ graph TD;
       rawMarkdown = content;
       await tick();
       if (editorView) {
+        // First: update doc without language reconfigure so gutters stay in sync
         editorView.dispatch({
           changes: { from: 0, to: editorView.state.doc.length, insert: content },
+        });
+        // Second: reconfigure language on separate update so fold-gutter resets
+        editorView.dispatch({
           effects: languageCompartment.reconfigure(getLanguageExtension(tab.title || tab.path)),
         });
+        editorView.dispatch({ effects: EditorView.scrollIntoView(0, { y: 'start' }) });
       }
       renderMarkdown(content);
     } else {
@@ -777,10 +809,15 @@ graph TD;
         rawMarkdown = content;
         await tick();
         if (editorView) {
+          // First: update doc without language reconfigure so gutters stay in sync
           editorView.dispatch({
             changes: { from: 0, to: editorView.state.doc.length, insert: content },
+          });
+          // Second: reconfigure language on separate update so fold-gutter resets
+          editorView.dispatch({
             effects: languageCompartment.reconfigure(getLanguageExtension(tab.title || tab.path)),
           });
+          editorView.dispatch({ effects: EditorView.scrollIntoView(0, { y: 'start' }) });
         }
         renderMarkdown(content);
       } catch (e) {
