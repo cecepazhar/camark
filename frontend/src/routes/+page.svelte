@@ -6,17 +6,30 @@
   import { EditorView, basicSetup } from 'codemirror';
   import { Compartment } from '@codemirror/state';
   import { markdown } from '@codemirror/lang-markdown';
-  import { rust } from '@codemirror/lang-rust';
-  import { python } from '@codemirror/lang-python';
-  import { javascript } from '@codemirror/lang-javascript';
-  import { json } from '@codemirror/lang-json';
-  import { html } from '@codemirror/lang-html';
-  import { css } from '@codemirror/lang-css';
   import { oneDark } from '@codemirror/theme-one-dark';
   import { marked } from 'marked';
   import DOMPurify from 'dompurify';
   import katex from 'katex';
-  import mermaid from 'mermaid';
+  // mermaid is ~500 KB — lazy-loaded on demand (first mermaid block render) to
+  // keep the cold start under a second.
+  let mermaid: typeof import('mermaid').default | null = null;
+  async function getMermaid() {
+    if (!mermaid) {
+      mermaid = (await import('mermaid')).default;
+    }
+    return mermaid;
+  }
+  let mermaidInitialized = false;
+  async function ensureMermaidInitialized() {
+    if (mermaidInitialized) return;
+    const m = await getMermaid();
+    m.initialize({
+      startOnLoad: false,
+      theme: 'dark',
+      securityLevel: 'loose',
+    });
+    mermaidInitialized = true;
+  }
   import { Button, Input, Badge } from '@cecepazhar/caui';
 
   import { showToast } from '$lib/stores/uiNotifications.svelte';
@@ -180,17 +193,52 @@ graph TD;
     }
   });
 
-  function getLanguageExtension(filename: string) {
+  // Lazy language modules: import on demand to keep the initial bundle small.
+  // The markdown editor is the default (used for the majority of files), so it
+  // is the only one loaded synchronously. Code languages load on first use.
+  async function getLanguageExtension(filename: string) {
     const lower = (filename || '').toLowerCase();
-    if (lower.endsWith('.rs')) return rust();
-    if (lower.endsWith('.py') || lower.endsWith('.pyw')) return python();
-    if (lower.endsWith('.js') || lower.endsWith('.mjs') || lower.endsWith('.cjs')) return javascript();
-    if (lower.endsWith('.ts') || lower.endsWith('.mts') || lower.endsWith('.cts')) return javascript({ typescript: true });
-    if (lower.endsWith('.jsx')) return javascript({ jsx: true });
-    if (lower.endsWith('.tsx')) return javascript({ jsx: true, typescript: true });
-    if (lower.endsWith('.json') || lower.endsWith('.jsonc') || lower.endsWith('.json5')) return json();
-    if (lower.endsWith('.html') || lower.endsWith('.htm') || lower.endsWith('.svg') || lower.endsWith('.svelte') || lower.endsWith('.vue')) return html();
-    if (lower.endsWith('.css') || lower.endsWith('.scss') || lower.endsWith('.sass') || lower.endsWith('.less')) return css();
+    if (lower.endsWith('.rs')) {
+      const m = await import('@codemirror/lang-rust');
+      return m.rust();
+    }
+    if (lower.endsWith('.py') || lower.endsWith('.pyw')) {
+      const m = await import('@codemirror/lang-python');
+      return m.python();
+    }
+    if (
+      lower.endsWith('.js') ||
+      lower.endsWith('.mjs') ||
+      lower.endsWith('.cjs') ||
+      lower.endsWith('.ts') ||
+      lower.endsWith('.mts') ||
+      lower.endsWith('.cts') ||
+      lower.endsWith('.jsx') ||
+      lower.endsWith('.tsx')
+    ) {
+      const m = await import('@codemirror/lang-javascript');
+      const typescript = lower.endsWith('.ts') || lower.endsWith('.tsx') || lower.endsWith('.mts') || lower.endsWith('.cts');
+      const jsx = lower.endsWith('.jsx') || lower.endsWith('.tsx') || lower.endsWith('.js');
+      return m.javascript({ typescript, jsx });
+    }
+    if (lower.endsWith('.json') || lower.endsWith('.jsonc') || lower.endsWith('.json5')) {
+      const m = await import('@codemirror/lang-json');
+      return m.json();
+    }
+    if (
+      lower.endsWith('.html') ||
+      lower.endsWith('.htm') ||
+      lower.endsWith('.svg') ||
+      lower.endsWith('.svelte') ||
+      lower.endsWith('.vue')
+    ) {
+      const m = await import('@codemirror/lang-html');
+      return m.html();
+    }
+    if (lower.endsWith('.css') || lower.endsWith('.scss') || lower.endsWith('.sass') || lower.endsWith('.less')) {
+      const m = await import('@codemirror/lang-css');
+      return m.css();
+    }
     return markdown();
   }
 
@@ -457,19 +505,10 @@ graph TD;
     };
     window.addEventListener('keydown', handleKeyDown);
 
-    mermaid.initialize({
-      startOnLoad: false,
-      theme: 'dark',
-      securityLevel: 'loose',
-    });
-
-    // Restore saved tabs from local session storage
+    // Restore saved tabs from local session storage (run first, before editor init)
     restoreTabs();
     viewMode = getViewMode();
     const restored = getActiveTab();
-    if (restored) {
-      loadTabContent(restored);
-    }
 
     // Initialize CodeMirror 6 with oneDark theme and update listeners
     if (editorElement) {
@@ -477,7 +516,7 @@ graph TD;
         doc: rawMarkdown,
         extensions: [
           basicSetup,
-          languageCompartment.of(getLanguageExtension(currentDocTitle || currentFilePath || '')),
+          languageCompartment.of(markdown()),
           oneDark,
           lineWrappingCompartment.of(isZenMode ? EditorView.lineWrapping : []),
           EditorView.domEventHandlers({
@@ -517,11 +556,13 @@ graph TD;
 
       editorView = view;
       view.scrollDOM.addEventListener('scroll', syncScrollEditorToPreview, { passive: true });
+    }
 
-      // Render the demo preview or active tab content now that CodeMirror is mounted
-      if (!restored && !currentFilePath) {
-        renderMarkdown(rawMarkdown);
-      }
+    // Now that CodeMirror is mounted, load the restored tab if any
+    if (restored && editorView) {
+      loadTabContent(restored).catch(console.error);
+    } else if (!currentFilePath) {
+      renderMarkdown(rawMarkdown);
     }
 
     let lastOpenFileEvent: { path: string; timestamp: number } | null = null;
@@ -641,23 +682,27 @@ graph TD;
         ],
       });
 
-      // 3. Render Mermaid blocks on next tick
-      setTimeout(() => {
+      // 3. Render Mermaid blocks on next tick (lazy-load mermaid only if needed)
+      setTimeout(async () => {
         if (previewElement) {
           const mermaidBlocks = previewElement.querySelectorAll('code.language-mermaid');
-          mermaidBlocks.forEach(async (block, index) => {
-            const code = block.textContent || '';
-            const id = `mermaid-svg-${index}-${Date.now()}`;
-            try {
-              const { svg } = await mermaid.render(id, code);
-              const container = document.createElement('div');
-              container.className = 'my-4 flex justify-center overflow-x-auto';
-              container.innerHTML = svg;
-              block.parentElement?.replaceWith(container);
-            } catch (err) {
-              console.error('Mermaid render error:', err);
-            }
-          });
+          if (mermaidBlocks.length > 0) {
+            await ensureMermaidInitialized();
+            const m = await getMermaid();
+            mermaidBlocks.forEach(async (block, index) => {
+              const code = block.textContent || '';
+              const id = `mermaid-svg-${index}-${Date.now()}`;
+              try {
+                const { svg } = await m.render(id, code);
+                const container = document.createElement('div');
+                container.className = 'my-4 flex justify-center overflow-x-auto';
+                container.innerHTML = svg;
+                block.parentElement?.replaceWith(container);
+              } catch (err) {
+                console.error('Mermaid render error:', err);
+              }
+            });
+          }
         }
       }, 50);
     } catch (e) {
@@ -795,8 +840,9 @@ graph TD;
           changes: { from: 0, to: editorView.state.doc.length, insert: content },
         });
         // Second: reconfigure language on separate update so fold-gutter resets
+        const langExt = await getLanguageExtension(tab.title || tab.path);
         editorView.dispatch({
-          effects: languageCompartment.reconfigure(getLanguageExtension(tab.title || tab.path)),
+          effects: languageCompartment.reconfigure(langExt),
         });
         editorView.dispatch({ effects: EditorView.scrollIntoView(0, { y: 'start' }) });
       }
@@ -814,8 +860,9 @@ graph TD;
             changes: { from: 0, to: editorView.state.doc.length, insert: content },
           });
           // Second: reconfigure language on separate update so fold-gutter resets
+          const langExt = await getLanguageExtension(tab.title || tab.path);
           editorView.dispatch({
-            effects: languageCompartment.reconfigure(getLanguageExtension(tab.title || tab.path)),
+            effects: languageCompartment.reconfigure(langExt),
           });
           editorView.dispatch({ effects: EditorView.scrollIntoView(0, { y: 'start' }) });
         }

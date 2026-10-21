@@ -102,14 +102,19 @@ pub fn run() {
 }
 
 pub fn run_with_start(start: std::time::Instant) {
+    let t0 = std::time::Instant::now();
     caf_core::crash::install_panic_hook();
+    eprintln!("[COLD_START] panic_hook: {} ms", t0.elapsed().as_millis());
 
+    let t1 = std::time::Instant::now();
     #[allow(clippy::expect_used, clippy::disallowed_methods)]
     let mut builder = tauri::Builder::default()
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init());
+    eprintln!("[COLD_START] plugins_init: {} ms", t1.elapsed().as_millis());
 
+    let t2 = std::time::Instant::now();
     #[cfg(desktop)]
     {
         builder = builder.plugin(tauri_plugin_single_instance::init(|app, args, cwd| {
@@ -130,9 +135,6 @@ pub fn run_with_start(start: std::time::Instant) {
 
                 #[cfg(target_os = "linux")]
                 {
-                    // GNOME Shell on Wayland (Mutter) ignores direct set_focus() calls from
-                    // background apps. Use wmctrl -x -a to raise/activate the WMClass "camark"
-                    // window, which the window manager honors even when another app is focused.
                     let _ = std::process::Command::new("wmctrl")
                         .arg("-x")
                         .arg("-a")
@@ -142,6 +144,7 @@ pub fn run_with_start(start: std::time::Instant) {
             }
         }));
     }
+    eprintln!("[COLD_START] single_instance_init: {} ms", t2.elapsed().as_millis());
 
     for arg in std::env::args().skip(1) {
         if let Some(path_str) = normalize_cli_path(&arg, None) {
@@ -152,6 +155,7 @@ pub fn run_with_start(start: std::time::Instant) {
 
     builder
         .setup(move |app| {
+            let ts0 = std::time::Instant::now();
             #[cfg(target_os = "android")]
             {
                 use tauri::Manager;
@@ -161,16 +165,16 @@ pub fn run_with_start(start: std::time::Instant) {
             }
 
             window::create_main_window(app)?;
+            eprintln!("[COLD_START] create_main_window: {} ms", ts0.elapsed().as_millis());
 
+            let ts1 = std::time::Instant::now();
             #[cfg(desktop)]
             app.handle()
                 .plugin(tauri_plugin_updater::Builder::new().build())?;
+            eprintln!("[COLD_START] updater_plugin: {} ms", ts1.elapsed().as_millis());
 
             #[cfg(target_os = "linux")]
             {
-                // Fix for non-Debian distros (Fedora/Arch/RHEL): tauri-plugin-updater hardcodes
-                // /etc/ssl/certs/ca-certificates.crt which doesn't exist on Fedora. Sanitize it
-                // so child shells/processes don't inherit a poisoned SSL_CERT_FILE.
                 if let Ok(cert) = std::env::var("SSL_CERT_FILE") {
                     if !std::path::Path::new(&cert).exists() {
                         let valid_ca = [
