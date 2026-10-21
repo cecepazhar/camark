@@ -38,6 +38,11 @@ pub const COMMAND_POLICIES: &[CommandPolicy] = &[
         returns_list: false,
     },
     CommandPolicy {
+        name: "window_show",
+        policy: Policy::Public,
+        returns_list: false,
+    },
+    CommandPolicy {
         name: "window_start_dragging",
         policy: Policy::Public,
         returns_list: false,

@@ -221,6 +221,7 @@ pub fn run_with_start(start: std::time::Instant) {
             commands::window_minimize,
             commands::window_maximize,
             commands::window_close,
+            commands::window_show,
             commands::window_start_dragging,
             commands::is_vault_initialized,
             commands::validate_vault_password,

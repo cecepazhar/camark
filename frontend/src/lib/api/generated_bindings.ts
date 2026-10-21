@@ -13,6 +13,10 @@ export async function invoke_windowClose(window: any): Promise<void> {
   return invoke('window_close', { window: window });
 }
 
+export async function invoke_windowShow(window: any): Promise<void> {
+  return invoke('window_show', { window: window });
+}
+
 export async function invoke_windowStartDragging(window: any): Promise<void> {
   return invoke('window_start_dragging', { window: window });
 }

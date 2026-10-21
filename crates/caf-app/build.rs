@@ -11,6 +11,7 @@ const COMMANDS: &[&str] = &[
     "window_minimize",
     "window_maximize",
     "window_close",
+    "window_show",
     "window_start_dragging",
     // Vault & Security
     "is_vault_initialized",

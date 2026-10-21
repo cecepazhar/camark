@@ -2247,6 +2247,12 @@
           "markdownDescription": "Enables the window_minimize command without any pre-configured scope."
         },
         {
+          "description": "Enables the window_show command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-window-show",
+          "markdownDescription": "Enables the window_show command without any pre-configured scope."
+        },
+        {
           "description": "Enables the window_start_dragging command without any pre-configured scope.",
           "type": "string",
           "const": "allow-window-start-dragging",
@@ -2545,6 +2551,12 @@
           "type": "string",
           "const": "deny-window-minimize",
           "markdownDescription": "Denies the window_minimize command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the window_show command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-window-show",
+          "markdownDescription": "Denies the window_show command without any pre-configured scope."
         },
         {
           "description": "Denies the window_start_dragging command without any pre-configured scope.",

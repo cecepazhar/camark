@@ -24,6 +24,9 @@ pub fn create_main_window(app: &tauri::App) -> tauri::Result<WebviewWindow> {
 
     #[allow(unused_mut)]
     let mut builder = tauri::WebviewWindowBuilder::from_config(app.handle(), &config)?;
+    // Hide the window until SvelteKit has finished its first meaningful render.
+    // Revealing later prevents a white/transparent flash on cold start.
+    builder = builder.visible(false);
     if !prefs::load_performance_prefs()
         .map(|p| p.gpu_acceleration)
         .unwrap_or(false)

@@ -10,6 +10,7 @@
     "allow-window-minimize",
     "allow-window-maximize",
     "allow-window-close",
+    "allow-window-show",
     "allow-window-start-dragging",
     "allow-is-vault-initialized",
     "allow-validate-vault-password",

@@ -42,8 +42,17 @@ pub async fn window_maximize(#[allow(unused_variables)] window: tauri::Window) {
 
 #[tauri::command]
 pub async fn window_close(#[allow(unused_variables)] window: tauri::Window) {
-    #[cfg(not(target_os = "android"))]
+    #[cfg(desktop)]
     let _ = window.close();
+}
+
+#[tauri::command]
+pub async fn window_show(#[allow(unused_variables)] window: tauri::Window) {
+    #[cfg(desktop)]
+    {
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
 }
 
 #[tauri::command]

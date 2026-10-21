@@ -523,12 +523,15 @@ graph TD;
           showFileTree = false;
           const parts = path.split('/');
           const name = parts[parts.length - 1] || 'document.md';
-          openFile({ name, path, is_dir: false });
+          await openFile({ name, path, is_dir: false });
         }
       })
       .catch((e) => console.warn('No initial file:', e))
       .finally(() => {
         isAppInitialized = true;
+        // Only reveal the window after SvelteKit's first meaningful render is done,
+        // otherwise the user sees a white flash (cold start glitch).
+        invoke('window_show').catch(() => {});
       });
 
     // Listen for single instance open-file events
