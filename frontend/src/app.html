@@ -1,21 +1,33 @@
 <!doctype html>
 <html lang="en" class="dark">
-  <head>
-    <meta charset="utf-8" />
-    <link rel="icon" href="%sveltekit.assets%/favicon.png" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <title>CAFramework</title>
-    <script>
-      try {
-        const theme = localStorage.getItem('caframework-theme');
-        if (theme === 'light') {
-          document.documentElement.classList.remove('dark');
-        } else {
-          document.documentElement.classList.add('dark');
-        }
-      } catch (e) {}
-    </script>
-    %sveltekit.head%
+<head>
+<meta charset="utf-8" />
+<link rel="icon" href="%sveltekit.assets%/favicon.png" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>CAMark</title>
+<style>
+  html, body {
+    margin: 0;
+    background-color: #0a0a0c;
+    overscroll-behavior: none;
+  }
+  html:not(.dark), html:not(.dark) body {
+    background-color: #f3f4f6;
+  }
+</style>
+<script>
+  try {
+    const theme = localStorage.getItem('caframework-theme') || localStorage.getItem('camark-theme');
+    if (theme === 'light') {
+      document.documentElement.classList.remove('dark');
+      document.documentElement.style.backgroundColor = '#f3f4f6';
+    } else {
+      document.documentElement.classList.add('dark');
+      document.documentElement.style.backgroundColor = '#0a0a0c';
+    }
+  } catch (e) {}
+</script>
+%sveltekit.head%
   </head>
   <body data-sveltekit-preload-data="hover">
     <div style="display: contents">%sveltekit.body%</div>

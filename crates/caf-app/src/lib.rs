@@ -125,10 +125,6 @@ pub fn run_with_start(start: std::time::Instant) {
                 tauri::async_runtime::spawn(async move {
                     let _ = window_clone.unminimize();
                     let _ = window_clone.show();
-                    let _ = window_clone.set_always_on_top(true);
-                    let _ = window_clone.set_focus();
-                    tokio::time::sleep(std::time::Duration::from_millis(150)).await;
-                    let _ = window_clone.set_always_on_top(false);
                     let _ = window_clone.set_focus();
                 });
 

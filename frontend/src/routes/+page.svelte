@@ -133,6 +133,7 @@ graph TD;
 
   const initialActiveTab = getActiveTab();
   let rawMarkdown = $state<string>(initialActiveTab ? '' : (getLocale() === 'id' ? DEMO_MD_ID : DEMO_MD_EN));
+  let isAppInitialized = $state<boolean>(false);
   let renderedHtml = $state<string>('');
 
   // Multi-document tabs reactive state
@@ -460,8 +461,6 @@ graph TD;
     const restored = getActiveTab();
     if (restored) {
       loadTabContent(restored);
-    } else {
-      renderMarkdown(rawMarkdown);
     }
 
     // Initialize CodeMirror 6 with oneDark theme and update listeners
@@ -510,6 +509,11 @@ graph TD;
 
       editorView = view;
       view.scrollDOM.addEventListener('scroll', syncScrollEditorToPreview, { passive: true });
+
+      // Render the demo preview or active tab content now that CodeMirror is mounted
+      if (!restored && !currentFilePath) {
+        renderMarkdown(rawMarkdown);
+      }
     }
 
     // Check initial file passed via CLI or Open With
@@ -522,7 +526,10 @@ graph TD;
           openFile({ name, path, is_dir: false });
         }
       })
-      .catch((e) => console.warn('No initial file:', e));
+      .catch((e) => console.warn('No initial file:', e))
+      .finally(() => {
+        isAppInitialized = true;
+      });
 
     // Listen for single instance open-file events
     listen<string>('open-file', (event) => {
@@ -1385,7 +1392,7 @@ graph TD;
   </header>
 
   <!-- Main Multi-Pane Body -->
-  <div class="flex-1 flex overflow-hidden min-h-0 relative">
+  <div class="flex-1 flex overflow-hidden min-h-0 relative {isAppInitialized ? 'opacity-100' : 'opacity-0'} transition-opacity duration-150">
     <!-- Workspace Files / Vault Explorer Sidebar -->
     <aside
       oncontextmenu={(e) => e.preventDefault()}
