@@ -133,7 +133,6 @@ graph TD;
 
   const initialActiveTab = getActiveTab();
   let rawMarkdown = $state<string>(initialActiveTab ? '' : (getLocale() === 'id' ? DEMO_MD_ID : DEMO_MD_EN));
-  let isAppInitialized = $state<boolean>(false);
   let renderedHtml = $state<string>('');
 
   // Multi-document tabs reactive state
@@ -528,10 +527,16 @@ graph TD;
       })
       .catch((e) => console.warn('No initial file:', e))
       .finally(() => {
-        isAppInitialized = true;
-        // Only reveal the window after SvelteKit's first meaningful render is done,
-        // otherwise the user sees a white flash (cold start glitch).
-        invoke('window_show').catch(() => {});
+        // Give the browser one full frame to lay out the DOM before the window
+        // pops in, then reveal. Without this beat the user sees a jolt when
+        // the hidden window becomes visible mid-layout.
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            // Reveal after SvelteKit's first meaningful render completes,
+            // so the user never sees a white flash.
+            invoke('window_show').catch(() => {});
+          });
+        });
       });
 
     // Listen for single instance open-file events
@@ -1395,7 +1400,7 @@ graph TD;
   </header>
 
   <!-- Main Multi-Pane Body -->
-  <div class="flex-1 flex overflow-hidden min-h-0 relative {isAppInitialized ? 'opacity-100' : 'opacity-0'} transition-opacity duration-150">
+  <div class="flex-1 flex overflow-hidden min-h-0 relative">
     <!-- Workspace Files / Vault Explorer Sidebar -->
     <aside
       oncontextmenu={(e) => e.preventDefault()}

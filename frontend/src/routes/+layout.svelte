@@ -546,8 +546,6 @@
         aria-label="Open Hana AI"
       >
         <span class="text-rose-500 group-hover:rotate-12 transition-transform text-sm">🌸</span>
-        <span class="font-medium tracking-tight">Hana AI</span>
-        <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
       </button>
     {/if}
 
