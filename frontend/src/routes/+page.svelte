@@ -525,19 +525,7 @@ graph TD;
           await openFile({ name, path, is_dir: false });
         }
       })
-      .catch((e) => console.warn('No initial file:', e))
-      .finally(() => {
-        // Give the browser one full frame to lay out the DOM before the window
-        // pops in, then reveal. Without this beat the user sees a jolt when
-        // the hidden window becomes visible mid-layout.
-        requestAnimationFrame(() => {
-          requestAnimationFrame(() => {
-            // Reveal after SvelteKit's first meaningful render completes,
-            // so the user never sees a white flash.
-            invoke('window_show').catch(() => {});
-          });
-        });
-      });
+      .catch((e) => console.warn('No initial file:', e));
 
     // Listen for single instance open-file events
     listen<string>('open-file', (event) => {
