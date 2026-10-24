@@ -3,7 +3,26 @@
   import { invoke } from '@tauri-apps/api/core';
   import { listen } from '@tauri-apps/api/event';
   import { open } from '@tauri-apps/plugin-dialog';
-  import { EditorView, basicSetup } from 'codemirror';
+  import {
+    EditorView,
+    drawSelection,
+    dropCursor,
+    highlightSpecialChars,
+    highlightActiveLine,
+    lineNumbers,
+    keymap,
+  } from '@codemirror/view';
+  import {
+    history,
+    defaultKeymap,
+    historyKeymap,
+  } from '@codemirror/commands';
+  import {
+    bracketMatching,
+    defaultHighlightStyle,
+    syntaxHighlighting,
+  } from '@codemirror/language';
+  import { closeBrackets } from '@codemirror/autocomplete';
   import { Compartment } from '@codemirror/state';
   import { markdown } from '@codemirror/lang-markdown';
   import { oneDark } from '@codemirror/theme-one-dark';
@@ -187,6 +206,7 @@ graph TD;
   const languageCompartment = new Compartment();
   const lineWrappingCompartment = new Compartment();
   const liveMarkdownCompartment = new Compartment();
+  const lineNumbersCompartment = new Compartment();
 
   $effect(() => {
     if (editorView) {
@@ -200,6 +220,15 @@ graph TD;
     if (editorView) {
       editorView.dispatch({
         effects: liveMarkdownCompartment.reconfigure(viewMode === 'live' ? createLiveMarkdownPlugin() : []),
+      });
+    }
+  });
+
+  $effect(() => {
+    if (editorView) {
+      const showNums = !isMarkdownFile(currentFilePath) && viewMode === 'editor';
+      editorView.dispatch({
+        effects: lineNumbersCompartment.reconfigure(showNums ? lineNumbers() : []),
       });
     }
   });
@@ -526,16 +555,28 @@ graph TD;
       const view = new EditorView({
         doc: rawMarkdown,
         extensions: [
-          basicSetup,
-          languageCompartment.of(markdown()),
-          oneDark,
-          lineWrappingCompartment.of(isZenMode ? EditorView.lineWrapping : []),
-          liveMarkdownCompartment.of(viewMode === 'live' ? createLiveMarkdownPlugin() : []),
+          highlightSpecialChars(),
+          history(),
+          drawSelection(),
+          dropCursor(),
+          syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
+          bracketMatching(),
+          closeBrackets(),
           EditorView.domEventHandlers({
             paste(event) {
               return handleEditorPaste(event);
             },
           }),
+          keymap.of([
+            ...defaultKeymap,
+            ...historyKeymap,
+          ]),
+          highlightActiveLine(),
+          lineNumbersCompartment.of(!isMarkdownFile(currentFilePath) && viewMode === 'editor' ? lineNumbers() : []),
+          languageCompartment.of(markdown()),
+          oneDark,
+          lineWrappingCompartment.of(isZenMode ? EditorView.lineWrapping : []),
+          liveMarkdownCompartment.of(viewMode === 'live' ? createLiveMarkdownPlugin() : []),
           EditorView.updateListener.of((update) => {
             if (update.docChanged) {
               rawMarkdown = update.state.doc.toString();
@@ -1641,7 +1682,7 @@ graph TD;
       <!-- CodeMirror Editor Viewport (no overflow-auto or padding that would push gutters out of alignment) -->
       <div
         bind:this={editorElement}
-        class="flex-1 overflow-hidden {isZenMode ? 'max-w-3xl mx-auto w-full pt-12 pb-32' : ''}"
+        class="flex-1 overflow-hidden {viewMode === 'live' ? 'cm-live-mode' : ''} {isZenMode ? 'max-w-3xl mx-auto w-full pt-12 pb-32' : ''}"
       ></div>
 
       <!-- Floating Contextual AI Action Bar on Text Selection -->
@@ -1931,70 +1972,125 @@ graph TD;
     line-height: 1.65 !important;
   }
 
-  /* Live Smart WYSIWYG Decorations */
-  :global(.cm-live-h1) {
-    font-size: 1.7em !important;
-    font-weight: 700 !important;
-    line-height: 1.35 !important;
-    color: #06b6d4 !important;
+  /* Live Smart WYSIWYG Mode Canvas: 100% Matches Preview Typography */
+  :global(.cm-live-mode .cm-scroller) {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
+    font-size: 0.95rem !important;
+    line-height: 1.75 !important;
   }
-  :global(.cm-live-h2) {
-    font-size: 1.4em !important;
-    font-weight: 700 !important;
-    line-height: 1.35 !important;
-    color: #38bdf8 !important;
+  :global(.cm-live-mode .cm-content) {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
+    font-size: 0.95rem !important;
+    line-height: 1.75 !important;
+    max-width: 56rem !important;
+    margin: 0 auto !important;
+    padding: 2.5rem 3rem !important;
+    color: #d4d4d8 !important;
   }
-  :global(.cm-live-h3) {
-    font-size: 1.2em !important;
-    font-weight: 600 !important;
-    line-height: 1.4 !important;
-    color: #7dd3fc !important;
+  :global(:not(.dark) .cm-live-mode .cm-content) {
+    color: #18181b !important;
   }
-  :global(.cm-live-bold) {
+  :global(.cm-live-mode .cm-line) {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
+    line-height: 1.75 !important;
+  }
+
+  /* Live Smart Headings (Identical to Preview H1, H2, H3) */
+  :global(.cm-live-mode .cm-live-h1) {
+    font-size: 1.85rem !important;
     font-weight: 700 !important;
+    line-height: 1.3 !important;
+    letter-spacing: -0.02em !important;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+    padding-bottom: 0.5rem !important;
+    margin-top: 1.75rem !important;
+    margin-bottom: 0.75rem !important;
     color: #fafafa !important;
   }
-  :global(.cm-live-italic) {
-    font-style: italic !important;
-    color: #e4e4e7 !important;
+  :global(:not(.dark) .cm-live-mode .cm-live-h1) {
+    border-bottom-color: rgba(0, 0, 0, 0.08) !important;
+    color: #09090b !important;
   }
-  :global(.cm-live-inlinecode) {
-    font-family: ui-monospace, monospace !important;
+
+  :global(.cm-live-mode .cm-live-h2) {
+    font-size: 1.45rem !important;
+    font-weight: 700 !important;
+    line-height: 1.3 !important;
+    letter-spacing: -0.02em !important;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05) !important;
+    padding-bottom: 0.35rem !important;
+    margin-top: 1.5rem !important;
+    margin-bottom: 0.75rem !important;
+    color: #fafafa !important;
+  }
+  :global(:not(.dark) .cm-live-mode .cm-live-h2) {
+    border-bottom-color: rgba(0, 0, 0, 0.05) !important;
+    color: #09090b !important;
+  }
+
+  :global(.cm-live-mode .cm-live-h3) {
+    font-size: 1.25rem !important;
+    font-weight: 700 !important;
+    line-height: 1.3 !important;
+    letter-spacing: -0.02em !important;
+    margin-top: 1.25rem !important;
+    margin-bottom: 0.5rem !important;
+    color: #fafafa !important;
+  }
+  :global(:not(.dark) .cm-live-mode .cm-live-h3) {
+    color: #09090b !important;
+  }
+
+  /* Bold, Italic, Code, Blockquote: Identical to Preview */
+  :global(.cm-live-mode .cm-live-bold) {
+    font-weight: 600 !important;
+    color: #fafafa !important;
+  }
+  :global(:not(.dark) .cm-live-mode .cm-live-bold) {
+    color: #09090b !important;
+  }
+
+  :global(.cm-live-mode .cm-live-italic) {
+    font-style: italic !important;
+    color: #f4f4f5 !important;
+  }
+  :global(:not(.dark) .cm-live-mode .cm-live-italic) {
+    color: #27272a !important;
+  }
+
+  :global(.cm-live-mode .cm-live-inlinecode) {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace !important;
+    font-size: 0.85em !important;
     background-color: rgba(255, 255, 255, 0.08) !important;
     color: #22d3ee !important;
     border-radius: 4px !important;
-    padding: 1px 4px !important;
-    font-size: 0.9em !important;
+    padding: 0.15rem 0.35rem !important;
   }
-  :global(.cm-live-strike) {
-    text-decoration: line-through !important;
-    opacity: 0.6 !important;
-  }
-  :global(.cm-live-quote) {
-    border-left: 3px solid #06b6d4 !important;
-    padding-left: 8px !important;
-    color: #a1a1aa !important;
-    font-style: italic !important;
-  }
-  :global(.cm-live-mark-hidden) {
-    opacity: 0.25 !important;
-    font-size: 0.85em !important;
+  :global(:not(.dark) .cm-live-mode .cm-live-inlinecode) {
+    background-color: #f4f4f5 !important;
+    color: #0891b2 !important;
   }
 
-  :global(:not(.dark) .cm-live-h1) {
-    color: #0891b2 !important;
+  :global(.cm-live-mode .cm-live-strike) {
+    text-decoration: line-through !important;
+    opacity: 0.65 !important;
   }
-  :global(:not(.dark) .cm-live-h2) {
-    color: #0284c7 !important;
+
+  :global(.cm-live-mode .cm-live-quote) {
+    border-left: 4px solid #06b6d4 !important;
+    margin: 1.25rem 0 !important;
+    padding: 0.6rem 1.25rem !important;
+    background: rgba(6, 182, 212, 0.06) !important;
+    border-radius: 0 8px 8px 0 !important;
+    color: #a1a1aa !important;
   }
-  :global(:not(.dark) .cm-live-h3) {
-    color: #0369a1 !important;
+  :global(:not(.dark) .cm-live-mode .cm-live-quote) {
+    background: rgba(6, 182, 212, 0.03) !important;
+    color: #52525b !important;
   }
-  :global(:not(.dark) .cm-live-bold) {
-    color: #09090b !important;
-  }
-  :global(:not(.dark) .cm-live-inlinecode) {
-    background-color: rgba(0, 0, 0, 0.06) !important;
-    color: #0891b2 !important;
+
+  :global(.cm-live-mode .cm-live-hr) {
+    border-top: 1px solid rgba(255, 255, 255, 0.08) !important;
+    margin: 2rem 0 !important;
   }
 </style>

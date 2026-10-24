@@ -484,7 +484,7 @@ export const id: Dictionary = {
     spreadsheetConverted: 'Data spreadsheet otomatis dikonversi ke tabel Markdown!',
     selectedTableFormatted: 'Tabel terpilih berhasil dirapikan!',
     vaultStorageLabel: '🔒 SQLCipher Vault',
-    fileStorageLabel: '📁 Plaintext File',
+    fileStorageLabel: '📁 Berkas Markdown',
     untitledDocument: 'Dokumen Tanpa Judul.md',
     defaultNewFileName: 'dokumen_baru.md',
     defaultNewFolderName: 'folder_baru',

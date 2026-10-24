@@ -486,7 +486,7 @@ export const en: Dictionary = {
     spreadsheetConverted: 'Spreadsheet data automatically converted to Markdown table!',
     selectedTableFormatted: 'Selected table formatted!',
     vaultStorageLabel: '🔒 SQLCipher Vault',
-    fileStorageLabel: '📁 Plaintext File',
+    fileStorageLabel: '📁 Markdown File',
     untitledDocument: 'Untitled Document.md',
     defaultNewFileName: 'new_document.md',
     defaultNewFolderName: 'new_folder',
