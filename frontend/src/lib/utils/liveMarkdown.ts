@@ -9,7 +9,8 @@ import { RangeSetBuilder } from '@codemirror/state';
 import { syntaxTree } from '@codemirror/language';
 
 export function createLiveMarkdownPlugin() {
-  const replaceDeco = Decoration.replace({});
+  const tokenHiddenDeco = Decoration.mark({ class: 'cm-live-token-hidden' });
+  const tokenActiveDeco = Decoration.mark({ class: 'cm-live-token-active' });
   const boldDeco = Decoration.mark({ class: 'cm-live-bold' });
   const italicDeco = Decoration.mark({ class: 'cm-live-italic' });
   const codeDeco = Decoration.mark({ class: 'cm-live-inlinecode' });
@@ -28,16 +29,18 @@ export function createLiveMarkdownPlugin() {
     const sel = view.state.selection.main;
     const cursorFrom = sel.from;
     const cursorTo = sel.to;
-    const cursorLine = doc.lineAt(cursorFrom).number;
+    const cursorLine = doc.lineAt(Math.min(cursorFrom, doc.length)).number;
 
     const items: Array<{ from: number; to: number; deco: Decoration; isLine: boolean }> = [];
 
     if (tree) {
       tree.iterate({
         enter: (node) => {
+          if (node.from >= doc.length) return;
+          const nodeTo = Math.min(node.to, doc.length);
           const nodeLine = doc.lineAt(node.from).number;
           const isCursorOnLine = nodeLine === cursorLine;
-          const isCursorInside = cursorFrom >= node.from && cursorTo <= node.to;
+          const isCursorInside = cursorFrom >= node.from && cursorTo <= nodeTo;
 
           // Headings lines
           if (node.name === 'ATXHeading1') {
@@ -57,44 +60,95 @@ export function createLiveMarkdownPlugin() {
             items.push({ from: lineStart, to: lineStart, deco: hrDeco, isLine: true });
           }
 
-          // Hide heading and quote prefix marks when cursor is NOT on that line
-          if (node.name === 'HeaderMark' && !isCursorOnLine) {
-            const nextChar = view.state.sliceDoc(node.to, node.to + 1);
-            const to = nextChar === ' ' ? node.to + 1 : node.to;
-            items.push({ from: node.from, to, deco: replaceDeco, isLine: false });
-          } else if (node.name === 'QuoteMark' && !isCursorOnLine) {
-            const nextChar = view.state.sliceDoc(node.to, node.to + 1);
-            const to = nextChar === ' ' ? node.to + 1 : node.to;
-            items.push({ from: node.from, to, deco: replaceDeco, isLine: false });
+          // Header mark and Quote mark
+          if (node.name === 'HeaderMark' || node.name === 'QuoteMark') {
+            const nextChar = view.state.sliceDoc(nodeTo, nodeTo + 1);
+            const to = nextChar === ' ' ? nodeTo + 1 : nodeTo;
+            items.push({
+              from: node.from,
+              to: Math.min(to, doc.length),
+              deco: isCursorOnLine ? tokenActiveDeco : tokenHiddenDeco,
+              isLine: false,
+            });
           }
 
-          // Inline styling: hide delimiters and apply rich text when cursor is NOT inside
-          if (!isCursorInside) {
-            if (node.name === 'StrongEmphasis') {
-              if (node.to - node.from > 4) {
-                items.push({ from: node.from, to: node.from + 2, deco: replaceDeco, isLine: false });
-                items.push({ from: node.from + 2, to: node.to - 2, deco: boldDeco, isLine: false });
-                items.push({ from: node.to - 2, to: node.to, deco: replaceDeco, isLine: false });
-              }
-            } else if (node.name === 'Emphasis') {
-              if (node.to - node.from > 2) {
-                items.push({ from: node.from, to: node.from + 1, deco: replaceDeco, isLine: false });
-                items.push({ from: node.from + 1, to: node.to - 1, deco: italicDeco, isLine: false });
-                items.push({ from: node.to - 1, to: node.to, deco: replaceDeco, isLine: false });
-              }
-            } else if (node.name === 'InlineCode') {
-              if (node.to - node.from > 2) {
-                items.push({ from: node.from, to: node.from + 1, deco: replaceDeco, isLine: false });
-                items.push({ from: node.from + 1, to: node.to - 1, deco: codeDeco, isLine: false });
-                items.push({ from: node.to - 1, to: node.to, deco: replaceDeco, isLine: false });
-              }
-            } else if (node.name === 'Strikethrough') {
-              if (node.to - node.from > 4) {
-                items.push({ from: node.from, to: node.from + 2, deco: replaceDeco, isLine: false });
-                items.push({ from: node.from + 2, to: node.to - 2, deco: strikeDeco, isLine: false });
-                items.push({ from: node.to - 2, to: node.to, deco: replaceDeco, isLine: false });
-              }
-            }
+          // Inline styling: hide delimiters and apply rich text
+          if (node.name === 'StrongEmphasis' && nodeTo - node.from >= 4) {
+            items.push({
+              from: node.from,
+              to: node.from + 2,
+              deco: isCursorInside ? tokenActiveDeco : tokenHiddenDeco,
+              isLine: false,
+            });
+            items.push({
+              from: node.from + 2,
+              to: nodeTo - 2,
+              deco: boldDeco,
+              isLine: false,
+            });
+            items.push({
+              from: nodeTo - 2,
+              to: nodeTo,
+              deco: isCursorInside ? tokenActiveDeco : tokenHiddenDeco,
+              isLine: false,
+            });
+          } else if (node.name === 'Emphasis' && nodeTo - node.from >= 2) {
+            items.push({
+              from: node.from,
+              to: node.from + 1,
+              deco: isCursorInside ? tokenActiveDeco : tokenHiddenDeco,
+              isLine: false,
+            });
+            items.push({
+              from: node.from + 1,
+              to: nodeTo - 1,
+              deco: italicDeco,
+              isLine: false,
+            });
+            items.push({
+              from: nodeTo - 1,
+              to: nodeTo,
+              deco: isCursorInside ? tokenActiveDeco : tokenHiddenDeco,
+              isLine: false,
+            });
+          } else if (node.name === 'InlineCode' && nodeTo - node.from >= 2) {
+            items.push({
+              from: node.from,
+              to: node.from + 1,
+              deco: isCursorInside ? tokenActiveDeco : tokenHiddenDeco,
+              isLine: false,
+            });
+            items.push({
+              from: node.from + 1,
+              to: nodeTo - 1,
+              deco: codeDeco,
+              isLine: false,
+            });
+            items.push({
+              from: nodeTo - 1,
+              to: nodeTo,
+              deco: isCursorInside ? tokenActiveDeco : tokenHiddenDeco,
+              isLine: false,
+            });
+          } else if (node.name === 'Strikethrough' && nodeTo - node.from >= 4) {
+            items.push({
+              from: node.from,
+              to: node.from + 2,
+              deco: isCursorInside ? tokenActiveDeco : tokenHiddenDeco,
+              isLine: false,
+            });
+            items.push({
+              from: node.from + 2,
+              to: nodeTo - 2,
+              deco: strikeDeco,
+              isLine: false,
+            });
+            items.push({
+              from: nodeTo - 2,
+              to: nodeTo,
+              deco: isCursorInside ? tokenActiveDeco : tokenHiddenDeco,
+              isLine: false,
+            });
           }
         },
       });
@@ -112,6 +166,7 @@ export function createLiveMarkdownPlugin() {
 
     const seenLines = new Set<number>();
     for (const it of items) {
+      if (it.from < 0 || it.to > doc.length || it.from > it.to) continue;
       if (it.isLine) {
         if (seenLines.has(it.from)) continue;
         seenLines.add(it.from);
@@ -123,7 +178,11 @@ export function createLiveMarkdownPlugin() {
       }
     }
 
-    return builder.finish();
+    try {
+      return builder.finish();
+    } catch {
+      return Decoration.none;
+    }
   }
 
   return ViewPlugin.fromClass(

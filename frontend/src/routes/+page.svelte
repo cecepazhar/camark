@@ -1682,7 +1682,7 @@ graph TD;
       <!-- CodeMirror Editor Viewport (no overflow-auto or padding that would push gutters out of alignment) -->
       <div
         bind:this={editorElement}
-        class="flex-1 overflow-hidden {viewMode === 'live' ? 'cm-live-mode' : ''} {isZenMode ? 'max-w-3xl mx-auto w-full pt-12 pb-32' : ''}"
+        class="flex-1 overflow-hidden {viewMode === 'live' ? 'cm-live-mode max-w-4xl w-full mx-auto' : ''} {isZenMode ? 'max-w-3xl mx-auto w-full pt-12 pb-32' : ''}"
       ></div>
 
       <!-- Floating Contextual AI Action Bar on Text Selection -->
@@ -1973,26 +1973,47 @@ graph TD;
   }
 
   /* Live Smart WYSIWYG Mode Canvas: 100% Matches Preview Typography */
+  :global(.cm-live-mode) {
+    font-size: 0.95rem !important;
+  }
   :global(.cm-live-mode .cm-scroller) {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
     font-size: 0.95rem !important;
     line-height: 1.75 !important;
+    overflow: auto !important;
   }
   :global(.cm-live-mode .cm-content) {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
     font-size: 0.95rem !important;
     line-height: 1.75 !important;
-    max-width: 56rem !important;
-    margin: 0 auto !important;
-    padding: 2.5rem 3rem !important;
-    color: #d4d4d8 !important;
+    padding: 2.5rem 2rem !important;
   }
-  :global(:not(.dark) .cm-live-mode .cm-content) {
+  :global(html.dark .cm-live-mode .cm-content) {
+    color: #e4e4e7 !important;
+  }
+  :global(html:not(.dark) .cm-live-mode .cm-content) {
     color: #18181b !important;
   }
   :global(.cm-live-mode .cm-line) {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
     line-height: 1.75 !important;
+  }
+
+  /* Live Smart Markdown Tokens (Smooth inline hiding and reveal on line cursor) */
+  :global(.cm-live-token-hidden) {
+    display: inline-block !important;
+    width: 0 !important;
+    max-width: 0 !important;
+    font-size: 0 !important;
+    opacity: 0 !important;
+    overflow: hidden !important;
+    vertical-align: middle !important;
+    user-select: none !important;
+  }
+  :global(.cm-live-token-active) {
+    opacity: 0.35 !important;
+    font-size: 0.9em !important;
+    font-family: ui-monospace, monospace !important;
   }
 
   /* Live Smart Headings (Identical to Preview H1, H2, H3) */
@@ -2005,11 +2026,14 @@ graph TD;
     padding-bottom: 0.5rem !important;
     margin-top: 1.75rem !important;
     margin-bottom: 0.75rem !important;
-    color: #fafafa !important;
   }
-  :global(:not(.dark) .cm-live-mode .cm-live-h1) {
-    border-bottom-color: rgba(0, 0, 0, 0.08) !important;
+  :global(html.dark .cm-live-mode .cm-live-h1) {
+    color: #fafafa !important;
+    border-bottom-color: rgba(255, 255, 255, 0.08) !important;
+  }
+  :global(html:not(.dark) .cm-live-mode .cm-live-h1) {
     color: #09090b !important;
+    border-bottom-color: rgba(0, 0, 0, 0.08) !important;
   }
 
   :global(.cm-live-mode .cm-live-h2) {
@@ -2021,11 +2045,14 @@ graph TD;
     padding-bottom: 0.35rem !important;
     margin-top: 1.5rem !important;
     margin-bottom: 0.75rem !important;
-    color: #fafafa !important;
   }
-  :global(:not(.dark) .cm-live-mode .cm-live-h2) {
-    border-bottom-color: rgba(0, 0, 0, 0.05) !important;
+  :global(html.dark .cm-live-mode .cm-live-h2) {
+    color: #fafafa !important;
+    border-bottom-color: rgba(255, 255, 255, 0.05) !important;
+  }
+  :global(html:not(.dark) .cm-live-mode .cm-live-h2) {
     color: #09090b !important;
+    border-bottom-color: rgba(0, 0, 0, 0.05) !important;
   }
 
   :global(.cm-live-mode .cm-live-h3) {
@@ -2035,38 +2062,46 @@ graph TD;
     letter-spacing: -0.02em !important;
     margin-top: 1.25rem !important;
     margin-bottom: 0.5rem !important;
+  }
+  :global(html.dark .cm-live-mode .cm-live-h3) {
     color: #fafafa !important;
   }
-  :global(:not(.dark) .cm-live-mode .cm-live-h3) {
+  :global(html:not(.dark) .cm-live-mode .cm-live-h3) {
     color: #09090b !important;
   }
 
   /* Bold, Italic, Code, Blockquote: Identical to Preview */
   :global(.cm-live-mode .cm-live-bold) {
     font-weight: 600 !important;
+  }
+  :global(html.dark .cm-live-mode .cm-live-bold) {
     color: #fafafa !important;
   }
-  :global(:not(.dark) .cm-live-mode .cm-live-bold) {
+  :global(html:not(.dark) .cm-live-mode .cm-live-bold) {
     color: #09090b !important;
   }
 
   :global(.cm-live-mode .cm-live-italic) {
     font-style: italic !important;
+  }
+  :global(html.dark .cm-live-mode .cm-live-italic) {
     color: #f4f4f5 !important;
   }
-  :global(:not(.dark) .cm-live-mode .cm-live-italic) {
+  :global(html:not(.dark) .cm-live-mode .cm-live-italic) {
     color: #27272a !important;
   }
 
   :global(.cm-live-mode .cm-live-inlinecode) {
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace !important;
     font-size: 0.85em !important;
-    background-color: rgba(255, 255, 255, 0.08) !important;
-    color: #22d3ee !important;
     border-radius: 4px !important;
     padding: 0.15rem 0.35rem !important;
   }
-  :global(:not(.dark) .cm-live-mode .cm-live-inlinecode) {
+  :global(html.dark .cm-live-mode .cm-live-inlinecode) {
+    background-color: rgba(255, 255, 255, 0.08) !important;
+    color: #22d3ee !important;
+  }
+  :global(html:not(.dark) .cm-live-mode .cm-live-inlinecode) {
     background-color: #f4f4f5 !important;
     color: #0891b2 !important;
   }
@@ -2080,11 +2115,13 @@ graph TD;
     border-left: 4px solid #06b6d4 !important;
     margin: 1.25rem 0 !important;
     padding: 0.6rem 1.25rem !important;
-    background: rgba(6, 182, 212, 0.06) !important;
     border-radius: 0 8px 8px 0 !important;
+  }
+  :global(html.dark .cm-live-mode .cm-live-quote) {
+    background: rgba(6, 182, 212, 0.06) !important;
     color: #a1a1aa !important;
   }
-  :global(:not(.dark) .cm-live-mode .cm-live-quote) {
+  :global(html:not(.dark) .cm-live-mode .cm-live-quote) {
     background: rgba(6, 182, 212, 0.03) !important;
     color: #52525b !important;
   }

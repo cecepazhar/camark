@@ -1,7 +1,7 @@
 {
   "name": "caf-frontend",
   "private": true,
-  "version": "1.0.29",
+  "version": "1.0.30",
   "type": "module",
   "scripts": {
     "test": "vitest run",
