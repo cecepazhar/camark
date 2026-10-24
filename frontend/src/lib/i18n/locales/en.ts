@@ -453,6 +453,7 @@ export const en: Dictionary = {
     readTime: 'Read',
     minutes: 'min',
     editorMode: 'Editor',
+    liveMode: 'Live Smart',
     splitMode: 'Split',
     previewMode: 'Preview',
     toggleFilePanel: 'Toggle Files Panel (Ctrl+B)',

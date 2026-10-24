@@ -50,7 +50,9 @@
     getViewMode,
     setViewMode,
     type DocTab,
+    type ViewMode,
   } from '$lib/stores/docTabs.svelte';
+  import { createLiveMarkdownPlugin } from '$lib/utils/liveMarkdown';
 
   import FileTreeNode from '$lib/components/FileTreeNode.svelte';
   import MarkdownFormatToolbar from '$lib/components/MarkdownFormatToolbar.svelte';
@@ -154,8 +156,8 @@ graph TD;
   const activeTab = $derived(getActiveTab());
   const pro = getPro();
 
-  // View mode: 'editor' | 'split' | 'preview' (synchronized via docTabs store)
-  let viewMode = $state<'editor' | 'split' | 'preview'>(getViewMode());
+  // View mode: 'editor' | 'live' | 'split' | 'preview' (synchronized via docTabs store)
+  let viewMode = $state<ViewMode>(getViewMode());
   let isSaving = $state<boolean>(false);
 
   // Zen & Focus Mode
@@ -184,11 +186,20 @@ graph TD;
 
   const languageCompartment = new Compartment();
   const lineWrappingCompartment = new Compartment();
+  const liveMarkdownCompartment = new Compartment();
 
   $effect(() => {
     if (editorView) {
       editorView.dispatch({
         effects: lineWrappingCompartment.reconfigure(isZenMode ? EditorView.lineWrapping : []),
+      });
+    }
+  });
+
+  $effect(() => {
+    if (editorView) {
+      editorView.dispatch({
+        effects: liveMarkdownCompartment.reconfigure(viewMode === 'live' ? createLiveMarkdownPlugin() : []),
       });
     }
   });
@@ -519,6 +530,7 @@ graph TD;
           languageCompartment.of(markdown()),
           oneDark,
           lineWrappingCompartment.of(isZenMode ? EditorView.lineWrapping : []),
+          liveMarkdownCompartment.of(viewMode === 'live' ? createLiveMarkdownPlugin() : []),
           EditorView.domEventHandlers({
             paste(event) {
               return handleEditorPaste(event);
@@ -1447,13 +1459,21 @@ graph TD;
         <span class="hidden sm:inline">HTML</span>
       </Button>
 
-      <!-- Editor / Split / Preview View Switcher -->
+      <!-- Editor / Live Smart / Split / Preview View Switcher -->
       <div class="flex items-center p-0.5 bg-neutral-200/70 dark:bg-neutral-900 rounded-lg border border-neutral-300 dark:border-neutral-800 text-xs">
         <button
           onclick={() => { viewMode = 'editor'; setViewMode('editor'); }}
           class="px-2.5 py-1 rounded-md transition-all {viewMode === 'editor' ? 'bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white font-medium shadow-2xs' : 'text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'}"
         >
           {t('editor.editorMode')}
+        </button>
+        <button
+          onclick={() => { viewMode = 'live'; setViewMode('live'); }}
+          class="px-2.5 py-1 rounded-md transition-all flex items-center gap-1 {viewMode === 'live' ? 'bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 font-semibold border border-cyan-500/30 shadow-2xs' : 'text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'}"
+          title="Live Smart WYSIWYG Mode"
+        >
+          <span class="text-xs">⚡</span>
+          <span>{t('editor.liveMode')}</span>
         </button>
         <button
           onclick={() => { viewMode = 'split'; setViewMode('split'); }}
@@ -1618,10 +1638,10 @@ graph TD;
         onFormatDocumentTable={handleFormatDocumentTable}
       />
 
-      <!-- CodeMirror Editor Viewport -->
+      <!-- CodeMirror Editor Viewport (no overflow-auto or padding that would push gutters out of alignment) -->
       <div
         bind:this={editorElement}
-        class="flex-1 overflow-auto font-mono text-sm leading-relaxed p-2 {isZenMode ? 'max-w-3xl mx-auto w-full pt-12 pb-32' : ''}"
+        class="flex-1 overflow-hidden {isZenMode ? 'max-w-3xl mx-auto w-full pt-12 pb-32' : ''}"
       ></div>
 
       <!-- Floating Contextual AI Action Bar on Text Selection -->
@@ -1644,7 +1664,7 @@ graph TD;
       bind:this={previewElement}
       onscroll={viewMode === 'split' ? syncScrollPreviewToEditor : undefined}
       onclick={handlePreviewClick}
-      class="preview-scroll-accel flex-1 overflow-y-auto bg-white dark:bg-[#0c1017] p-8 sm:p-10 markdown-preview max-w-none select-text overscroll-contain will-change-[scroll-position] bg-[linear-gradient(to_right,#00000006_1px,transparent_1px),linear-gradient(to_bottom,#00000006_1px,transparent_1px)] dark:bg-[linear-gradient(to_right,#ffffff05_1px,transparent_1px),linear-gradient(to_bottom,#ffffff05_1px,transparent_1px)] bg-[size:56px_56px] {viewMode === 'editor' || isZenMode ? 'hidden' : 'block'}"
+      class="preview-scroll-accel flex-1 overflow-y-auto bg-white dark:bg-[#0c1017] p-8 sm:p-10 markdown-preview max-w-none select-text overscroll-contain will-change-[scroll-position] bg-[linear-gradient(to_right,#00000006_1px,transparent_1px),linear-gradient(to_bottom,#00000006_1px,transparent_1px)] dark:bg-[linear-gradient(to_right,#ffffff05_1px,transparent_1px),linear-gradient(to_bottom,#ffffff05_1px,transparent_1px)] bg-[size:56px_56px] {viewMode === 'editor' || viewMode === 'live' || isZenMode ? 'hidden' : 'block'}"
     >
       {@html renderedHtml}
     </section>
@@ -1870,10 +1890,111 @@ graph TD;
   :global(.cm-editor) {
     height: 100% !important;
     background-color: transparent !important;
+    font-size: 13px !important;
+  }
+  :global(.cm-editor.cm-focused) {
+    outline: none !important;
   }
   :global(.cm-scroller) {
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace !important;
-    font-size: 13px !important;
     line-height: 1.65 !important;
+    overflow: auto !important;
+  }
+  :global(.cm-gutters) {
+    background-color: transparent !important;
+    border-right: 1px solid rgba(255, 255, 255, 0.08) !important;
+    color: #71717a !important;
+  }
+  :global(.dark .cm-gutters) {
+    border-right-color: rgba(255, 255, 255, 0.08) !important;
+    color: #71717a !important;
+  }
+  :global(:not(.dark) .cm-gutters) {
+    border-right-color: rgba(0, 0, 0, 0.08) !important;
+    color: #a1a1aa !important;
+  }
+  :global(.cm-lineNumbers .cm-gutterElement) {
+    padding: 0 10px 0 6px !important;
+    min-width: 28px !important;
+    text-align: right !important;
+    line-height: 1.65 !important;
+  }
+  :global(.cm-foldGutter .cm-gutterElement) {
+    padding: 0 4px !important;
+    line-height: 1.65 !important;
+  }
+  :global(.cm-content) {
+    padding: 8px 14px !important;
+    line-height: 1.65 !important;
+  }
+  :global(.cm-line) {
+    line-height: 1.65 !important;
+  }
+
+  /* Live Smart WYSIWYG Decorations */
+  :global(.cm-live-h1) {
+    font-size: 1.7em !important;
+    font-weight: 700 !important;
+    line-height: 1.35 !important;
+    color: #06b6d4 !important;
+  }
+  :global(.cm-live-h2) {
+    font-size: 1.4em !important;
+    font-weight: 700 !important;
+    line-height: 1.35 !important;
+    color: #38bdf8 !important;
+  }
+  :global(.cm-live-h3) {
+    font-size: 1.2em !important;
+    font-weight: 600 !important;
+    line-height: 1.4 !important;
+    color: #7dd3fc !important;
+  }
+  :global(.cm-live-bold) {
+    font-weight: 700 !important;
+    color: #fafafa !important;
+  }
+  :global(.cm-live-italic) {
+    font-style: italic !important;
+    color: #e4e4e7 !important;
+  }
+  :global(.cm-live-inlinecode) {
+    font-family: ui-monospace, monospace !important;
+    background-color: rgba(255, 255, 255, 0.08) !important;
+    color: #22d3ee !important;
+    border-radius: 4px !important;
+    padding: 1px 4px !important;
+    font-size: 0.9em !important;
+  }
+  :global(.cm-live-strike) {
+    text-decoration: line-through !important;
+    opacity: 0.6 !important;
+  }
+  :global(.cm-live-quote) {
+    border-left: 3px solid #06b6d4 !important;
+    padding-left: 8px !important;
+    color: #a1a1aa !important;
+    font-style: italic !important;
+  }
+  :global(.cm-live-mark-hidden) {
+    opacity: 0.25 !important;
+    font-size: 0.85em !important;
+  }
+
+  :global(:not(.dark) .cm-live-h1) {
+    color: #0891b2 !important;
+  }
+  :global(:not(.dark) .cm-live-h2) {
+    color: #0284c7 !important;
+  }
+  :global(:not(.dark) .cm-live-h3) {
+    color: #0369a1 !important;
+  }
+  :global(:not(.dark) .cm-live-bold) {
+    color: #09090b !important;
+  }
+  :global(:not(.dark) .cm-live-inlinecode) {
+    background-color: rgba(0, 0, 0, 0.06) !important;
+    color: #0891b2 !important;
   }
 </style>

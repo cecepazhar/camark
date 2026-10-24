@@ -9,15 +9,17 @@ export interface DocTab {
   isDirty: boolean;
 }
 
+export type ViewMode = 'editor' | 'live' | 'split' | 'preview';
+
 const STORAGE_KEY = 'camark_open_tabs_v1';
 const ACTIVE_TAB_KEY = 'camark_active_tab_v1';
 const VIEW_MODE_KEY = 'camark_view_mode_v1';
 
-function getInitialViewMode(): 'editor' | 'split' | 'preview' {
+function getInitialViewMode(): ViewMode {
   if (typeof localStorage === 'undefined') return 'split';
   try {
     const vm = localStorage.getItem(VIEW_MODE_KEY);
-    if (vm === 'editor' || vm === 'split' || vm === 'preview') return vm;
+    if (vm === 'editor' || vm === 'live' || vm === 'split' || vm === 'preview') return vm;
   } catch {}
   return 'split';
 }
@@ -40,7 +42,7 @@ function getInitialTabs(): { tabs: DocTab[]; activeTabId: string | null } {
 const initialSession = getInitialTabs();
 let tabs = $state<DocTab[]>(initialSession.tabs);
 let activeTabId = $state<string | null>(initialSession.activeTabId);
-let viewMode = $state<'editor' | 'split' | 'preview'>(getInitialViewMode());
+let viewMode = $state<ViewMode>(getInitialViewMode());
 
 function persist() {
   if (typeof localStorage === 'undefined') return;
@@ -80,7 +82,7 @@ export function restoreTabs() {
       tabs = parsed.map((p) => ({ ...p, isDirty: false }));
     }
     activeTabId = activeRaw && tabs.some((t) => t.id === activeRaw) ? activeRaw : (tabs[0]?.id ?? null);
-    if (vm === 'editor' || vm === 'split' || vm === 'preview') {
+    if (vm === 'editor' || vm === 'live' || vm === 'split' || vm === 'preview') {
       viewMode = vm;
     } else {
       viewMode = 'split';
@@ -157,7 +159,7 @@ export function setDirty(id: string, dirty: boolean): void {
   }
 }
 
-export function setViewMode(mode: 'editor' | 'split' | 'preview'): void {
+export function setViewMode(mode: ViewMode): void {
   viewMode = mode;
   persist();
 }

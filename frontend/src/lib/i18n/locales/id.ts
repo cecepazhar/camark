@@ -451,6 +451,7 @@ export const id: Dictionary = {
     readTime: 'Baca',
     minutes: 'mnt',
     editorMode: 'Editor',
+    liveMode: 'Live Smart',
     splitMode: 'Split',
     previewMode: 'Pratinjau',
     toggleFilePanel: 'Panel Berkas (Ctrl+B)',
