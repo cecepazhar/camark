@@ -18,7 +18,7 @@ use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
 const PREFS_FILE: &str = "crash_reporting.json";
-const PROXY_URL: &str = "";
+const PROXY_URL: &str = "https://gcc.fathforce.com/api/pro/v1/crash-report";
 /// A dump older than this is almost certainly from a version so old the stack trace is no
 /// longer useful, and keeping it around only risks an unbounded pile of unread dumps.
 const MAX_DUMP_AGE_SECS: i64 = 30 * 24 * 3600;
@@ -86,11 +86,20 @@ pub fn install_panic_hook() {
     let previous = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
         previous(info);
-        // `PanicHookInfo` borrows the panic payload (`dyn Any`), which isn't provably
-        // `RefUnwindSafe` — but we only ever read from it here, never mutate through it, so a
-        // second panic inside `try_record_panic` cannot observe it in some torn intermediate
-        // state. That's exactly what `AssertUnwindSafe` is for.
-        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| try_record_panic(info)));
+        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let message = info
+                .payload()
+                .downcast_ref::<&str>()
+                .map(|s| (*s).to_string())
+                .or_else(|| info.payload().downcast_ref::<String>().cloned())
+                .unwrap_or_default();
+            // Broken pipe / EPIPE panics are harmless in GUI builds: they mean a
+            // print to a closed stdout/stderr, not a real crash. Do not record dumps.
+            if message.contains("Broken pipe") || message.contains("os error 32") {
+                return;
+            }
+            let _ = try_record_panic(info);
+        }));
     }));
 }
 

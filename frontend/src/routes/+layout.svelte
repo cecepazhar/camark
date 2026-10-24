@@ -156,7 +156,19 @@
 
     getPendingCrashReport()
       .then((report) => {
-        pendingCrashReport = report;
+        // Broken-pipe / EPIPE reports are side-effects of running in a GUI shell
+        // without a real stderr, not real crashes. Do not block the UI with them.
+        const payload = (report?.payload ?? '').toLowerCase();
+        const errorType = (report?.error_type ?? '').toLowerCase();
+        if (
+          report &&
+          !payload.includes('broken pipe') &&
+          !payload.includes('os error 32') &&
+          !errorType.includes('broken pipe') &&
+          !errorType.includes('os error 32')
+        ) {
+          pendingCrashReport = report;
+        }
       })
       .catch(() => {});
 

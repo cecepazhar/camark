@@ -101,20 +101,15 @@ pub fn run() {
     run_with_start(std::time::Instant::now());
 }
 
-pub fn run_with_start(start: std::time::Instant) {
-    let t0 = std::time::Instant::now();
+pub fn run_with_start(_start: std::time::Instant) {
     caf_core::crash::install_panic_hook();
-    eprintln!("[COLD_START] panic_hook: {} ms", t0.elapsed().as_millis());
 
-    let t1 = std::time::Instant::now();
     #[allow(clippy::expect_used, clippy::disallowed_methods)]
     let mut builder = tauri::Builder::default()
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init());
-    eprintln!("[COLD_START] plugins_init: {} ms", t1.elapsed().as_millis());
 
-    let t2 = std::time::Instant::now();
     #[cfg(desktop)]
     {
         builder = builder.plugin(tauri_plugin_single_instance::init(|app, args, cwd| {
@@ -144,7 +139,6 @@ pub fn run_with_start(start: std::time::Instant) {
             }
         }));
     }
-    eprintln!("[COLD_START] single_instance_init: {} ms", t2.elapsed().as_millis());
 
     for arg in std::env::args().skip(1) {
         if let Some(path_str) = normalize_cli_path(&arg, None) {
@@ -155,7 +149,6 @@ pub fn run_with_start(start: std::time::Instant) {
 
     builder
         .setup(move |app| {
-            let ts0 = std::time::Instant::now();
             #[cfg(target_os = "android")]
             {
                 use tauri::Manager;
@@ -165,13 +158,10 @@ pub fn run_with_start(start: std::time::Instant) {
             }
 
             window::create_main_window(app)?;
-            eprintln!("[COLD_START] create_main_window: {} ms", ts0.elapsed().as_millis());
 
-            let ts1 = std::time::Instant::now();
             #[cfg(desktop)]
             app.handle()
                 .plugin(tauri_plugin_updater::Builder::new().build())?;
-            eprintln!("[COLD_START] updater_plugin: {} ms", ts1.elapsed().as_millis());
 
             #[cfg(target_os = "linux")]
             {
@@ -218,7 +208,6 @@ pub fn run_with_start(start: std::time::Instant) {
                 }
             }
 
-            println!("CMRKRAMEWORK_COLD_START_MS={}", start.elapsed().as_millis());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
