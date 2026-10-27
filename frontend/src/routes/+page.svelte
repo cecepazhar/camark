@@ -188,6 +188,7 @@ graph TD;
   // View mode: 'editor' | 'live' | 'split' | 'preview' (synchronized via docTabs store)
   const viewMode = $derived(getViewMode());
   let isSaving = $state<boolean>(false);
+  let isLoadingTabDoc = false;
   $effect(() => {
     setIsSavingDoc(isSaving);
   });
@@ -683,8 +684,10 @@ graph TD;
             if (update.docChanged) {
               rawMarkdown = update.state.doc.toString();
               renderMarkdown(rawMarkdown);
-              if (activeTabId) setDirty(activeTabId, true);
-              autoSave();
+              if (!isLoadingTabDoc) {
+                if (activeTabId) setDirty(activeTabId, true);
+                autoSave();
+              }
               updateDocumentContext({ active_doc_content: rawMarkdown });
             }
             if (update.selectionSet) {
@@ -998,7 +1001,9 @@ graph TD;
       return;
     }
 
-    if (tab.isVault) {
+    isLoadingTabDoc = true;
+    try {
+      if (tab.isVault) {
       const docId = tab.path.replace('vault://', '');
       if (!isVaultUnlocked) {
         await enterVaultMode();
@@ -1064,7 +1069,11 @@ graph TD;
         console.error('Failed reading tab file:', e);
       }
     }
+  } finally {
+    isLoadingTabDoc = false;
+    setDirty(tab.id, false);
   }
+}
 
   async function handleSelectTab(id: string) {
     setActiveTab(id);
@@ -1597,10 +1606,6 @@ graph TD;
           </span>
 
           <span class="truncate flex-1 min-w-0">{tab.title}</span>
-
-          {#if tab.isDirty}
-            <span class="w-1.5 h-1.5 rounded-full bg-cyan-500 shrink-0" title={t('editor.unsavedChanges')}></span>
-          {/if}
 
           {#if tabs.length > 1}
             <button

@@ -51,11 +51,6 @@
       <!-- Tab Title -->
       <span class="truncate max-w-[140px] sm:max-w-[180px]">{tab.title}</span>
 
-      <!-- Dirty indicator dot -->
-      {#if tab.isDirty}
-        <span class="w-1.5 h-1.5 rounded-full bg-cyan-500 shrink-0" title="Ada perubahan belum tersimpan"></span>
-      {/if}
-
       <!-- Close Button -->
       {#if tabs.length > 1}
         <button
