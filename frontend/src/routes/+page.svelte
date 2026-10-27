@@ -2330,6 +2330,31 @@ graph TD;
     margin-right: 0.25rem !important;
   }
 
+  :global(.cm-live-mode .cm-live-bullet) {
+    font-size: 0 !important;
+    color: transparent !important;
+    display: inline-block !important;
+    width: 1.15rem !important;
+    vertical-align: middle !important;
+    user-select: none !important;
+  }
+  :global(.cm-live-mode .cm-live-bullet::before) {
+    content: "•" !important;
+    font-size: 1.25rem !important;
+    color: #06b6d4 !important;
+    font-weight: 700 !important;
+    display: inline-block !important;
+    line-height: 1 !important;
+  }
+
+  :global(.cm-live-mode .cm-live-ascii) {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace !important;
+    font-size: 0.88em !important;
+    line-height: 1.25 !important;
+    letter-spacing: 0 !important;
+    white-space: pre !important;
+  }
+
   :global(.cm-live-mode .cm-live-link) {
     color: #22d3ee !important;
     text-decoration: underline !important;

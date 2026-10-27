@@ -27,6 +27,9 @@ export function createLiveMarkdownPlugin() {
   const quoteDeco = Decoration.line({ class: 'cm-live-quote' });
   const hrDeco = Decoration.line({ class: 'cm-live-hr' });
   const codeBlockLineDeco = Decoration.line({ class: 'cm-live-codeblock' });
+  const asciiLineDeco = Decoration.line({ class: 'cm-live-ascii' });
+  const bulletGlyphDeco = Decoration.mark({ class: 'cm-live-bullet' });
+  const BOX_REGEX = /[\u2500-\u257F\u2580-\u259F┌─┐│└┘├┤┬┴┼═║╔╗╚╝╠╣╦╩╬▲▼◀▶]/;
 
   function computeDecos(view: EditorView): DecorationSet {
     const doc = view.state.doc;
@@ -96,12 +99,23 @@ export function createLiveMarkdownPlugin() {
 
           // List markers (- , * , 1. )
           if (node.name === 'ListMark') {
-            items.push({
-              from: node.from,
-              to: nodeTo,
-              deco: listMarkDeco,
-              isLine: false,
-            });
+            const markText = view.state.sliceDoc(node.from, nodeTo);
+            const isBullet = markText.includes('*') || markText.includes('-');
+            if (isBullet && !isCursorOnLine) {
+              items.push({
+                from: node.from,
+                to: nodeTo,
+                deco: bulletGlyphDeco,
+                isLine: false,
+              });
+            } else {
+              items.push({
+                from: node.from,
+                to: nodeTo,
+                deco: listMarkDeco,
+                isLine: false,
+              });
+            }
           }
 
           // Links: [text](url)
@@ -196,6 +210,14 @@ export function createLiveMarkdownPlugin() {
           }
         },
       });
+    }
+
+    // Detect lines containing ASCII diagram box-drawing characters
+    for (let i = 1; i <= doc.lines; i++) {
+      const line = doc.line(i);
+      if (BOX_REGEX.test(line.text)) {
+        items.push({ from: line.from, to: line.from, deco: asciiLineDeco, isLine: true });
+      }
     }
 
     // Sort order:
