@@ -50,6 +50,11 @@
   const pro = getPro();
   const viewMode = $derived(getViewMode());
 
+  const isEditorPage = $derived(
+    !page.url.pathname.startsWith('/settings') &&
+    !page.url.pathname.startsWith('/copilot')
+  );
+
   const cardBorderClass = $derived.by(() => {
     if (!ambient.config.enabled || !ambient.config.cardGlowEnabled || !pro.isPro) {
       return 'border border-neutral-200 dark:border-neutral-800 md:border-b-0 md:border-r-0';

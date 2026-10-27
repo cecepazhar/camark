@@ -176,6 +176,7 @@ graph TD;
   const initialActiveTab = getActiveTab();
   let rawMarkdown = $state<string>(initialActiveTab ? '' : (getLocale() === 'id' ? DEMO_MD_ID : DEMO_MD_EN));
   let renderedHtml = $state<string>('');
+  let renderedSvgHtml = $state<string>('');
 
   // Multi-document tabs reactive state
   const tabs = $derived(getDocTabs());
@@ -333,6 +334,18 @@ graph TD;
       lower.endsWith('.txt') ||
       lower.endsWith('.text')
     );
+  }
+
+  function isHtmlFile(pathOrTitle: string | null): boolean {
+    if (!pathOrTitle) return false;
+    const lower = pathOrTitle.toLowerCase();
+    return lower.endsWith('.html') || lower.endsWith('.htm');
+  }
+
+  function isSvgFile(pathOrTitle: string | null): boolean {
+    if (!pathOrTitle) return false;
+    const lower = pathOrTitle.toLowerCase();
+    return lower.endsWith('.svg');
   }
 
   function escapeHtml(str: string): string {
@@ -763,6 +776,17 @@ graph TD;
 
   async function renderMarkdown(content: string) {
     try {
+      if (isHtmlFile(currentFilePath)) {
+        return;
+      }
+
+      if (isSvgFile(currentFilePath)) {
+        renderedSvgHtml = DOMPurify.sanitize(content, {
+          USE_PROFILES: { svg: true, svgFilters: true },
+        });
+        return;
+      }
+
       if (!isMarkdownFile(currentFilePath)) {
         const ext = (currentFilePath?.split('.').pop() || 'text').toLowerCase();
         const encoded = encodeURIComponent(content);
@@ -1802,9 +1826,50 @@ graph TD;
       bind:this={previewElement}
       onscroll={viewMode === 'split' ? syncScrollPreviewToEditor : undefined}
       onclick={handlePreviewClick}
-      class="preview-scroll-accel flex-1 overflow-y-auto bg-white dark:bg-[#0c1017] p-8 sm:p-10 markdown-preview max-w-none select-text overscroll-contain will-change-[scroll-position] bg-[linear-gradient(to_right,#00000006_1px,transparent_1px),linear-gradient(to_bottom,#00000006_1px,transparent_1px)] dark:bg-[linear-gradient(to_right,#ffffff05_1px,transparent_1px),linear-gradient(to_bottom,#ffffff05_1px,transparent_1px)] bg-[size:56px_56px] {viewMode === 'editor' || viewMode === 'live' || isZenMode ? 'hidden' : 'block'}"
+      class="preview-scroll-accel flex-1 overflow-y-auto bg-white dark:bg-[#0c1017] {isHtmlFile(currentFilePath) ? '!p-0 overflow-hidden' : isSvgFile(currentFilePath) ? 'p-4 sm:p-6' : 'p-8 sm:p-10'} markdown-preview max-w-none select-text overscroll-contain will-change-[scroll-position] bg-[linear-gradient(to_right,#00000006_1px,transparent_1px),linear-gradient(to_bottom,#00000006_1px,transparent_1px)] dark:bg-[linear-gradient(to_right,#ffffff05_1px,transparent_1px),linear-gradient(to_bottom,#ffffff05_1px,transparent_1px)] bg-[size:56px_56px] {viewMode === 'editor' || viewMode === 'live' || isZenMode ? 'hidden' : 'block'}"
     >
-      {@html renderedHtml}
+      {#if isHtmlFile(currentFilePath)}
+        <div class="w-full h-full flex flex-col bg-white dark:bg-[#111111] overflow-hidden">
+          <div class="h-8 px-3 bg-neutral-100 dark:bg-[#161616] border-b border-neutral-200 dark:border-neutral-800 flex items-center justify-between text-xs text-neutral-500 font-mono select-none shrink-0 no-print">
+            <span class="flex items-center gap-1.5 text-cyan-600 dark:text-cyan-400 font-semibold text-[11px]">
+              <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+              <span>LIVE WEB PREVIEW</span>
+            </span>
+            <span class="text-[10px] text-neutral-400">Sandboxed HTML Canvas</span>
+          </div>
+          <iframe
+            title="Live Web Preview"
+            srcdoc={rawMarkdown}
+            sandbox="allow-scripts allow-forms allow-same-origin allow-modals"
+            class="w-full flex-1 border-0 bg-white"
+          ></iframe>
+        </div>
+      {:else if isSvgFile(currentFilePath)}
+        <div class="w-full h-full flex flex-col items-center justify-center min-h-[400px]">
+          <div class="p-6 sm:p-8 rounded-2xl bg-neutral-100 dark:bg-neutral-900/90 border border-neutral-200 dark:border-neutral-800 shadow-xl max-w-2xl w-full flex flex-col items-center gap-4">
+            <div class="w-full flex items-center justify-between text-xs font-mono text-neutral-500 pb-2 border-b border-neutral-200 dark:border-neutral-800">
+              <span class="font-semibold text-cyan-600 dark:text-cyan-400 flex items-center gap-1.5">
+                <svg class="w-4 h-4 text-purple-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
+                  <polyline points="2 17 12 22 22 17"></polyline>
+                  <polyline points="2 12 12 17 22 12"></polyline>
+                </svg>
+                <span>Vector SVG Canvas</span>
+              </span>
+              <span class="text-[10px] px-2 py-0.5 rounded bg-purple-500/10 text-purple-400 border border-purple-500/20 font-bold">SVG</span>
+            </div>
+
+            <!-- Checkerboard Transparent Backdrop Canvas for Graphic Preview -->
+            <div class="w-full flex items-center justify-center p-8 rounded-xl border border-neutral-300/80 dark:border-neutral-800 bg-[linear-gradient(45deg,#ccc_25%,transparent_25%),linear-gradient(-45deg,#ccc_25%,transparent_25%),linear-gradient(45deg,transparent_75%,#ccc_75%),linear-gradient(-45deg,transparent_75%,#ccc_75%)] dark:bg-[linear-gradient(45deg,#1f1f1f_25%,transparent_25%),linear-gradient(-45deg,#1f1f1f_25%,transparent_25%),linear-gradient(45deg,transparent_75%,#1f1f1f_75%),linear-gradient(-45deg,transparent_75%,#1f1f1f_75%)] bg-[size:16px_16px] bg-[position:0_0,0_8px,8px_-8px,-8px_0] overflow-auto">
+              <div class="max-w-full max-h-[500px] flex items-center justify-center drop-shadow-md svg-graphic-wrapper">
+                {@html renderedSvgHtml}
+              </div>
+            </div>
+          </div>
+        </div>
+      {:else}
+        {@html renderedHtml}
+      {/if}
     </section>
 
     <!-- Live Document Outline Drawer -->
@@ -2116,6 +2181,15 @@ graph TD;
     opacity: 0.35 !important;
     font-size: 0.9em !important;
     font-family: ui-monospace, monospace !important;
+  }
+
+  /* Scalable Vector SVG Graphic Canvas Preview */
+  :global(.svg-graphic-wrapper svg) {
+    max-width: 100% !important;
+    max-height: 480px !important;
+    width: auto !important;
+    height: auto !important;
+    display: block !important;
   }
 
   /* Live Smart Headings (Identical to Preview H1, H2, H3) */
