@@ -15,12 +15,18 @@ export function createLiveMarkdownPlugin() {
   const italicDeco = Decoration.mark({ class: 'cm-live-italic' });
   const codeDeco = Decoration.mark({ class: 'cm-live-inlinecode' });
   const strikeDeco = Decoration.mark({ class: 'cm-live-strike' });
+  const listMarkDeco = Decoration.mark({ class: 'cm-live-listmark' });
+  const linkDeco = Decoration.mark({ class: 'cm-live-link' });
 
   const h1Deco = Decoration.line({ class: 'cm-live-h1' });
   const h2Deco = Decoration.line({ class: 'cm-live-h2' });
   const h3Deco = Decoration.line({ class: 'cm-live-h3' });
+  const h4Deco = Decoration.line({ class: 'cm-live-h4' });
+  const h5Deco = Decoration.line({ class: 'cm-live-h5' });
+  const h6Deco = Decoration.line({ class: 'cm-live-h6' });
   const quoteDeco = Decoration.line({ class: 'cm-live-quote' });
   const hrDeco = Decoration.line({ class: 'cm-live-hr' });
+  const codeBlockLineDeco = Decoration.line({ class: 'cm-live-codeblock' });
 
   function computeDecos(view: EditorView): DecorationSet {
     const doc = view.state.doc;
@@ -52,12 +58,28 @@ export function createLiveMarkdownPlugin() {
           } else if (node.name === 'ATXHeading3') {
             const lineStart = doc.lineAt(node.from).from;
             items.push({ from: lineStart, to: lineStart, deco: h3Deco, isLine: true });
+          } else if (node.name === 'ATXHeading4') {
+            const lineStart = doc.lineAt(node.from).from;
+            items.push({ from: lineStart, to: lineStart, deco: h4Deco, isLine: true });
+          } else if (node.name === 'ATXHeading5') {
+            const lineStart = doc.lineAt(node.from).from;
+            items.push({ from: lineStart, to: lineStart, deco: h5Deco, isLine: true });
+          } else if (node.name === 'ATXHeading6') {
+            const lineStart = doc.lineAt(node.from).from;
+            items.push({ from: lineStart, to: lineStart, deco: h6Deco, isLine: true });
           } else if (node.name === 'Blockquote') {
             const lineStart = doc.lineAt(node.from).from;
             items.push({ from: lineStart, to: lineStart, deco: quoteDeco, isLine: true });
           } else if (node.name === 'HorizontalRule') {
             const lineStart = doc.lineAt(node.from).from;
             items.push({ from: lineStart, to: lineStart, deco: hrDeco, isLine: true });
+          } else if (node.name === 'FencedCode') {
+            const startLine = doc.lineAt(node.from).number;
+            const endLine = doc.lineAt(nodeTo).number;
+            for (let l = startLine; l <= endLine; l++) {
+              const lineStart = doc.line(l).from;
+              items.push({ from: lineStart, to: lineStart, deco: codeBlockLineDeco, isLine: true });
+            }
           }
 
           // Header mark and Quote mark
@@ -70,6 +92,28 @@ export function createLiveMarkdownPlugin() {
               deco: isCursorOnLine ? tokenActiveDeco : tokenHiddenDeco,
               isLine: false,
             });
+          }
+
+          // List markers (- , * , 1. )
+          if (node.name === 'ListMark') {
+            items.push({
+              from: node.from,
+              to: nodeTo,
+              deco: listMarkDeco,
+              isLine: false,
+            });
+          }
+
+          // Links: [text](url)
+          if (node.name === 'Link' && nodeTo - node.from > 4) {
+            if (!isCursorInside) {
+              items.push({
+                from: node.from,
+                to: nodeTo,
+                deco: linkDeco,
+                isLine: false,
+              });
+            }
           }
 
           // Inline styling: hide delimiters and apply rich text

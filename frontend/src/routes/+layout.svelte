@@ -22,7 +22,7 @@
   import { invoke } from '@tauri-apps/api/core';
   import { listen } from '@tauri-apps/api/event';
   import { goto } from '$app/navigation';
-  import { openTab, getViewMode, setViewMode, triggerExport, type ViewMode } from '$lib/stores/docTabs.svelte';
+  import { openTab, getViewMode, setViewMode, triggerExport, getIsSavingDoc, type ViewMode } from '$lib/stores/docTabs.svelte';
   import { Button } from '@cecepazhar/caui';
   import { t } from '$lib/i18n/index.svelte';
   import LanguageSwitcher from '$lib/components/LanguageSwitcher.svelte';
@@ -49,6 +49,7 @@
   const ambient = getAmbientStore();
   const pro = getPro();
   const viewMode = $derived(getViewMode());
+  const isSavingDoc = $derived(getIsSavingDoc());
 
   const isEditorPage = $derived(
     !page.url.pathname.startsWith('/settings') &&
@@ -266,6 +267,14 @@
       <!-- Right: Live sync dot, Hana AI shortcut, Language, Theme & Frameless Window Controls -->
       <div class="flex items-center gap-1.5 text-neutral-500 dark:text-neutral-400 shrink-0 no-drag" data-tauri-drag-region>
         {#if isEditorPage}
+          <!-- Autosaving Indicator Badge beside PDF (No tab layout shift) -->
+          {#if isSavingDoc}
+            <div class="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/20 text-[10px] font-mono shrink-0 animate-pulse">
+              <span class="w-1.5 h-1.5 rounded-full bg-cyan-500 animate-ping"></span>
+              <span class="hidden sm:inline">{t('editor.saving')}</span>
+            </div>
+          {/if}
+
           <!-- PDF Print Exporter -->
           <Button
             variant="secondary"

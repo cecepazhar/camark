@@ -164,6 +164,16 @@ export function setViewMode(mode: ViewMode): void {
   persist();
 }
 
+let isSavingDoc = $state<boolean>(false);
+
+export function getIsSavingDoc(): boolean {
+  return isSavingDoc;
+}
+
+export function setIsSavingDoc(saving: boolean): void {
+  isSavingDoc = saving;
+}
+
 export type ExporterType = 'pdf' | 'html';
 export type ExporterHandler = (type: ExporterType) => void;
 

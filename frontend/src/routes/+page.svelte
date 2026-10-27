@@ -70,6 +70,7 @@
     getViewMode,
     setViewMode,
     registerExporterHandler,
+    setIsSavingDoc,
     type DocTab,
     type ViewMode,
   } from '$lib/stores/docTabs.svelte';
@@ -187,6 +188,9 @@ graph TD;
   // View mode: 'editor' | 'live' | 'split' | 'preview' (synchronized via docTabs store)
   const viewMode = $derived(getViewMode());
   let isSaving = $state<boolean>(false);
+  $effect(() => {
+    setIsSavingDoc(isSaving);
+  });
 
   // Tabs scroll & overflow container reference
   let tabsContainerEl = $state<HTMLDivElement | null>(null);
@@ -250,8 +254,9 @@ graph TD;
 
   $effect(() => {
     if (editorView) {
+      const shouldWrap = isZenMode || viewMode === 'live' || isMarkdownFile(currentFilePath);
       editorView.dispatch({
-        effects: lineWrappingCompartment.reconfigure(isZenMode ? EditorView.lineWrapping : []),
+        effects: lineWrappingCompartment.reconfigure(shouldWrap ? EditorView.lineWrapping : []),
       });
     }
   });
@@ -672,7 +677,7 @@ graph TD;
           lineNumbersCompartment.of(!isMarkdownFile(currentFilePath) && viewMode === 'editor' ? lineNumbers() : []),
           languageCompartment.of(markdown()),
           oneDark,
-          lineWrappingCompartment.of(isZenMode ? EditorView.lineWrapping : []),
+          lineWrappingCompartment.of(isZenMode || viewMode === 'live' || isMarkdownFile(currentFilePath) ? EditorView.lineWrapping : []),
           liveMarkdownCompartment.of(viewMode === 'live' ? createLiveMarkdownPlugin() : []),
           EditorView.updateListener.of((update) => {
             if (update.docChanged) {
@@ -1643,14 +1648,6 @@ graph TD;
         </svg>
       </button>
     </div>
-
-    {#if isSaving}
-      <div class="flex items-center gap-2 shrink-0 pr-1">
-        <span class="text-[10px] px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/20 shrink-0 font-mono animate-pulse">
-          {t('editor.saving')}
-        </span>
-      </div>
-    {/if}
   </header>
 
   <!-- Main Multi-Pane Body -->
@@ -1781,7 +1778,7 @@ graph TD;
 
     <!-- Editor Pane (CodeMirror 6 with Format Toolbar & Zen Mode) -->
     <main
-      class="flex-1 min-h-0 flex flex-col bg-neutral-50 dark:bg-[#0f141c] overflow-hidden relative {viewMode === 'split' ? 'border-r border-neutral-200 dark:border-neutral-800' : ''} {viewMode === 'preview' ? 'hidden' : 'flex'}"
+      class="flex-1 min-h-0 flex flex-col overflow-hidden relative {viewMode === 'live' ? 'bg-white dark:bg-[#0c1017] bg-[linear-gradient(to_right,#00000006_1px,transparent_1px),linear-gradient(to_bottom,#00000006_1px,transparent_1px)] dark:bg-[linear-gradient(to_right,#ffffff05_1px,transparent_1px),linear-gradient(to_bottom,#ffffff05_1px,transparent_1px)] bg-[size:56px_56px]' : 'bg-neutral-50 dark:bg-[#0f141c]'} {viewMode === 'split' ? 'border-r border-neutral-200 dark:border-neutral-800' : ''} {viewMode === 'preview' ? 'hidden' : 'flex'}"
     >
       <!-- Format Toolbar Above Editor -->
       <MarkdownFormatToolbar
@@ -2140,6 +2137,21 @@ graph TD;
   /* Live Smart WYSIWYG Mode Canvas: 100% Matches Preview Typography */
   :global(.cm-live-mode) {
     font-size: 0.95rem !important;
+    background: transparent !important;
+  }
+  :global(.cm-live-mode .cm-editor) {
+    background: transparent !important;
+    background-color: transparent !important;
+  }
+  :global(.cm-live-mode .cm-gutters) {
+    display: none !important;
+    width: 0 !important;
+    border: none !important;
+    background: transparent !important;
+  }
+  :global(.cm-live-mode .cm-activeLine) {
+    background: transparent !important;
+    background-color: transparent !important;
   }
   :global(.cm-live-mode .cm-scroller) {
     height: 100% !important;
@@ -2148,15 +2160,19 @@ graph TD;
     font-size: 0.95rem !important;
     line-height: 1.75 !important;
     overflow: auto !important;
+    background: transparent !important;
   }
   :global(.cm-live-mode .cm-content) {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
     font-size: 0.95rem !important;
     line-height: 1.75 !important;
-    padding: 2.5rem 2rem !important;
+    padding: 2.5rem 2.5rem 8rem 2.5rem !important;
+    max-width: 54rem !important;
+    margin: 0 auto !important;
+    background: transparent !important;
   }
   :global(html.dark .cm-live-mode .cm-content) {
-    color: #e4e4e7 !important;
+    color: #d4d4d8 !important;
   }
   :global(html:not(.dark) .cm-live-mode .cm-content) {
     color: #18181b !important;
@@ -2164,6 +2180,7 @@ graph TD;
   :global(.cm-live-mode .cm-line) {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
     line-height: 1.75 !important;
+    padding: 1px 0 !important;
   }
 
   /* Live Smart Markdown Tokens (Smooth inline hiding and reveal on line cursor) */
@@ -2178,9 +2195,10 @@ graph TD;
     user-select: none !important;
   }
   :global(.cm-live-token-active) {
-    opacity: 0.35 !important;
-    font-size: 0.9em !important;
-    font-family: ui-monospace, monospace !important;
+    opacity: 0.45 !important;
+    font-size: 0.85em !important;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important;
+    color: #06b6d4 !important;
   }
 
   /* Scalable Vector SVG Graphic Canvas Preview */
@@ -2192,7 +2210,7 @@ graph TD;
     display: block !important;
   }
 
-  /* Live Smart Headings (Identical to Preview H1, H2, H3) */
+  /* Live Smart Headings (Identical to Preview H1, H2, H3, H4) */
   :global(.cm-live-mode .cm-live-h1) {
     font-size: 1.85rem !important;
     font-weight: 700 !important;
@@ -2200,8 +2218,7 @@ graph TD;
     letter-spacing: -0.02em !important;
     border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
     padding-bottom: 0.5rem !important;
-    margin-top: 1.75rem !important;
-    margin-bottom: 0.75rem !important;
+    padding-top: 1.25rem !important;
   }
   :global(html.dark .cm-live-mode .cm-live-h1) {
     color: #fafafa !important;
@@ -2219,8 +2236,7 @@ graph TD;
     letter-spacing: -0.02em !important;
     border-bottom: 1px solid rgba(255, 255, 255, 0.05) !important;
     padding-bottom: 0.35rem !important;
-    margin-top: 1.5rem !important;
-    margin-bottom: 0.75rem !important;
+    padding-top: 1rem !important;
   }
   :global(html.dark .cm-live-mode .cm-live-h2) {
     color: #fafafa !important;
@@ -2236,14 +2252,20 @@ graph TD;
     font-weight: 700 !important;
     line-height: 1.3 !important;
     letter-spacing: -0.02em !important;
-    margin-top: 1.25rem !important;
-    margin-bottom: 0.5rem !important;
+    padding-top: 0.75rem !important;
   }
   :global(html.dark .cm-live-mode .cm-live-h3) {
     color: #fafafa !important;
   }
   :global(html:not(.dark) .cm-live-mode .cm-live-h3) {
     color: #09090b !important;
+  }
+
+  :global(.cm-live-mode .cm-live-h4) {
+    font-size: 1.05rem !important;
+    font-weight: 700 !important;
+    letter-spacing: -0.02em !important;
+    padding-top: 0.5rem !important;
   }
 
   /* Bold, Italic, Code, Blockquote: Identical to Preview */
@@ -2289,9 +2311,9 @@ graph TD;
 
   :global(.cm-live-mode .cm-live-quote) {
     border-left: 4px solid #06b6d4 !important;
-    margin: 1.25rem 0 !important;
-    padding: 0.6rem 1.25rem !important;
-    border-radius: 0 8px 8px 0 !important;
+    padding-left: 1rem !important;
+    border-radius: 0 6px 6px 0 !important;
+    font-style: italic !important;
   }
   :global(html.dark .cm-live-mode .cm-live-quote) {
     background: rgba(6, 182, 212, 0.06) !important;
@@ -2302,8 +2324,43 @@ graph TD;
     color: #52525b !important;
   }
 
+  :global(.cm-live-mode .cm-live-listmark) {
+    color: #06b6d4 !important;
+    font-weight: 700 !important;
+    margin-right: 0.25rem !important;
+  }
+
+  :global(.cm-live-mode .cm-live-link) {
+    color: #22d3ee !important;
+    text-decoration: underline !important;
+    text-underline-offset: 3px !important;
+    cursor: pointer !important;
+  }
+  :global(html:not(.dark) .cm-live-mode .cm-live-link) {
+    color: #0891b2 !important;
+  }
+
+  :global(.cm-live-mode .cm-live-codeblock) {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important;
+    font-size: 0.88em !important;
+    padding-left: 1rem !important;
+    padding-right: 1rem !important;
+  }
+  :global(html.dark .cm-live-mode .cm-live-codeblock) {
+    background: rgba(0, 0, 0, 0.35) !important;
+    color: #93c5fd !important;
+  }
+  :global(html:not(.dark) .cm-live-mode .cm-live-codeblock) {
+    background: #f1f5f9 !important;
+    color: #1e293b !important;
+  }
+
   :global(.cm-live-mode .cm-live-hr) {
-    border-top: 1px solid rgba(255, 255, 255, 0.08) !important;
-    margin: 2rem 0 !important;
+    border-top: 1px solid rgba(255, 255, 255, 0.12) !important;
+    padding-top: 0.75rem !important;
+    margin-top: 0.75rem !important;
+  }
+  :global(html:not(.dark) .cm-live-mode .cm-live-hr) {
+    border-top-color: rgba(0, 0, 0, 0.1) !important;
   }
 </style>
