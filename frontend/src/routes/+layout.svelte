@@ -77,14 +77,16 @@
 
   const currentSection = $derived(
     [...navItems, settingsItem].find((item) => {
-      if (item.href === '/') return page.url.pathname === '/';
-      return page.url.pathname.startsWith(item.href);
-    }) ?? navItems[1]
+      const p = page.url.pathname as string;
+      if (item.href === '/') return p === '/' || p.includes('index.html') || p === '';
+      return p.startsWith(item.href);
+    }) ?? navItems[0]
   );
 
   function isActive(href: string): boolean {
-    if (href === '/') return page.url.pathname === '/';
-    return page.url.pathname.startsWith(href);
+    const p = page.url.pathname as string;
+    if (href === '/') return p === '/' || p.includes('index.html') || p === '';
+    return p.startsWith(href);
   }
 
   const isTauri = typeof window !== 'undefined' && Boolean((window as any).__TAURI_INTERNALS__ || (window as any).__TAURI__);
@@ -263,7 +265,7 @@
 
       <!-- Right: Live sync dot, Hana AI shortcut, Language, Theme & Frameless Window Controls -->
       <div class="flex items-center gap-1.5 text-neutral-500 dark:text-neutral-400 shrink-0 no-drag" data-tauri-drag-region>
-        {#if page.url.pathname === '/'}
+        {#if isEditorPage}
           <!-- PDF Print Exporter -->
           <Button
             variant="secondary"
