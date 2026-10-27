@@ -417,7 +417,15 @@ export const id: Dictionary = {
     closeAssistant: 'Tutup Asisten AI',
     inputPlaceholder: 'Tanyakan sesuatu atau perbaiki format markdown...',
     send: 'Kirim',
-    askAi: 'Hana AI'
+    askAi: 'Hana AI',
+    connected: 'Terhubung',
+    replaceDoc: 'Ganti Semua',
+    appendToDoc: 'Tambahkan',
+    insertAtCursor: 'Sisipkan',
+    appliedToDoc: 'Diterapkan ke dokumen',
+    editorNotFound: 'Editor aktif tidak ditemukan',
+    autoAppliedBanner: 'Otomatis diterapkan ke dokumen',
+    autoAppliedToDoc: 'Perubahan otomatis diterapkan ke dokumen'
   },
   editor: {
     exportHtmlTitle: 'Ekspor Dokumen ke Standalone HTML',

@@ -173,17 +173,19 @@ pub async fn ai_preview_context(level: ai::PrivacyLevel) -> Result<ai::ContextPa
 #[tauri::command]
 pub async fn ai_chat(
     prompt: String,
+    doc_context: Option<caf_core::ai::DocContext>,
     privacy_level: Option<ai::PrivacyLevel>,
     consent_given: Option<bool>,
 ) -> Result<ai::AiChatResponse, CafError> {
     run_blocking(move || {
         let session = caf_core::session::get_current_session()
             .unwrap_or_else(|_| caf_core::session::Session::new("default", "member"));
-        ai::chat(
+        ai::chat_with_doc_context(
             &session,
             &prompt,
             privacy_level,
             consent_given.unwrap_or(false),
+            doc_context.as_ref(),
         )
     })
     .await

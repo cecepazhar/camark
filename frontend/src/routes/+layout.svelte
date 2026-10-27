@@ -22,7 +22,7 @@
   import { invoke } from '@tauri-apps/api/core';
   import { listen } from '@tauri-apps/api/event';
   import { goto } from '$app/navigation';
-  import { openTab } from '$lib/stores/docTabs.svelte';
+  import { openTab, getViewMode, setViewMode, triggerExport, type ViewMode } from '$lib/stores/docTabs.svelte';
   import { Button } from '@cecepazhar/caui';
   import { t } from '$lib/i18n/index.svelte';
   import LanguageSwitcher from '$lib/components/LanguageSwitcher.svelte';
@@ -48,6 +48,7 @@
   const palette = getPalette();
   const ambient = getAmbientStore();
   const pro = getPro();
+  const viewMode = $derived(getViewMode());
 
   const cardBorderClass = $derived.by(() => {
     if (!ambient.config.enabled || !ambient.config.cardGlowEnabled || !pro.isPro) {
@@ -257,11 +258,73 @@
 
       <!-- Right: Live sync dot, Hana AI shortcut, Language, Theme & Frameless Window Controls -->
       <div class="flex items-center gap-1.5 text-neutral-500 dark:text-neutral-400 shrink-0 no-drag" data-tauri-drag-region>
-        <!-- Live Status Pulse Indicator -->
-        <div class="hidden sm:flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20" title="Brankas Terenkripsi (SQLCipher) & Local-First">
-          <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_6px_rgba(16,185,129,0.8)]"></span>
-          <span class="text-[11px] font-mono hidden md:inline">SQLCipher Vault</span>
-        </div>
+        {#if page.url.pathname === '/'}
+          <!-- PDF Print Exporter -->
+          <Button
+            variant="secondary"
+            size="sm"
+            onclick={() => triggerExport('pdf')}
+            class="flex items-center gap-1.5 !h-7 !px-2 text-xs"
+            title={t('editor.printPdf')}
+          >
+            <svg class="w-3.5 h-3.5 text-rose-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M6 9V2h12v7"></path>
+              <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+              <path d="M6 14h12v8H6z"></path>
+            </svg>
+            <span class="hidden sm:inline">PDF</span>
+          </Button>
+
+          <!-- HTML Exporter -->
+          <Button
+            variant="secondary"
+            size="sm"
+            onclick={() => triggerExport('html')}
+            class="flex items-center gap-1.5 !h-7 !px-2 text-xs"
+            title={t('editor.exportHtml')}
+          >
+            <svg class="w-3.5 h-3.5 text-cyan-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            </svg>
+            <span class="hidden sm:inline">HTML</span>
+          </Button>
+
+          <!-- Mode Switcher: Editor, Split, Preview, Live -->
+          <div class="flex items-center p-0.5 bg-neutral-200/70 dark:bg-neutral-900 rounded-lg border border-neutral-300 dark:border-neutral-800 text-xs select-none">
+            <button
+              type="button"
+              onclick={() => setViewMode('editor')}
+              class="px-2 py-1 rounded-md transition-all cursor-pointer {viewMode === 'editor' ? 'bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white font-medium shadow-2xs' : 'text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'}"
+            >
+              {t('editor.editorMode')}
+            </button>
+            <button
+              type="button"
+              onclick={() => setViewMode('split')}
+              class="px-2 py-1 rounded-md transition-all cursor-pointer {viewMode === 'split' ? 'bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white font-medium shadow-2xs' : 'text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'}"
+            >
+              {t('editor.splitMode')}
+            </button>
+            <button
+              type="button"
+              onclick={() => setViewMode('preview')}
+              class="px-2 py-1 rounded-md transition-all cursor-pointer {viewMode === 'preview' ? 'bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white font-medium shadow-2xs' : 'text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'}"
+            >
+              {t('editor.previewMode')}
+            </button>
+            <button
+              type="button"
+              onclick={() => setViewMode('live')}
+              class="px-2 py-1 rounded-md transition-all flex items-center gap-1 cursor-pointer {viewMode === 'live' ? 'bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 font-semibold border border-cyan-500/30 shadow-2xs' : 'text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'}"
+              title="Live Smart WYSIWYG Mode"
+            >
+              <span class="text-xs">⚡</span>
+              <span>{t('editor.liveMode')}</span>
+            </button>
+          </div>
+
+          <div class="h-3.5 w-px bg-neutral-300 dark:bg-neutral-800 mx-0.5"></div>
+        {/if}
 
         <!-- Pro Edition Status Pill -->
         {#if pro.isPro}

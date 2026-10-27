@@ -66,6 +66,14 @@ export interface AiChatResponse {
   tokens_used?: number | null;
 }
 
+export interface DocContext {
+  active_doc_path?: string | null;
+  active_doc_title?: string | null;
+  active_doc_content: string;
+  selected_text: string;
+  is_vault_doc: boolean;
+}
+
 export interface ScrubbedCrashReport {
   id: string;
   timestamp: number;
@@ -165,11 +173,13 @@ export async function cmdAiPreviewContext(args: { level: PrivacyLevel }): Promis
 
 export async function cmdAiChat(args: {
   prompt: string;
+  docContext?: DocContext | null;
   privacyLevel?: PrivacyLevel | null;
   consentGiven?: boolean | null;
 }): Promise<AiChatResponse> {
   return await invoke<AiChatResponse>('ai_chat', {
     prompt: args.prompt,
+    doc_context: args.docContext ?? null,
     privacy_level: args.privacyLevel,
     consent_given: args.consentGiven,
   });

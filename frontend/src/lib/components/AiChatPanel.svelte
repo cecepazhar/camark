@@ -1,14 +1,33 @@
 <script lang="ts">
   import { t } from '$lib/i18n/index.svelte';
-  import { getAiSettings, chatWithAi, type AiSettings } from '$lib/api/ai';
+  import { chatWithAi } from '$lib/api/ai';
   import { showToast } from '$lib/stores/uiNotifications.svelte';
+  import {
+    getDocumentContextSnapshot,
+    getDocumentContextState,
+    applyAiTextToEditor,
+    undoEditor,
+    type EditorApplyMode,
+  } from '$lib/stores/documentContext.svelte';
 
   let { isOpen, onClose }: { isOpen: boolean; onClose: () => void } = $props();
 
   let inputPrompt = $state('');
   let isMinimized = $state(false);
   let isFullHeight = $state(false);
-  let messages = $state<{ role: 'user' | 'assistant'; content: string }[]>([]);
+  let autoApply = $state(
+    typeof localStorage !== 'undefined'
+      ? localStorage.getItem('camark_ai_auto_apply') !== 'false'
+      : true
+  );
+
+  let messages = $state<{
+    role: 'user' | 'assistant';
+    content: string;
+    autoApplied?: boolean;
+  }[]>([]);
+
+  const docCtx = getDocumentContextState();
 
   $effect(() => {
     if (messages.length === 0) {
@@ -19,6 +38,35 @@
   });
   let isSending = $state(false);
 
+  function toggleAutoApply() {
+    autoApply = !autoApply;
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('camark_ai_auto_apply', String(autoApply));
+    }
+  }
+
+  function hasMarkdownBlock(content: string): boolean {
+    return /```(?:markdown|md|ya?ml)?\s*\n[\s\S]*?\n```/.test(content);
+  }
+
+  function extractApplyText(content: string): string {
+    const match = content.match(/```(?:markdown|md|ya?ml)?\s*\n([\s\S]*?)\n```/);
+    if (match && match[1] && match[1].trim().length > 0) {
+      return match[1];
+    }
+    return content;
+  }
+
+  function handleApply(text: string, mode: EditorApplyMode) {
+    const cleanText = extractApplyText(text);
+    const success = applyAiTextToEditor(cleanText, mode);
+    if (success) {
+      showToast(t('ai.appliedToDoc'), 'success');
+    } else {
+      showToast(t('ai.editorNotFound'), 'info');
+    }
+  }
+
   async function handleSend() {
     if (!inputPrompt.trim() || isSending) return;
     const prompt = inputPrompt.trim();
@@ -27,8 +75,25 @@
     isSending = true;
 
     try {
-      const response = await chatWithAi(prompt);
-      messages.push({ role: 'assistant', content: response.message });
+      const docSnapshot = getDocumentContextSnapshot();
+      const response = await chatWithAi(prompt, docSnapshot);
+      const hasCode = hasMarkdownBlock(response.message);
+      let didAutoApply = false;
+
+      if (autoApply && hasCode) {
+        const cleanText = extractApplyText(response.message);
+        if (cleanText.trim().length > 0) {
+          applyAiTextToEditor(cleanText, 'replace');
+          didAutoApply = true;
+          showToast(t('ai.autoAppliedToDoc'), 'success');
+        }
+      }
+
+      messages.push({
+        role: 'assistant',
+        content: response.message,
+        autoApplied: didAutoApply,
+      });
     } catch (e: any) {
       const errStr = typeof e === 'string' ? e : (e?.message || e?.code || t('ai.checkSettings'));
       showToast(errStr, 'error');
@@ -70,7 +135,7 @@
     <div
       class="fixed z-50 flex flex-col bg-neutral-900/95 backdrop-blur-xl border border-neutral-700/80 rounded-2xl shadow-2xl shadow-black/80 overflow-hidden transition-all duration-200 {isFullHeight
         ? 'top-[calc(3.5rem+env(safe-area-inset-top,0px))] bottom-3 right-3 w-[420px]'
-        : 'bottom-4 right-4 w-[390px] h-[520px] max-h-[calc(100vh-4.5rem-env(safe-area-inset-top,0px))]'}"
+        : 'bottom-4 right-4 w-[410px] h-[550px] max-h-[calc(100vh-4.5rem-env(safe-area-inset-top,0px))]'}"
     >
       <!-- Panel Header -->
       <div class="px-4 py-3 border-b border-neutral-800/80 bg-neutral-950/60 flex items-center justify-between select-none">
@@ -128,16 +193,101 @@
         </div>
       </div>
 
+      <!-- Active Document Context Sub-bar with Auto-Apply toggle -->
+      <div class="px-3.5 py-1.5 bg-neutral-950/40 border-b border-neutral-800/60 flex items-center justify-between text-[11px] font-mono text-neutral-400 select-none">
+        <div class="flex items-center gap-1.5 truncate min-w-0">
+          <span class="text-xs shrink-0">{docCtx.is_vault_doc ? '🔒' : '📄'}</span>
+          <span class="truncate max-w-[170px] text-neutral-300 font-medium" title={docCtx.active_doc_path || 'Untitled'}>
+            {docCtx.active_doc_title || 'Untitled'}
+          </span>
+          {#if docCtx.selected_text.trim().length > 0}
+            <span class="px-1.5 py-0.2 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 text-[9px] shrink-0 font-sans">
+              Selection
+            </span>
+          {/if}
+        </div>
+        <div class="flex items-center gap-2 shrink-0 ml-2">
+          <button
+            type="button"
+            onclick={toggleAutoApply}
+            class="px-2 py-0.5 rounded text-[10px] font-sans flex items-center gap-1 transition-all cursor-pointer {autoApply ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 font-semibold shadow-xs' : 'bg-neutral-800 text-neutral-400 border border-neutral-700 hover:text-white'}"
+            title={autoApply ? 'Pengetikan otomatis aktif: hasil AI langsung diterapkan ke dokumen' : 'Klik untuk mengaktifkan pengetikan otomatis langsung'}
+          >
+            <span>⚡</span>
+            <span>Auto-Type: {autoApply ? 'ON' : 'OFF'}</span>
+          </button>
+        </div>
+      </div>
+
       <!-- Messages Stream -->
       <div class="flex-1 overflow-y-auto p-4 space-y-3 text-xs leading-relaxed">
-        {#each messages as msg}
+        {#each messages as msg, idx}
           <div class="flex flex-col {msg.role === 'user' ? 'items-end' : 'items-start'}">
             <div
-              class="max-w-[88%] rounded-2xl px-3.5 py-2.5 {msg.role === 'user'
+              class="max-w-[94%] rounded-2xl px-3.5 py-2.5 {msg.role === 'user'
                 ? 'bg-indigo-600 text-white rounded-br-none shadow-md shadow-indigo-600/20'
                 : 'bg-neutral-800/90 text-neutral-200 rounded-bl-none border border-neutral-700/60'}"
             >
-              {msg.content}
+              <div class="whitespace-pre-wrap">{msg.content}</div>
+
+              <!-- Action buttons to apply AI suggestions directly to active document -->
+              {#if msg.role === 'assistant' && idx > 0}
+                <div class="mt-2.5 pt-2 border-t border-neutral-700/50 flex flex-col gap-1.5">
+                  {#if msg.autoApplied}
+                    <div class="flex items-center justify-between text-[11px] text-emerald-400 bg-emerald-500/10 px-2 py-1 rounded-md border border-emerald-500/20">
+                      <span class="flex items-center gap-1 font-medium">
+                        <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                        </svg>
+                        <span>{t('ai.autoAppliedBanner')}</span>
+                      </span>
+                      <button
+                        type="button"
+                        onclick={() => {
+                          const ok = undoEditor();
+                          if (ok) {
+                            msg.autoApplied = false;
+                            showToast('Perubahan dibatalkan', 'info');
+                          }
+                        }}
+                        class="text-[10px] text-neutral-300 hover:text-white underline font-mono cursor-pointer"
+                      >
+                        Undo
+                      </button>
+                    </div>
+                  {/if}
+
+                  <div class="flex items-center gap-1.5 flex-wrap">
+                    <button
+                      type="button"
+                      onclick={() => handleApply(msg.content, 'replace')}
+                      class="px-2.5 py-1 rounded-md bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-[10px] font-sans flex items-center gap-1 transition-colors cursor-pointer shadow-xs"
+                      title={t('ai.replaceDoc')}
+                    >
+                      <span>✍</span>
+                      <span>{t('ai.replaceDoc')}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onclick={() => handleApply(msg.content, 'append')}
+                      class="px-2 py-0.5 rounded bg-neutral-700/70 hover:bg-neutral-600 text-neutral-200 text-[10px] font-sans flex items-center gap-1 transition-colors cursor-pointer"
+                      title={t('ai.appendToDoc')}
+                    >
+                      <span>➕</span>
+                      <span>{t('ai.appendToDoc')}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onclick={() => handleApply(msg.content, 'insert')}
+                      class="px-2 py-0.5 rounded bg-neutral-700/70 hover:bg-neutral-600 text-neutral-200 text-[10px] font-sans flex items-center gap-1 transition-colors cursor-pointer"
+                      title={t('ai.insertAtCursor')}
+                    >
+                      <span>📍</span>
+                      <span>{t('ai.insertAtCursor')}</span>
+                    </button>
+                  </div>
+                </div>
+              {/if}
             </div>
           </div>
         {/each}

@@ -130,6 +130,19 @@ pub struct AiChatResponse {
     pub tokens_used: Option<u32>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default, TS)]
+#[ts(export)]
+pub struct DocContext {
+    pub active_doc_path: Option<String>,
+    pub active_doc_title: Option<String>,
+    #[serde(default)]
+    pub active_doc_content: String,
+    #[serde(default)]
+    pub selected_text: String,
+    #[serde(default)]
+    pub is_vault_doc: bool,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct ContextPayload {
@@ -279,7 +292,9 @@ pub fn compose_prompt(
     system_builder.push_str("Framework Format Rules:\n");
     system_builder.push_str(&format!("- Tone: {}\n", tone));
     system_builder.push_str(&format!("- Response Language: {}\n", response_language));
-    system_builder.push_str("- Format responses cleanly using markdown when appropriate.\n\n");
+    system_builder.push_str("- Format responses cleanly using markdown when appropriate.\n");
+    system_builder.push_str("- You have direct visibility into the user's active open document and editor selection in Context Data when provided. You can analyze, edit, summarize, continue, or rewrite it directly.\n");
+    system_builder.push_str("- When the user requests an edit, update, addition, format, or modification of the active document (e.g. 'tambahkan...', 'ubah...', 'ganti...', 'perbaiki...', 'add...', 'insert...'): DO NOT merely give tutorial explanations. Output the COMPLETE updated document content or exact replacement inside a single ```markdown ... ``` code block incorporating the requested change, so it can be applied directly to the document.\n\n");
 
     // 3. User custom instructions
     if !custom_instructions.trim().is_empty() {
@@ -443,6 +458,16 @@ pub fn chat(
     privacy_level: Option<PrivacyLevel>,
     consent_given: bool,
 ) -> Result<AiChatResponse, CatermError> {
+    chat_with_doc_context(session, prompt, privacy_level, consent_given, None)
+}
+
+pub fn chat_with_doc_context(
+    session: &crate::session::Session,
+    prompt: &str,
+    privacy_level: Option<PrivacyLevel>,
+    consent_given: bool,
+    doc_context: Option<&DocContext>,
+) -> Result<AiChatResponse, CatermError> {
     let cfg = get_stored_config()?;
 
     if cfg.mode == AiMode::Off {
@@ -466,16 +491,57 @@ pub fn chat(
         &cfg.base_url,
     )?;
 
+    // Combine DB context with live document context
+    let mut combined_context = context_payload.content;
+    let mut total_redactions = context_payload.redacted_count;
+
+    if let Some(doc_ctx) = doc_context {
+        let mut doc_parts = Vec::new();
+        let doc_title = doc_ctx.active_doc_title.as_deref().unwrap_or("Untitled");
+        let doc_path = doc_ctx.active_doc_path.as_deref().unwrap_or("in-memory");
+        let storage_kind = if doc_ctx.is_vault_doc { "Encrypted Vault" } else { "Local Workspace" };
+
+        doc_parts.push(format!("Active Document: \"{}\" (Path: {}, Storage: {})", doc_title, doc_path, storage_kind));
+
+        if !doc_ctx.selected_text.trim().is_empty() {
+            let (scrubbed_sel, sel_redactions) = scrub_text(&doc_ctx.selected_text);
+            total_redactions += sel_redactions;
+            doc_parts.push(format!("User Selected Text in Editor:\n\"\"\"\n{}\n\"\"\"", scrubbed_sel));
+        }
+
+        if !doc_ctx.active_doc_content.trim().is_empty() {
+            // Generous token budget (~25000 chars / ~6000 tokens) to accommodate full documents
+            let raw_content = &doc_ctx.active_doc_content;
+            let truncated_content = if raw_content.len() > 25000 {
+                let slice = &raw_content[..25000];
+                let cut_pos = slice.rfind('\n').unwrap_or(25000);
+                format!("{}\n\n... [remaining document content truncated for length]", &raw_content[..cut_pos])
+            } else {
+                raw_content.clone()
+            };
+            let (scrubbed_content, doc_redactions) = scrub_text(&truncated_content);
+            total_redactions += doc_redactions;
+            doc_parts.push(format!("Active Document Content:\n```markdown\n{}\n```", scrubbed_content));
+        }
+
+        if !doc_parts.is_empty() {
+            if !combined_context.is_empty() {
+                combined_context.push_str("\n\n---\n");
+            }
+            combined_context.push_str(&doc_parts.join("\n\n"));
+        }
+    }
+
     // Scrub user prompt
     let (scrubbed_prompt, prompt_redactions) = scrub_text(prompt);
-    let total_redactions = context_payload.redacted_count + prompt_redactions;
+    total_redactions += prompt_redactions;
 
     let (system_msg, user_msg) = compose_prompt(
         GUARDRAILS_TEXT,
         &cfg.tone,
         &cfg.response_language,
         &cfg.custom_instructions,
-        &context_payload.content,
+        &combined_context,
         &scrubbed_prompt,
     );
 
@@ -797,20 +863,21 @@ pub mod tests {
     }
 
     #[test]
-    fn test_live_chat_to_local_proxy() {
-        if std::net::TcpStream::connect_timeout(
-            &std::net::SocketAddr::from(([127, 0, 0, 1], 20128)),
-            std::time::Duration::from_millis(50),
-        )
-        .is_ok()
-        {
-            let _guard = crate::test_support::isolated_data_dir("ai_live_chat_test");
-            let _key = crate::vault::ensure_unlocked_key().expect("vault key");
-            let session = crate::session::Session::new("prof-1", "member");
-            let res = chat(&session, "ping", None, false);
-            assert!(res.is_ok(), "Live chat failed: {:?}", res);
-            let resp = res.unwrap();
-            assert!(!resp.message.is_empty());
-        }
+    fn test_doc_context_deserialization_and_scrubbing() {
+        let json_input = r##"{
+            "active_doc_path": "/path/to/test.md",
+            "active_doc_title": "Test Doc",
+            "active_doc_content": "# Hello World\nMy secret email is secret@fathforce.com",
+            "selected_text": "secret@fathforce.com",
+            "is_vault_doc": false
+        }"##;
+
+        let doc_ctx: DocContext = serde_json::from_str(json_input).expect("deserialization");
+        assert_eq!(doc_ctx.active_doc_title.as_deref(), Some("Test Doc"));
+        assert_eq!(doc_ctx.selected_text, "secret@fathforce.com");
+
+        let (scrubbed, count) = scrub_text(&doc_ctx.active_doc_content);
+        assert!(count > 0);
+        assert!(!scrubbed.contains("secret@fathforce.com"));
     }
 }

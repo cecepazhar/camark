@@ -419,7 +419,15 @@ export const en: Dictionary = {
     closeAssistant: 'Close AI Assistant',
     inputPlaceholder: 'Ask something or refine markdown format...',
     send: 'Send',
-    askAi: 'Hana AI'
+    askAi: 'Hana AI',
+    connected: 'Connected',
+    replaceDoc: 'Replace All',
+    appendToDoc: 'Append',
+    insertAtCursor: 'Insert',
+    appliedToDoc: 'Applied to document',
+    editorNotFound: 'Active editor not found',
+    autoAppliedBanner: 'Auto-applied to document',
+    autoAppliedToDoc: 'Changes automatically applied to document'
   },
   editor: {
     exportHtmlTitle: 'Export Document to Standalone HTML',

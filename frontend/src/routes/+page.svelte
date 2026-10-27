@@ -16,6 +16,7 @@
     history,
     defaultKeymap,
     historyKeymap,
+    undo,
   } from '@codemirror/commands';
   import {
     bracketMatching,
@@ -68,9 +69,16 @@
     restoreTabs,
     getViewMode,
     setViewMode,
+    registerExporterHandler,
     type DocTab,
     type ViewMode,
   } from '$lib/stores/docTabs.svelte';
+  import {
+    updateDocumentContext,
+    registerEditorApplyHandler,
+    registerEditorUndoHandler,
+    type EditorApplyMode,
+  } from '$lib/stores/documentContext.svelte';
   import { createLiveMarkdownPlugin } from '$lib/utils/liveMarkdown';
 
   import FileTreeNode from '$lib/components/FileTreeNode.svelte';
@@ -176,8 +184,39 @@ graph TD;
   const pro = getPro();
 
   // View mode: 'editor' | 'live' | 'split' | 'preview' (synchronized via docTabs store)
-  let viewMode = $state<ViewMode>(getViewMode());
+  const viewMode = $derived(getViewMode());
   let isSaving = $state<boolean>(false);
+
+  // Tabs scroll & overflow container reference
+  let tabsContainerEl = $state<HTMLDivElement | null>(null);
+
+  function scrollTabsLeft() {
+    if (tabsContainerEl) {
+      tabsContainerEl.scrollBy({ left: -160, behavior: 'smooth' });
+    }
+  }
+
+  function scrollTabsRight() {
+    if (tabsContainerEl) {
+      tabsContainerEl.scrollBy({ left: 160, behavior: 'smooth' });
+    }
+  }
+
+  function handleTabsWheel(e: WheelEvent) {
+    if (tabsContainerEl && e.deltaY) {
+      e.preventDefault();
+      tabsContainerEl.scrollLeft += e.deltaY;
+    }
+  }
+
+  $effect(() => {
+    if (activeTabId && tabsContainerEl) {
+      const activeEl = tabsContainerEl.querySelector(`[data-tab-id="${CSS.escape(activeTabId)}"]`);
+      if (activeEl) {
+        activeEl.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+      }
+    }
+  });
 
   // Zen & Focus Mode
   let isZenMode = $state<boolean>(false);
@@ -484,12 +523,12 @@ graph TD;
     }
     isZenMode = !isZenMode;
     if (isZenMode) {
-      viewMode = 'editor';
+      setViewMode('editor');
       showFileTree = false;
       showToast(t('editor.zenModeActive'), 'info');
     } else {
       showFileTree = true;
-      viewMode = 'preview';
+      setViewMode('preview');
     }
   }
 
@@ -527,6 +566,52 @@ graph TD;
   }
 
   onMount(() => {
+    const unregisterApply = registerEditorApplyHandler((text: string, mode: EditorApplyMode) => {
+      if (!editorView) return;
+      const doc = editorView.state.doc;
+      if (mode === 'append') {
+        const insertPos = doc.length;
+        const separator = doc.length > 0 && !doc.toString().endsWith('\n') ? '\n\n' : '';
+        editorView.dispatch({
+          changes: { from: insertPos, insert: separator + text },
+          selection: { anchor: insertPos + separator.length + text.length },
+          scrollIntoView: true,
+        });
+      } else if (mode === 'insert') {
+        const sel = editorView.state.selection.main;
+        editorView.dispatch({
+          changes: { from: sel.from, to: sel.to, insert: text },
+          selection: { anchor: sel.from + text.length },
+          scrollIntoView: true,
+        });
+      } else {
+        // replace
+        editorView.dispatch({
+          changes: { from: 0, to: doc.length, insert: text },
+          selection: { anchor: text.length },
+          scrollIntoView: true,
+        });
+      }
+      editorView.focus();
+    });
+
+    const unregisterUndo = registerEditorUndoHandler(() => {
+      if (editorView) {
+        const undone = undo(editorView);
+        editorView.focus();
+        return undone;
+      }
+      return false;
+    });
+
+    const unregisterExporter = registerExporterHandler((type) => {
+      if (type === 'pdf') {
+        exportPdf();
+      } else if (type === 'html') {
+        exportHtml();
+      }
+    });
+
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && (e.key === 'b' || e.key === 'B')) {
         e.preventDefault();
@@ -547,7 +632,6 @@ graph TD;
 
     // Restore saved tabs from local session storage (run first, before editor init)
     restoreTabs();
-    viewMode = getViewMode();
     const restored = getActiveTab();
 
     // Initialize CodeMirror 6 with oneDark theme and update listeners
@@ -583,6 +667,7 @@ graph TD;
               renderMarkdown(rawMarkdown);
               if (activeTabId) setDirty(activeTabId, true);
               autoSave();
+              updateDocumentContext({ active_doc_content: rawMarkdown });
             }
             if (update.selectionSet) {
               const sel = update.state.selection.main;
@@ -593,6 +678,7 @@ graph TD;
                 selectedText = '';
                 selectionRange = null;
               }
+              updateDocumentContext({ selected_text: selectedText });
 
               // Typewriter scrolling in Zen Mode (center current line)
               if (isZenMode) {
@@ -659,8 +745,19 @@ graph TD;
       loadDirectory(workspacePath);
     }
 
+    updateDocumentContext({
+      active_doc_path: currentFilePath,
+      active_doc_title: currentDocTitle,
+      active_doc_content: rawMarkdown,
+      selected_text: '',
+      is_vault_doc: isVaultMode,
+    });
+
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
+      unregisterApply();
+      unregisterUndo();
+      unregisterExporter();
     };
   });
 
@@ -900,6 +997,13 @@ graph TD;
         editorView.dispatch({ effects: EditorView.scrollIntoView(0, { y: 'start' }) });
       }
       renderMarkdown(content);
+      updateDocumentContext({
+        active_doc_path: tab.path,
+        active_doc_title: tab.title,
+        active_doc_content: content,
+        selected_text: '',
+        is_vault_doc: tab.isVault,
+      });
     } else {
       try {
         const content = await invoke<string>('workspace_read_file', { filePath: tab.path });
@@ -920,6 +1024,13 @@ graph TD;
           editorView.dispatch({ effects: EditorView.scrollIntoView(0, { y: 'start' }) });
         }
         renderMarkdown(content);
+        updateDocumentContext({
+          active_doc_path: tab.path,
+          active_doc_title: tab.title,
+          active_doc_content: content,
+          selected_text: '',
+          is_vault_doc: false,
+        });
       } catch (e) {
         console.error('Failed reading tab file:', e);
       }
@@ -1036,6 +1147,13 @@ graph TD;
         });
       }
       renderedHtml = '';
+      updateDocumentContext({
+        active_doc_path: null,
+        active_doc_title: t('editor.untitledDocument'),
+        active_doc_content: '',
+        selected_text: '',
+        is_vault_doc: false,
+      });
     }
   }
 
@@ -1169,6 +1287,13 @@ graph TD;
       });
     }
     renderMarkdown(rawMarkdown);
+    updateDocumentContext({
+      active_doc_path: tabId,
+      active_doc_title: title,
+      active_doc_content: rawMarkdown,
+      selected_text: '',
+      is_vault_doc: true,
+    });
   }
 
   async function createNewFile() {
@@ -1385,17 +1510,35 @@ graph TD;
       <div class="h-4 w-px bg-neutral-300 dark:bg-neutral-800 mx-0.5"></div>
     </div>
 
+    <!-- Scroll Left Button -->
+    <button
+      type="button"
+      onclick={scrollTabsLeft}
+      class="h-7 w-5 rounded flex items-center justify-center text-neutral-400 hover:text-neutral-700 dark:hover:text-white hover:bg-neutral-200/60 dark:hover:bg-neutral-800/60 transition-colors shrink-0 select-none cursor-pointer"
+      title="Scroll tabs left"
+      aria-label="Scroll tabs left"
+    >
+      <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+      </svg>
+    </button>
+
     <!-- Center/Fill: Document Tabs Strip -->
-    <div class="flex-1 min-w-0 flex items-center gap-1 overflow-x-auto scrollbar-none h-full pt-1">
+    <div
+      bind:this={tabsContainerEl}
+      onwheel={handleTabsWheel}
+      class="flex-1 min-w-0 flex items-center gap-1 overflow-x-auto scrollbar-none h-full pt-1 scroll-smooth"
+    >
       {#each tabs as tab (tab.id)}
         {@const isActive = tab.id === activeTabId}
         <div
           role="button"
           tabindex="0"
+          data-tab-id={tab.id}
           onclick={() => handleSelectTab(tab.id)}
           oncontextmenu={(e) => handleTabContextMenu(e, tab)}
           onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleSelectTab(tab.id); }}
-          class="group relative h-8 px-3 rounded-t-md flex items-center gap-2 text-xs font-mono transition-all cursor-pointer border-t border-x shrink-0 {isActive ? 'bg-white dark:bg-[#1a1a1a] text-cyan-600 dark:text-cyan-400 border-neutral-300 dark:border-neutral-700/80 shadow-2xs font-semibold' : 'bg-transparent border-transparent text-neutral-500 hover:text-neutral-800 dark:text-neutral-400 dark:hover:text-neutral-200 hover:bg-neutral-200/50 dark:hover:bg-neutral-800/40'}"
+          class="group relative h-8 px-2.5 rounded-t-md flex items-center gap-1.5 text-xs font-mono transition-all cursor-pointer border-t border-x flex-shrink min-w-[70px] max-w-[140px] sm:max-w-[190px] {isActive ? 'bg-white dark:bg-[#1a1a1a] text-cyan-600 dark:text-cyan-400 border-neutral-300 dark:border-neutral-700/80 shadow-2xs font-semibold' : 'bg-transparent border-transparent text-neutral-500 hover:text-neutral-800 dark:text-neutral-400 dark:hover:text-neutral-200 hover:bg-neutral-200/50 dark:hover:bg-neutral-800/40'}"
           title={tab.path}
         >
           {#if isActive}
@@ -1424,7 +1567,7 @@ graph TD;
             {/if}
           </span>
 
-          <span class="truncate max-w-[120px] sm:max-w-[180px]">{tab.title}</span>
+          <span class="truncate flex-1 min-w-0">{tab.title}</span>
 
           {#if tab.isDirty}
             <span class="w-1.5 h-1.5 rounded-full bg-cyan-500 shrink-0" title={t('editor.unsavedChanges')}></span>
@@ -1448,11 +1591,26 @@ graph TD;
           {/if}
         </div>
       {/each}
+    </div>
+
+    <!-- Scroll Right Button & New Tab Button -->
+    <div class="flex items-center gap-0.5 shrink-0">
+      <button
+        type="button"
+        onclick={scrollTabsRight}
+        class="h-7 w-5 rounded flex items-center justify-center text-neutral-400 hover:text-neutral-700 dark:hover:text-white hover:bg-neutral-200/60 dark:hover:bg-neutral-800/60 transition-colors select-none cursor-pointer"
+        title="Scroll tabs right"
+        aria-label="Scroll tabs right"
+      >
+        <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+        </svg>
+      </button>
 
       <button
         type="button"
         onclick={handleNewTab}
-        class="h-7 w-7 rounded-md flex items-center justify-center text-neutral-400 hover:text-neutral-700 dark:hover:text-white hover:bg-neutral-200/60 dark:hover:bg-neutral-800/60 transition-colors shrink-0"
+        class="h-7 w-7 rounded-md flex items-center justify-center text-neutral-400 hover:text-neutral-700 dark:hover:text-white hover:bg-neutral-200/60 dark:hover:bg-neutral-800/60 transition-colors shrink-0 cursor-pointer"
         title={t('editor.openNewDocShortcut')}
         aria-label={t('editor.newDocument')}
       >
@@ -1462,74 +1620,13 @@ graph TD;
       </button>
     </div>
 
-    <!-- Right: Exporters & Mode Switcher -->
-    <div class="flex items-center gap-2 shrink-0">
-      {#if isSaving}
+    {#if isSaving}
+      <div class="flex items-center gap-2 shrink-0 pr-1">
         <span class="text-[10px] px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/20 shrink-0 font-mono animate-pulse">
           {t('editor.saving')}
         </span>
-      {/if}
-
-      <!-- PDF Print Exporter -->
-      <Button
-        variant="secondary"
-        size="sm"
-        onclick={exportPdf}
-        class="flex items-center gap-1.5"
-        title={t('editor.printPdf')}
-      >
-        <svg class="w-3.5 h-3.5 text-rose-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M6 9V2h12v7"></path>
-          <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
-          <path d="M6 14h12v8H6z"></path>
-        </svg>
-        <span class="hidden sm:inline">PDF</span>
-      </Button>
-
-      <!-- HTML Exporter -->
-      <Button
-        variant="secondary"
-        size="sm"
-        onclick={exportHtml}
-        class="flex items-center gap-1.5"
-        title={t('editor.exportHtml')}
-      >
-        <svg class="w-3.5 h-3.5 text-cyan-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-        </svg>
-        <span class="hidden sm:inline">HTML</span>
-      </Button>
-
-      <!-- Editor / Live Smart / Split / Preview View Switcher -->
-      <div class="flex items-center p-0.5 bg-neutral-200/70 dark:bg-neutral-900 rounded-lg border border-neutral-300 dark:border-neutral-800 text-xs">
-        <button
-          onclick={() => { viewMode = 'editor'; setViewMode('editor'); }}
-          class="px-2.5 py-1 rounded-md transition-all {viewMode === 'editor' ? 'bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white font-medium shadow-2xs' : 'text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'}"
-        >
-          {t('editor.editorMode')}
-        </button>
-        <button
-          onclick={() => { viewMode = 'live'; setViewMode('live'); }}
-          class="px-2.5 py-1 rounded-md transition-all flex items-center gap-1 {viewMode === 'live' ? 'bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 font-semibold border border-cyan-500/30 shadow-2xs' : 'text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'}"
-          title="Live Smart WYSIWYG Mode"
-        >
-          <span class="text-xs">⚡</span>
-          <span>{t('editor.liveMode')}</span>
-        </button>
-        <button
-          onclick={() => { viewMode = 'split'; setViewMode('split'); }}
-          class="px-2.5 py-1 rounded-md transition-all {viewMode === 'split' ? 'bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white font-medium shadow-2xs' : 'text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'}"
-        >
-          {t('editor.splitMode')}
-        </button>
-        <button
-          onclick={() => { viewMode = 'preview'; setViewMode('preview'); }}
-          class="px-2.5 py-1 rounded-md transition-all {viewMode === 'preview' ? 'bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white font-medium shadow-2xs' : 'text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'}"
-        >
-          {t('editor.previewMode')}
-        </button>
       </div>
-    </div>
+    {/if}
   </header>
 
   <!-- Main Multi-Pane Body -->
@@ -1660,7 +1757,7 @@ graph TD;
 
     <!-- Editor Pane (CodeMirror 6 with Format Toolbar & Zen Mode) -->
     <main
-      class="flex-1 flex flex-col bg-neutral-50 dark:bg-[#0f141c] overflow-hidden relative {viewMode === 'split' ? 'border-r border-neutral-200 dark:border-neutral-800' : ''} {viewMode === 'preview' ? 'hidden' : 'flex'}"
+      class="flex-1 min-h-0 flex flex-col bg-neutral-50 dark:bg-[#0f141c] overflow-hidden relative {viewMode === 'split' ? 'border-r border-neutral-200 dark:border-neutral-800' : ''} {viewMode === 'preview' ? 'hidden' : 'flex'}"
     >
       <!-- Format Toolbar Above Editor -->
       <MarkdownFormatToolbar
@@ -1682,7 +1779,7 @@ graph TD;
       <!-- CodeMirror Editor Viewport (no overflow-auto or padding that would push gutters out of alignment) -->
       <div
         bind:this={editorElement}
-        class="flex-1 overflow-hidden {viewMode === 'live' ? 'cm-live-mode max-w-4xl w-full mx-auto' : ''} {isZenMode ? 'max-w-3xl mx-auto w-full pt-12 pb-32' : ''}"
+        class="flex-1 min-h-0 h-full w-full overflow-hidden {viewMode === 'live' ? 'cm-live-mode max-w-4xl w-full mx-auto' : ''} {isZenMode ? 'max-w-3xl mx-auto w-full pt-12 pb-32' : ''}"
       ></div>
 
       <!-- Floating Contextual AI Action Bar on Text Selection -->
@@ -1930,6 +2027,7 @@ graph TD;
 <style>
   :global(.cm-editor) {
     height: 100% !important;
+    max-height: 100% !important;
     background-color: transparent !important;
     font-size: 13px !important;
   }
@@ -1937,6 +2035,8 @@ graph TD;
     outline: none !important;
   }
   :global(.cm-scroller) {
+    height: 100% !important;
+    max-height: 100% !important;
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace !important;
     line-height: 1.65 !important;
     overflow: auto !important;
@@ -1977,6 +2077,8 @@ graph TD;
     font-size: 0.95rem !important;
   }
   :global(.cm-live-mode .cm-scroller) {
+    height: 100% !important;
+    max-height: 100% !important;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
     font-size: 0.95rem !important;
     line-height: 1.75 !important;

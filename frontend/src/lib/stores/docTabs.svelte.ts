@@ -163,3 +163,24 @@ export function setViewMode(mode: ViewMode): void {
   viewMode = mode;
   persist();
 }
+
+export type ExporterType = 'pdf' | 'html';
+export type ExporterHandler = (type: ExporterType) => void;
+
+let exporterHandler: ExporterHandler | null = null;
+
+export function registerExporterHandler(handler: ExporterHandler): () => void {
+  exporterHandler = handler;
+  return () => {
+    if (exporterHandler === handler) {
+      exporterHandler = null;
+    }
+  };
+}
+
+export function triggerExport(type: ExporterType): void {
+  if (exporterHandler) {
+    exporterHandler(type);
+  }
+}
+

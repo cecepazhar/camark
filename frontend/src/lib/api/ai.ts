@@ -1,6 +1,19 @@
-  import { cmdGetAiSettings, cmdSaveAiSettings, cmdSetAiApiKey, cmdClearAiApiKey, cmdAiPreviewContext, cmdAiChat, cmdTestAiConnection, type AiSettings, type AiChatResponse, type ContextPayload, type PrivacyLevel } from '$lib/generated/commands';
+import {
+  cmdGetAiSettings,
+  cmdSaveAiSettings,
+  cmdSetAiApiKey,
+  cmdClearAiApiKey,
+  cmdAiPreviewContext,
+  cmdAiChat,
+  cmdTestAiConnection,
+  type AiSettings,
+  type AiChatResponse,
+  type ContextPayload,
+  type PrivacyLevel,
+  type DocContext,
+} from '$lib/generated/commands';
 
-export type { AiSettings, AiChatResponse, ContextPayload, PrivacyLevel };
+export type { AiSettings, AiChatResponse, ContextPayload, PrivacyLevel, DocContext };
 
 export async function getAiSettings(): Promise<AiSettings> {
   return await cmdGetAiSettings();
@@ -31,13 +44,15 @@ export async function previewAiContext(level: PrivacyLevel): Promise<ContextPayl
 
 export async function chatWithAi(
   prompt: string,
+  docContext?: DocContext | null,
   privacyLevel?: PrivacyLevel | null,
   consentGiven?: boolean | null
 ): Promise<AiChatResponse> {
   return await cmdAiChat({
     prompt,
+    docContext: docContext ?? undefined,
     privacyLevel: privacyLevel ?? undefined,
-    consentGiven: consentGiven ?? undefined
+    consentGiven: consentGiven ?? undefined,
   });
 }
 
