@@ -22,7 +22,7 @@
   import { invoke } from '@tauri-apps/api/core';
   import { listen } from '@tauri-apps/api/event';
   import { goto } from '$app/navigation';
-  import { openTab, getViewMode, setViewMode, triggerExport, getIsSavingDoc, type ViewMode } from '$lib/stores/docTabs.svelte';
+  import { openTab, getViewMode, setViewMode, triggerExport, getIsSavingDoc, getIsOutlineOpen, toggleOutline, type ViewMode } from '$lib/stores/docTabs.svelte';
   import { Button } from '@cecepazhar/caui';
   import { t } from '$lib/i18n/index.svelte';
   import LanguageSwitcher from '$lib/components/LanguageSwitcher.svelte';
@@ -50,6 +50,7 @@
   const pro = getPro();
   const viewMode = $derived(getViewMode());
   const isSavingDoc = $derived(getIsSavingDoc());
+  const isOutlineOpen = $derived(getIsOutlineOpen());
 
   const isEditorPage = $derived(
     !page.url.pathname.startsWith('/settings') &&
@@ -58,19 +59,19 @@
 
   const cardBorderClass = $derived.by(() => {
     if (!ambient.config.enabled || !ambient.config.cardGlowEnabled || !pro.isPro) {
-      return 'border border-neutral-200 dark:border-neutral-800 md:border-b-0 md:border-r-0';
+      return 'border-t border-l border-b-0 border-r-0 border-neutral-200 dark:border-neutral-800';
     }
 
     if (ambient.config.cardGlowStyle === 'neon-border') {
-      return 'border border-cyan-400 dark:border-cyan-400 md:border-b-0 md:border-r-0 shadow-[inset_0_0_8px_rgba(6,182,212,0.15)]';
+      return 'border-t border-l border-b-0 border-r-0 border-cyan-400 dark:border-cyan-400 shadow-[inset_1px_1px_6px_rgba(6,182,212,0.15)]';
     }
 
     if (ambient.config.cardGlowStyle === 'chroma-beam') {
-      return 'border border-cyan-400/50 dark:border-cyan-400/40 md:border-b-0 md:border-r-0';
+      return 'border-t border-l border-b-0 border-r-0 border-cyan-400/50 dark:border-cyan-400/40';
     }
 
     // diffused-halo
-    return 'border border-cyan-400/30 dark:border-cyan-400/25 md:border-b-0 md:border-r-0';
+    return 'border-t border-l border-b-0 border-r-0 border-cyan-400/30 dark:border-cyan-400/25';
   });
 
   const navItems = $derived(getNavItems());
@@ -339,6 +340,19 @@
             </button>
           </div>
 
+          <button
+            type="button"
+            onclick={() => toggleOutline()}
+            class="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-all cursor-pointer {isOutlineOpen ? 'bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 border border-cyan-500/40' : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white hover:bg-neutral-200/60 dark:hover:bg-neutral-800/60 border border-transparent'}"
+            title="Struktur Dokumen (Outline / Heading Navigator)"
+            aria-label="Toggle Outline Navigator"
+          >
+            <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h10M4 18h14" />
+            </svg>
+            <span class="hidden md:inline font-semibold">Outline</span>
+          </button>
+
           <div class="h-3.5 w-px bg-neutral-300 dark:bg-neutral-800 mx-0.5"></div>
         {/if}
 
@@ -366,11 +380,13 @@
         <button
           type="button"
           onclick={() => toggleAiChat()}
-          class="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold transition-all cursor-pointer {aiChat.open ? 'bg-rose-500/20 text-rose-500 dark:text-rose-400 border border-rose-500/40 shadow-xs' : 'text-neutral-600 dark:text-neutral-300 hover:text-rose-600 dark:hover:text-rose-300 hover:bg-neutral-200/70 dark:hover:bg-neutral-800 border border-transparent'}"
+          class="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold transition-all cursor-pointer {aiChat.open ? 'bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 border border-cyan-500/40 shadow-xs' : 'text-neutral-600 dark:text-neutral-300 hover:text-cyan-600 dark:hover:text-cyan-400 hover:bg-neutral-200/70 dark:hover:bg-neutral-800 border border-transparent'}"
           title="Hana AI (Markdown & Writing Copilot)"
           aria-label="Hana AI Copilot"
         >
-          <span class="text-rose-400 text-xs">🌸</span>
+          <svg class="w-3.5 h-3.5 shrink-0 text-cyan-600 dark:text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 3.104v1.896m4.5-1.896v1.896M5.25 7.5h13.5A2.25 2.25 0 0121 9.75v8.25a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 18.25V9.75A2.25 2.25 0 015.25 7.5zm3.75 4.5h.008v.008H9v-.008zm6 0h.008v.008H15v-.008zm-6.75 4.5h7.5" />
+          </svg>
           <span class="hidden sm:inline font-semibold">Hana AI</span>
         </button>
 

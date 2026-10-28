@@ -72,6 +72,9 @@
     setViewMode,
     registerExporterHandler,
     setIsSavingDoc,
+    getIsOutlineOpen,
+    setIsOutlineOpen,
+    toggleOutline,
     type DocTab,
     type ViewMode,
   } from '$lib/stores/docTabs.svelte';
@@ -281,7 +284,7 @@ graph TD;
   // Zen & Focus Mode
   let isZenMode = $state<boolean>(false);
   let isPresentationOpen = $state<boolean>(false);
-  let isOutlineOpen = $state<boolean>(false);
+  const isOutlineOpen = $derived(getIsOutlineOpen());
 
   // Text selection & AI Copilot Action Bar
   let selectedText = $state<string>('');
@@ -2436,7 +2439,7 @@ graph TD;
         {isZenMode}
         {isOutlineOpen}
         onToggleZen={handleToggleZen}
-        onToggleOutline={() => (isOutlineOpen = !isOutlineOpen)}
+        onToggleOutline={() => toggleOutline()}
         onTogglePresentation={() => {
           if (!pro.isPro) {
             showToast(t('pro.presentationExclusive'), 'error');
@@ -2519,12 +2522,28 @@ graph TD;
       {/if}
     </section>
 
+    {#if viewMode === 'preview'}
+      <div class="absolute top-4 right-6 z-20 no-print">
+        <button
+          type="button"
+          onclick={() => toggleOutline()}
+          class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-neutral-900/80 hover:bg-neutral-800 text-neutral-200 border border-neutral-700/80 shadow-lg backdrop-blur text-xs font-medium transition-all cursor-pointer"
+          title="Buka Struktur Dokumen (Outline)"
+        >
+          <svg class="w-3.5 h-3.5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h10M4 18h14" />
+          </svg>
+          <span>Struktur Dokumen</span>
+        </button>
+      </div>
+    {/if}
+
     <!-- Live Document Outline Drawer -->
     <OutlineDrawer
       isOpen={isOutlineOpen && !isZenMode}
       {rawMarkdown}
       onJumpToHeading={handleJumpToHeading}
-      onClose={() => (isOutlineOpen = false)}
+      onClose={() => setIsOutlineOpen(false)}
     />
   </div>
 
@@ -2546,6 +2565,17 @@ graph TD;
     </div>
 
     <div class="flex items-center gap-3 shrink-0">
+      <button
+        type="button"
+        onclick={() => toggleOutline()}
+        class="flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] transition-colors cursor-pointer {isOutlineOpen ? 'bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 font-medium' : 'hover:bg-neutral-200 dark:hover:bg-neutral-800 text-neutral-600 dark:text-neutral-400'}"
+        title="Toggle Outline / Heading Navigator"
+      >
+        <svg class="w-3 h-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h10M4 18h14" />
+        </svg>
+        <span>Outline</span>
+      </button>
       <span class="px-2 py-0.5 rounded text-[10px] bg-neutral-200 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300">
         {isVaultMode ? t('editor.vaultStorageLabel') : t('editor.fileStorageLabel')}
       </span>
@@ -2843,10 +2873,12 @@ graph TD;
             type="button"
             role="menuitem"
             onclick={() => handleSendToHanaAi(node)}
-            class="w-full px-3 py-1.5 flex items-center justify-between text-left hover:bg-rose-500/15 hover:text-rose-400 text-rose-300 transition-colors"
+            class="w-full px-3 py-1.5 flex items-center justify-between text-left hover:bg-cyan-500/15 hover:text-cyan-400 text-cyan-300 transition-colors"
           >
             <span class="flex items-center gap-2">
-              <span>🌸</span>
+              <svg class="w-3.5 h-3.5 shrink-0 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 3.104v1.896m4.5-1.896v1.896M5.25 7.5h13.5A2.25 2.25 0 0121 9.75v8.25a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 18.25V9.75A2.25 2.25 0 015.25 7.5zm3.75 4.5h.008v.008H9v-.008zm6 0h.008v.008H15v-.008zm-6.75 4.5h7.5" />
+              </svg>
               <span>{t('editor.sendToAiChat')}</span>
             </span>
           </button>

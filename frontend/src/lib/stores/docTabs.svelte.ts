@@ -194,3 +194,9 @@ export function triggerExport(type: ExporterType): void {
   }
 }
 
+let isOutlineOpen = $state<boolean>(false);
+export function getIsOutlineOpen() { return isOutlineOpen; }
+export function setIsOutlineOpen(open: boolean) { isOutlineOpen = open; }
+export function toggleOutline() { isOutlineOpen = !isOutlineOpen; }
+
+

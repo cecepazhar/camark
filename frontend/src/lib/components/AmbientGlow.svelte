@@ -28,11 +28,11 @@
     const color = activeColor;
 
     if (ambient.config.cardGlowStyle === 'neon-border') {
-      return `-1px -1px 0px 1px ${color}, 0 0 ${Math.max(6, Math.round(blur * 0.4))}px 1px ${color}, -2px -2px ${blur}px 2px ${color}`;
+      return `-1px -1px 0px 1px ${color}, -1px -1px ${Math.max(6, Math.round(blur * 0.4))}px 1px ${color}, -2px -2px ${blur}px 2px ${color}`;
     }
 
     // diffused-halo (default)
-    return `0 0 ${blur}px ${spread}px ${color}, -3px -3px ${blur * 1.4}px ${spread}px ${color}`;
+    return `-2px -2px ${blur}px ${spread}px ${color}, -4px -4px ${blur * 1.4}px ${spread}px ${color}`;
   });
 
   const animationDuration = $derived(`${ambient.config.speedSec}s`);
@@ -40,8 +40,9 @@
 
 {#if ambient.config.enabled && ambient.config.cardGlowEnabled && pro.isPro}
   <div
-    class="pointer-events-none absolute -inset-[2px] md:rounded-tl-xl z-0 overflow-visible transition-opacity duration-300 will-change-[filter,opacity]"
+    class="pointer-events-none absolute -top-[2px] -left-[2px] right-0 bottom-0 md:rounded-tl-xl z-0 overflow-visible transition-opacity duration-300 will-change-[filter,opacity]"
     style:opacity={ambient.config.intensity}
+    style:clip-path="inset(-200px 0px 0px -200px)"
     aria-hidden="true"
   >
     {#if ambient.config.cardGlowStyle === 'chroma-beam'}

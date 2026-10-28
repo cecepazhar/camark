@@ -269,10 +269,12 @@
       <!-- Panel Header -->
       <div class="px-4 py-3 border-b border-neutral-800/80 bg-neutral-950/60 flex items-center justify-between select-none">
         <div class="flex items-center gap-2">
-          <div class="w-2.5 h-2.5 rounded-full bg-rose-500 shadow-sm shadow-rose-500/50"></div>
+          <div class="w-2.5 h-2.5 rounded-full bg-cyan-500 shadow-sm shadow-cyan-500/50"></div>
           <h3 class="text-xs font-bold text-white tracking-wide flex items-center gap-1.5">
+            <svg class="w-4 h-4 shrink-0 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 3.104v1.896m4.5-1.896v1.896M5.25 7.5h13.5A2.25 2.25 0 0121 9.75v8.25a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 18.25V9.75A2.25 2.25 0 015.25 7.5zm3.75 4.5h.008v.008H9v-.008zm6 0h.008v.008H15v-.008zm-6.75 4.5h7.5" />
+            </svg>
             <span>Hana AI</span>
-            <span class="text-xs">🌸</span>
           </h3>
         </div>
 
