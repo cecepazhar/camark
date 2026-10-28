@@ -47,6 +47,7 @@
       startOnLoad: false,
       theme: 'dark',
       securityLevel: 'loose',
+      suppressErrorRendering: true,
     });
     mermaidInitialized = true;
   }
@@ -987,8 +988,31 @@ graph TD;
                 container.className = 'my-4 flex justify-center overflow-x-auto';
                 container.innerHTML = svg;
                 block.parentElement?.replaceWith(container);
-              } catch (err) {
+              } catch (err: any) {
                 console.error('Mermaid render error:', err);
+                // 1. Remove any stray error elements injected by mermaid into document.body
+                const stray1 = document.getElementById(id);
+                const stray2 = document.getElementById(`d${id}`);
+                if (stray1) stray1.remove();
+                if (stray2) stray2.remove();
+                // Also query any stray mermaid error containers in body
+                document.querySelectorAll('body > [id^="dmermaid-"], body > [id^="mermaid-"]').forEach(el => el.remove());
+
+                // 2. Render a clean, scoped error card INSIDE the markdown preview pane
+                const errContainer = document.createElement('div');
+                errContainer.className = 'my-4 p-3 rounded-lg border border-amber-500/30 bg-amber-500/10 text-amber-300 text-xs font-mono select-text';
+                const errMsg = err?.message || err?.str || String(err) || 'Syntax error in Mermaid diagram';
+                errContainer.innerHTML = `
+                  <div class="flex items-center gap-2 font-semibold text-amber-400 mb-1">
+                    <span>⚠️ Diagram Mermaid: Format Tidak Valid</span>
+                  </div>
+                  <div class="text-[11px] opacity-80 whitespace-pre-wrap font-mono mb-2">${errMsg.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>
+                  <details class="cursor-pointer text-[10px] text-neutral-400">
+                    <summary class="hover:text-neutral-200">Lihat teks sumber diagram</summary>
+                    <pre class="mt-2 p-2 bg-neutral-900/80 rounded border border-neutral-800 overflow-x-auto text-neutral-300">${code.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre>
+                  </details>
+                `;
+                block.parentElement?.replaceWith(errContainer);
               }
             });
           }
