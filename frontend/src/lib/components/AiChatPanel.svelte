@@ -1,10 +1,12 @@
 <script lang="ts">
+  import { invoke } from '@tauri-apps/api/core';
   import { t } from '$lib/i18n/index.svelte';
   import { chatWithAi } from '$lib/api/ai';
   import { showToast } from '$lib/stores/uiNotifications.svelte';
   import {
     getDocumentContextSnapshot,
     getDocumentContextState,
+    updateDocumentContext,
     applyAiTextToEditor,
     undoEditor,
     type EditorApplyMode,
@@ -37,6 +39,103 @@
     }
   });
   let isSending = $state(false);
+  let isDragOver = $state(false);
+
+  function handleDragOver(e: DragEvent) {
+    e.preventDefault();
+    if (e.dataTransfer) {
+      e.dataTransfer.dropEffect = 'copy';
+    }
+    isDragOver = true;
+  }
+
+  function handleDragLeave(e: DragEvent) {
+    e.preventDefault();
+    const related = e.relatedTarget as HTMLElement | null;
+    if (!related || !(e.currentTarget as HTMLElement).contains(related)) {
+      isDragOver = false;
+    }
+  }
+
+  async function handleDrop(e: DragEvent) {
+    e.preventDefault();
+    isDragOver = false;
+
+    // 1. Check custom CAMark file payload from sidebar
+    const customData = e.dataTransfer?.getData('application/x-camark-file');
+    if (customData) {
+      try {
+        const parsed = JSON.parse(customData);
+        let content = parsed.content || '';
+        if (!content && parsed.path && !parsed.isVault) {
+          content = await invoke<string>('workspace_read_file', { filePath: parsed.path });
+        }
+        updateDocumentContext({
+          active_doc_path: parsed.path,
+          active_doc_title: parsed.name,
+          active_doc_content: content,
+          selected_text: '',
+          is_vault_doc: !!parsed.isVault,
+        });
+        showToast(`Berkas ${parsed.name} dilampirkan ke Hana AI`, 'success');
+        messages.push({
+          role: 'assistant',
+          content: `📄 Berkas **${parsed.name}** berhasil dilampirkan sebagai konteks aktif. Anda dapat langsung menanyakan isi, meminta ringkasan, atau analisis dokumen ini.`,
+        });
+        return;
+      } catch (err) {
+        console.error('Failed to parse dropped file:', err);
+      }
+    }
+
+    // 2. Check dropped files from OS file manager
+    if (e.dataTransfer?.files && e.dataTransfer.files.length > 0) {
+      const file = e.dataTransfer.files[0];
+      try {
+        const text = await file.text();
+        const filePath = (file as any).path || file.name;
+        updateDocumentContext({
+          active_doc_path: filePath,
+          active_doc_title: file.name,
+          active_doc_content: text,
+          selected_text: '',
+          is_vault_doc: false,
+        });
+        showToast(`Berkas ${file.name} dilampirkan ke Hana AI`, 'success');
+        messages.push({
+          role: 'assistant',
+          content: `📄 Berkas **${file.name}** berhasil dilampirkan sebagai konteks aktif. Anda dapat langsung menanyakan isi, meminta ringkasan, atau analisis dokumen ini.`,
+        });
+        return;
+      } catch (err) {
+        console.error('Failed to read dropped OS file:', err);
+      }
+    }
+
+    // 3. Fallback text/plain path
+    const plainText = e.dataTransfer?.getData('text/plain');
+    if (plainText && plainText.trim()) {
+      const path = plainText.trim();
+      const name = path.split('/').pop() || 'document.md';
+      try {
+        const content = await invoke<string>('workspace_read_file', { filePath: path });
+        updateDocumentContext({
+          active_doc_path: path,
+          active_doc_title: name,
+          active_doc_content: content,
+          selected_text: '',
+          is_vault_doc: false,
+        });
+        showToast(`Berkas ${name} dilampirkan ke Hana AI`, 'success');
+        messages.push({
+          role: 'assistant',
+          content: `📄 Berkas **${name}** berhasil dilampirkan sebagai konteks aktif. Anda dapat langsung menanyakan isi, meminta ringkasan, atau analisis dokumen ini.`,
+        });
+      } catch (err) {
+        console.warn('Failed reading dropped text path:', err);
+      }
+    }
+  }
 
   function toggleAutoApply() {
     autoApply = !autoApply;
@@ -76,6 +175,18 @@
 
     try {
       const docSnapshot = getDocumentContextSnapshot();
+      // Safety net: ensure active_doc_content is loaded from disk if path exists
+      if (docSnapshot.active_doc_path && !docSnapshot.active_doc_content.trim() && !docSnapshot.is_vault_doc) {
+        try {
+          const content = await invoke<string>('workspace_read_file', { filePath: docSnapshot.active_doc_path });
+          if (content) {
+            docSnapshot.active_doc_content = content;
+            updateDocumentContext({ active_doc_content: content });
+          }
+        } catch (e) {
+          console.warn('Failed reading active doc content on send:', e);
+        }
+      }
       const response = await chatWithAi(prompt, docSnapshot);
       const hasCode = hasMarkdownBlock(response.message);
       let didAutoApply = false;
@@ -131,12 +242,30 @@
       </button>
     </div>
   {:else}
-    <!-- Floating non-destructive AI Card overlay in the bottom right corner -->
+    <!-- Floating non-destructive AI Card overlay with Drag & Drop file attachment support -->
     <div
+      role="region"
+      aria-label="Hana AI Chat"
+      ondragover={handleDragOver}
+      ondragleave={handleDragLeave}
+      ondrop={handleDrop}
       class="fixed z-50 flex flex-col bg-neutral-900/95 backdrop-blur-xl border border-neutral-700/80 rounded-2xl shadow-2xl shadow-black/80 overflow-hidden transition-all duration-200 {isFullHeight
         ? 'top-[calc(3.5rem+env(safe-area-inset-top,0px))] bottom-3 right-3 w-[420px]'
         : 'bottom-4 right-4 w-[410px] h-[550px] max-h-[calc(100vh-4.5rem-env(safe-area-inset-top,0px))]'}"
     >
+      <!-- Drop Zone Visual Indicator Overlay -->
+      {#if isDragOver}
+        <div class="absolute inset-0 z-50 bg-neutral-950/92 backdrop-blur-md border-2 border-dashed border-cyan-400 flex flex-col items-center justify-center gap-3 text-center p-6 select-none animate-in fade-in duration-150">
+          <div class="w-14 h-14 rounded-2xl bg-cyan-500/20 text-cyan-400 flex items-center justify-center text-3xl animate-bounce">
+            📥
+          </div>
+          <div>
+            <h4 class="text-sm font-bold text-white tracking-wide">Lepaskan Berkas di Sini</h4>
+            <p class="text-xs text-neutral-300 mt-1 max-w-xs">Berkas akan langsung dibaca dan dilampirkan sebagai konteks aktif ke Hana AI</p>
+          </div>
+        </div>
+      {/if}
+
       <!-- Panel Header -->
       <div class="px-4 py-3 border-b border-neutral-800/80 bg-neutral-950/60 flex items-center justify-between select-none">
         <div class="flex items-center gap-2">
@@ -304,6 +433,31 @@
 
       <!-- Input Bar -->
       <div class="p-3 border-t border-neutral-800/80 bg-neutral-950/80">
+        {#if docCtx.active_doc_title}
+          <div class="flex items-center gap-1.5 pb-2 overflow-x-auto scrollbar-none text-[10px]">
+            <span class="text-neutral-500 shrink-0 font-medium">Aksi Cepat:</span>
+            <button
+              type="button"
+              onclick={() => {
+                inputPrompt = `Tolong analisa dan jelaskan isi berkas "${docCtx.active_doc_title}" ini secara lengkap.`;
+                handleSend();
+              }}
+              class="px-2 py-0.5 rounded-full bg-neutral-800 hover:bg-neutral-700 text-neutral-300 hover:text-white border border-neutral-700/80 transition-colors shrink-0 cursor-pointer"
+            >
+              🔍 Analisa Berkas
+            </button>
+            <button
+              type="button"
+              onclick={() => {
+                inputPrompt = `Tolong buat ringkasan poin-poin utama dari berkas "${docCtx.active_doc_title}" ini.`;
+                handleSend();
+              }}
+              class="px-2 py-0.5 rounded-full bg-neutral-800 hover:bg-neutral-700 text-neutral-300 hover:text-white border border-neutral-700/80 transition-colors shrink-0 cursor-pointer"
+            >
+              📝 Ringkas
+            </button>
+          </div>
+        {/if}
         <form
           onsubmit={(e) => {
             e.preventDefault();

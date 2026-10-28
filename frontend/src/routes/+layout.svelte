@@ -362,6 +362,18 @@
           </a>
         {/if}
 
+        <!-- Hana AI Header Button beside PRO -->
+        <button
+          type="button"
+          onclick={() => toggleAiChat()}
+          class="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold transition-all cursor-pointer {aiChat.open ? 'bg-rose-500/20 text-rose-500 dark:text-rose-400 border border-rose-500/40 shadow-xs' : 'text-neutral-600 dark:text-neutral-300 hover:text-rose-600 dark:hover:text-rose-300 hover:bg-neutral-200/70 dark:hover:bg-neutral-800 border border-transparent'}"
+          title="Hana AI (Markdown & Writing Copilot)"
+          aria-label="Hana AI Copilot"
+        >
+          <span class="text-rose-400 text-xs">🌸</span>
+          <span class="hidden sm:inline font-semibold">Hana AI</span>
+        </button>
+
         <Button
           variant="ghost"
           size="icon"
@@ -626,19 +638,6 @@
 
     <!-- Modals & Global Overlays -->
     <AiChatPanel isOpen={aiChat.open} onClose={() => closeAiChat()} />
-
-    <!-- Sleek Floating Action Button (FAB) Hana AI in bottom right corner -->
-    {#if !aiChat.open}
-      <button
-        type="button"
-        onclick={() => toggleAiChat()}
-        class="fixed bottom-5 right-5 z-40 flex items-center gap-2.5 px-4 py-2.5 rounded-full bg-neutral-900/90 hover:bg-neutral-800 text-neutral-100 border border-neutral-700/80 shadow-2xl shadow-black/60 hover:scale-105 active:scale-95 transition-all text-xs font-semibold cursor-pointer group"
-        title="Hana AI (Markdown & Writing Copilot)"
-        aria-label="Open Hana AI"
-      >
-        <span class="text-rose-500 group-hover:rotate-12 transition-transform text-sm">🌸</span>
-      </button>
-    {/if}
 
     {#if pendingCrashReport}
       <CrashReportModal

@@ -133,13 +133,15 @@ pub struct AiChatResponse {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default, TS)]
 #[ts(export)]
 pub struct DocContext {
+    #[serde(default, alias = "activeDocPath")]
     pub active_doc_path: Option<String>,
+    #[serde(default, alias = "activeDocTitle")]
     pub active_doc_title: Option<String>,
-    #[serde(default)]
+    #[serde(default, alias = "activeDocContent")]
     pub active_doc_content: String,
-    #[serde(default)]
+    #[serde(default, alias = "selectedText")]
     pub selected_text: String,
-    #[serde(default)]
+    #[serde(default, alias = "isVaultDoc")]
     pub is_vault_doc: bool,
 }
 
@@ -294,6 +296,7 @@ pub fn compose_prompt(
     system_builder.push_str(&format!("- Response Language: {}\n", response_language));
     system_builder.push_str("- Format responses cleanly using markdown when appropriate.\n");
     system_builder.push_str("- You have direct visibility into the user's active open document and editor selection in Context Data when provided. You can analyze, edit, summarize, continue, or rewrite it directly.\n");
+    system_builder.push_str("- When Context Data contains an 'Active Document' or 'Active Document Content', treat it as the file currently opened and visible to the user. When the user asks 'file apa ini?', 'ini sedang buka apa?', 'jelaskan dokumen ini', or asks to inspect/analyze the file, answer directly using the provided Active Document information and content.\n");
     system_builder.push_str("- When the user requests an edit, update, addition, format, or modification of the active document (e.g. 'tambahkan...', 'ubah...', 'ganti...', 'perbaiki...', 'add...', 'insert...'): DO NOT merely give tutorial explanations. Output the COMPLETE updated document content or exact replacement inside a single ```markdown ... ``` code block incorporating the requested change, so it can be applied directly to the document.\n\n");
 
     // 3. User custom instructions
@@ -872,9 +875,22 @@ pub mod tests {
             "is_vault_doc": false
         }"##;
 
-        let doc_ctx: DocContext = serde_json::from_str(json_input).expect("deserialization");
+        let doc_ctx: DocContext = serde_json::from_str(json_input).expect("deserialization snake_case");
         assert_eq!(doc_ctx.active_doc_title.as_deref(), Some("Test Doc"));
         assert_eq!(doc_ctx.selected_text, "secret@fathforce.com");
+
+        // Verify camelCase deserialization works too!
+        let json_camel = r##"{
+            "activeDocPath": "/path/to/camel.md",
+            "activeDocTitle": "Camel Doc",
+            "activeDocContent": "# Camel Content",
+            "selectedText": "selected",
+            "isVaultDoc": true
+        }"##;
+        let doc_camel: DocContext = serde_json::from_str(json_camel).expect("deserialization camelCase");
+        assert_eq!(doc_camel.active_doc_title.as_deref(), Some("Camel Doc"));
+        assert_eq!(doc_camel.active_doc_content, "# Camel Content");
+        assert!(doc_camel.is_vault_doc);
 
         let (scrubbed, count) = scrub_text(&doc_ctx.active_doc_content);
         assert!(count > 0);

@@ -79,8 +79,21 @@
   {:else}
     <button
       type="button"
+      draggable="true"
+      ondragstart={(e) => {
+        if (e.dataTransfer) {
+          const payload = JSON.stringify({
+            path: node.path,
+            name: node.name,
+            isVault: false,
+          });
+          e.dataTransfer.setData('application/x-camark-file', payload);
+          e.dataTransfer.setData('text/plain', node.path);
+          e.dataTransfer.effectAllowed = 'copyMove';
+        }
+      }}
       onclick={() => onOpenFile(node)}
-      class="w-full flex items-center gap-1.5 py-1.5 rounded-lg text-left transition-colors select-none {isSelected ? 'bg-cyan-500/15 text-cyan-600 dark:text-cyan-300 font-medium' : 'text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200/60 dark:hover:bg-neutral-800/60 hover:text-neutral-900 dark:hover:text-white'}"
+      class="w-full flex items-center gap-1.5 py-1.5 rounded-lg text-left transition-colors select-none cursor-grab active:cursor-grabbing {isSelected ? 'bg-cyan-500/15 text-cyan-600 dark:text-cyan-300 font-medium' : 'text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200/60 dark:hover:bg-neutral-800/60 hover:text-neutral-900 dark:hover:text-white'}"
       style="padding-left: {depth * 14 + 18}px; padding-right: 8px;"
       title={node.path}
     >

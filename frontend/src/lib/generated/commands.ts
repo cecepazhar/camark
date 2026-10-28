@@ -179,9 +179,12 @@ export async function cmdAiChat(args: {
 }): Promise<AiChatResponse> {
   return await invoke<AiChatResponse>('ai_chat', {
     prompt: args.prompt,
+    docContext: args.docContext ?? null,
     doc_context: args.docContext ?? null,
-    privacy_level: args.privacyLevel,
-    consent_given: args.consentGiven,
+    privacyLevel: args.privacyLevel ?? null,
+    privacy_level: args.privacyLevel ?? null,
+    consentGiven: args.consentGiven ?? null,
+    consent_given: args.consentGiven ?? null,
   });
 }
 
