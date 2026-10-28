@@ -28,6 +28,9 @@ export function createLiveMarkdownPlugin() {
   const hrDeco = Decoration.line({ class: 'cm-live-hr' });
   const codeBlockLineDeco = Decoration.line({ class: 'cm-live-codeblock' });
   const asciiLineDeco = Decoration.line({ class: 'cm-live-ascii' });
+  const listItemDeco = Decoration.line({ class: 'cm-live-list-item' });
+  const listItemIndent1Deco = Decoration.line({ class: 'cm-live-list-item-indent-1' });
+  const listItemIndent2Deco = Decoration.line({ class: 'cm-live-list-item-indent-2' });
   const bulletGlyphDeco = Decoration.mark({ class: 'cm-live-bullet' });
   const BOX_REGEX = /[\u2500-\u257F\u2580-\u259F┌─┐│└┘├┤┬┴┼═║╔╗╚╝╠╣╦╩╬▲▼◀▶]/;
 
@@ -83,6 +86,18 @@ export function createLiveMarkdownPlugin() {
               const lineStart = doc.line(l).from;
               items.push({ from: lineStart, to: lineStart, deco: codeBlockLineDeco, isLine: true });
             }
+          } else if (node.name === 'ListItem') {
+            const line = doc.lineAt(node.from);
+            const lineStart = line.from;
+            const leading = line.text.match(/^\s*/)?.[0] || '';
+            const indent = leading.replace(/\t/g, '  ').length;
+            let deco = listItemDeco;
+            if (indent >= 4) {
+              deco = listItemIndent2Deco;
+            } else if (indent >= 2) {
+              deco = listItemIndent1Deco;
+            }
+            items.push({ from: lineStart, to: lineStart, deco, isLine: true });
           }
 
           // Header mark and Quote mark

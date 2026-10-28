@@ -433,7 +433,7 @@ graph TD;
       .trim()
       .replace(/\s+/g, '-');
     const html = originalHeading.call(this, token);
-    return html.replace(/^<h(\d)/, `<h$1 id="${slug}">`);
+    return html.replace(/^<h(\d)[^>]*>/, `<h$1 id="${slug}">`);
   };
 
   // Custom Table with modern wrapper
@@ -621,16 +621,26 @@ graph TD;
       const linePos = editorView.state.doc.line(targetLine).from;
       editorView.dispatch({
         selection: { anchor: linePos },
-        scrollIntoView: true,
+        effects: EditorView.scrollIntoView(linePos, { y: 'start' }),
       });
       editorView.focus();
     }
     if (previewElement) {
-      const allHeadings = Array.from(previewElement.querySelectorAll('h1, h2, h3, h4, h5, h6'));
-      const target = allHeadings.find((el) => {
-        const text = (el.textContent || '').trim().toLowerCase();
-        return text.includes(heading.anchor.replace(/-/g, ' '));
-      });
+      let target: Element | null = null;
+      if (heading.anchor) {
+        try {
+          target = previewElement.querySelector('#' + CSS.escape(heading.anchor));
+        } catch {
+          target = null;
+        }
+      }
+      if (!target) {
+        const allHeadings = Array.from(previewElement.querySelectorAll('h1, h2, h3, h4, h5, h6'));
+        target = allHeadings.find((el) => {
+          const text = (el.textContent || '').trim().toLowerCase();
+          return text.includes(heading.anchor.replace(/-/g, ' '));
+        }) || null;
+      }
       if (target) {
         target.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }
@@ -3285,7 +3295,7 @@ graph TD;
   :global(.cm-live-mode .cm-line) {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
     line-height: 1.75 !important;
-    padding: 1px 0 !important;
+    padding: 2px 0 !important;
   }
 
   /* Live Smart Markdown Tokens (Smooth inline hiding and reveal on line cursor) */
@@ -3435,11 +3445,24 @@ graph TD;
     margin-right: 0.25rem !important;
   }
 
+  :global(.cm-live-mode .cm-live-list-item) {
+    padding-left: 1.5rem !important;
+    text-indent: -1.25rem !important;
+  }
+  :global(.cm-live-mode .cm-live-list-item-indent-1) {
+    padding-left: 2.75rem !important;
+    text-indent: -1.25rem !important;
+  }
+  :global(.cm-live-mode .cm-live-list-item-indent-2) {
+    padding-left: 4rem !important;
+    text-indent: -1.25rem !important;
+  }
+
   :global(.cm-live-mode .cm-live-bullet) {
     font-size: 0 !important;
     color: transparent !important;
     display: inline-block !important;
-    width: 1.15rem !important;
+    width: 1.25rem !important;
     vertical-align: middle !important;
     user-select: none !important;
   }
