@@ -54,6 +54,7 @@ const COMMANDS: &[&str] = &[
     "workspace_rename_file",
     "workspace_delete_file",
     "workspace_reveal_file",
+    "workspace_copy_file",
     "get_initial_file_path",
     // CAMark Encrypted Vault Documents
     "vault_list_documents",

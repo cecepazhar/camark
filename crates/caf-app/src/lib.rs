@@ -147,7 +147,7 @@ pub fn run_with_start(_start: std::time::Instant) {
         }
     }
 
-    builder
+    let app = builder
         .setup(move |app| {
             #[cfg(target_os = "android")]
             {
@@ -249,6 +249,7 @@ pub fn run_with_start(_start: std::time::Instant) {
             commands::workspace_rename_file,
             commands::workspace_delete_file,
             commands::workspace_reveal_file,
+            commands::workspace_copy_file,
             commands::get_initial_file_path,
             commands::vault_list_documents,
             commands::vault_save_document,
@@ -262,7 +263,9 @@ pub fn run_with_start(_start: std::time::Instant) {
             commands::pro_register,
             commands::pro_activate_license,
             commands::pro_logout,
-        ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        ]);
+
+    if let Err(e) = app.run(tauri::generate_context!()) {
+        eprintln!("error while running tauri application: {e}");
+    }
 }

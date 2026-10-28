@@ -35,14 +35,17 @@ pub fn verify_and_parse_token(
     expected_device_id: &str,
 ) -> Result<EntitlementPayload, CatermError> {
     let parts: Vec<&str> = token.split('.').collect();
-    if parts.len() != 3 {
-        return Err(CatermError::Vault(VaultError::Generic(
-            "invalid token format: must be compact JWS with 3 parts".into(),
-        )));
-    }
+    let (part0, part1, part2) = match parts.as_slice() {
+        [p0, p1, p2] => (*p0, *p1, *p2),
+        _ => {
+            return Err(CatermError::Vault(VaultError::Generic(
+                "invalid token format: must be compact JWS with 3 parts".into(),
+            )));
+        }
+    };
 
     let header_bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
-        .decode(parts[0])
+        .decode(part0)
         .map_err(|e| {
             CatermError::Vault(VaultError::Generic(format!("invalid header base64: {e}")))
         })?;
@@ -88,7 +91,7 @@ pub fn verify_and_parse_token(
     })?;
 
     let sig_bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
-        .decode(parts[2])
+        .decode(part2)
         .map_err(|e| {
             CatermError::Vault(VaultError::Generic(format!(
                 "invalid signature base64: {e}"
@@ -105,7 +108,7 @@ pub fn verify_and_parse_token(
     sig_arr.copy_from_slice(&sig_bytes);
     let signature = Signature::from_bytes(&sig_arr);
 
-    let signing_input = format!("{}.{}", parts[0], parts[1]);
+    let signing_input = format!("{}.{}", part0, part1);
     verifying_key
         .verify_strict(signing_input.as_bytes(), &signature)
         .map_err(|_| {
@@ -115,7 +118,7 @@ pub fn verify_and_parse_token(
         })?;
 
     let payload_bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
-        .decode(parts[1])
+        .decode(part1)
         .map_err(|e| {
             CatermError::Vault(VaultError::Generic(format!("invalid payload base64: {e}")))
         })?;

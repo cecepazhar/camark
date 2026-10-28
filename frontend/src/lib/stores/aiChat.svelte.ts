@@ -15,3 +15,7 @@ export function toggleAiChat() {
 export function closeAiChat() {
   state.open = false;
 }
+
+export function openAiChat() {
+  state.open = true;
+}

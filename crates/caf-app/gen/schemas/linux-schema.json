@@ -2259,6 +2259,12 @@
           "markdownDescription": "Enables the window_start_dragging command without any pre-configured scope."
         },
         {
+          "description": "Enables the workspace_copy_file command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-workspace-copy-file",
+          "markdownDescription": "Enables the workspace_copy_file command without any pre-configured scope."
+        },
+        {
           "description": "Enables the workspace_create_directory command without any pre-configured scope.",
           "type": "string",
           "const": "allow-workspace-create-directory",
@@ -2563,6 +2569,12 @@
           "type": "string",
           "const": "deny-window-start-dragging",
           "markdownDescription": "Denies the window_start_dragging command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the workspace_copy_file command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-workspace-copy-file",
+          "markdownDescription": "Denies the workspace_copy_file command without any pre-configured scope."
         },
         {
           "description": "Denies the workspace_create_directory command without any pre-configured scope.",

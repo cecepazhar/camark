@@ -279,6 +279,11 @@ pub async fn workspace_reveal_file(file_path: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+pub async fn workspace_copy_file(src_path: String, dest_path: String) -> Result<(), String> {
+    fs_workspace::copy_file(src_path, dest_path).await
+}
+
+#[tauri::command]
 pub fn get_initial_file_path() -> Option<String> {
     fs_workspace::get_initial_file_path()
 }

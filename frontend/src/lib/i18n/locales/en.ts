@@ -508,7 +508,28 @@ export const en: Dictionary = {
     setupVaultBtn: 'Set Password & Unlock',
     passwordMismatch: 'Passwords do not match.',
     passwordMinLength: 'Master password must be at least 8 characters.',
-    cancelBtn: 'Cancel'
+    cancelBtn: 'Cancel',
+    rename: 'Rename',
+    duplicate: 'Duplicate',
+    cut: 'Cut',
+    copy: 'Copy',
+    paste: 'Paste',
+    delete: 'Delete',
+    copyFullPath: 'Copy Full Path',
+    copyRelativePath: 'Copy Relative Path',
+    sendToVault: 'Send to Vault',
+    sendToAiChat: 'Send to Hana AI',
+    refresh: 'Refresh',
+    deleteModalTitle: 'Delete {{type}}',
+    deleteModalDesc: 'Are you sure you want to delete {{name}}? This action cannot be undone.',
+    renameModalTitle: 'Rename {{type}}',
+    newNameLabel: 'New Name',
+    newFileModalTitle: 'Create New File',
+    newFolderModalTitle: 'Create New Folder',
+    namePlaceholder: 'Enter name...',
+    createBtn: 'Create',
+    renameBtn: 'Rename',
+    deleteBtn: 'Delete'
   }
 };
 

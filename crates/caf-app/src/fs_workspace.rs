@@ -228,6 +228,48 @@ pub async fn reveal_file(file_path: String) -> Result<(), String> {
     .map_err(|e| e.to_string())?
 }
 
+pub async fn copy_file(src_path: String, dest_path: String) -> Result<(), String> {
+    tokio::task::spawn_blocking(move || {
+        let src = Path::new(&src_path);
+        let dest = Path::new(&dest_path);
+        if !src.exists() {
+            return Err("Source file or folder does not exist".to_string());
+        }
+        if dest.exists() {
+            return Err("Destination already exists".to_string());
+        }
+        if src.is_dir() {
+            copy_dir_recursive(src, dest)
+        } else {
+            if let Some(parent) = dest.parent() {
+                let _ = fs::create_dir_all(parent);
+            }
+            fs::copy(src, dest)
+                .map(|_| ())
+                .map_err(|e| format!("Failed to copy file: {e}"))
+        }
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+fn copy_dir_recursive(src: &Path, dest: &Path) -> Result<(), String> {
+    fs::create_dir_all(dest).map_err(|e| format!("Failed to create destination directory: {e}"))?;
+    for entry in fs::read_dir(src).map_err(|e| format!("Failed to read source directory: {e}"))? {
+        let entry = entry.map_err(|e| format!("Failed to read directory entry: {e}"))?;
+        let entry_path = entry.path();
+        let file_name = entry.file_name();
+        let target_path = dest.join(file_name);
+        if entry_path.is_dir() {
+            copy_dir_recursive(&entry_path, &target_path)?;
+        } else {
+            fs::copy(&entry_path, &target_path)
+                .map_err(|e| format!("Failed to copy file {:?}: {e}", entry_path))?;
+        }
+    }
+    Ok(())
+}
+
 const IGNORED_DIRS: &[&str] = &[
     "node_modules",
     "target",
@@ -351,5 +393,39 @@ mod tests {
         let children = docs.children.as_ref().expect("docs children");
         assert_eq!(children.len(), 1);
         assert_eq!(children[0].name, "test.md");
+    }
+
+    #[tokio::test]
+    async fn test_copy_file_and_directory() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let temp_path = temp.path();
+
+        let src_file = temp_path.join("file1.md");
+        fs::write(&src_file, "hello").expect("write file");
+        let dest_file = temp_path.join("file2.md");
+
+        copy_file(
+            src_file.to_string_lossy().to_string(),
+            dest_file.to_string_lossy().to_string(),
+        )
+        .await
+        .expect("copy file");
+        assert_eq!(fs::read_to_string(&dest_file).expect("read"), "hello");
+
+        let src_dir = temp_path.join("folder1");
+        fs::create_dir_all(&src_dir).expect("mkdir");
+        fs::write(src_dir.join("sub.md"), "nested").expect("write sub");
+        let dest_dir = temp_path.join("folder2");
+
+        copy_file(
+            src_dir.to_string_lossy().to_string(),
+            dest_dir.to_string_lossy().to_string(),
+        )
+        .await
+        .expect("copy dir");
+        assert_eq!(
+            fs::read_to_string(dest_dir.join("sub.md")).expect("read"),
+            "nested"
+        );
     }
 }

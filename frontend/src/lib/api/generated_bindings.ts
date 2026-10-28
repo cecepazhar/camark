@@ -153,6 +153,10 @@ export async function invoke_workspaceRevealFile(filePath: string): Promise<any>
   return invoke('workspace_reveal_file', { file_path: filePath });
 }
 
+export async function invoke_workspaceCopyFile(srcPath: string, destPath: string): Promise<any> {
+  return invoke('workspace_copy_file', { src_path: srcPath, dest_path: destPath });
+}
+
 export async function invoke_getInitialFilePath(): Promise<string | null> {
   return invoke('get_initial_file_path');
 }

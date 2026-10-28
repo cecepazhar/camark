@@ -45,6 +45,7 @@
     "allow-workspace-rename-file",
     "allow-workspace-delete-file",
     "allow-workspace-reveal-file",
+    "allow-workspace-copy-file",
     "allow-get-initial-file-path",
     "allow-vault-list-documents",
     "allow-vault-save-document",

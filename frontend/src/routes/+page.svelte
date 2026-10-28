@@ -94,6 +94,7 @@
     tsvToMarkdown,
   } from '$lib/utils/markdownTools';
   import { getPro } from '$lib/stores/pro.svelte';
+  import { openAiChat } from '$lib/stores/aiChat.svelte';
   import { goto } from '$app/navigation';
 
   // State
@@ -106,6 +107,58 @@
       : true
   );
   let currentFilePath = $state<string | null>(null);
+  let selectedFileNode = $state<FileNode | null>(null);
+  let fileClipboard = $state<{ mode: 'copy' | 'cut'; node: FileNode } | null>(null);
+
+  let fileContextMenu = $state<{
+    open: boolean;
+    x: number;
+    y: number;
+    node: FileNode | null;
+    isBackground: boolean;
+  }>({
+    open: false,
+    x: 0,
+    y: 0,
+    node: null,
+    isBackground: false,
+  });
+
+  let fileModal = $state<{
+    open: boolean;
+    type: 'file' | 'folder';
+    targetDir: string;
+    name: string;
+    error: string | null;
+  }>({
+    open: false,
+    type: 'file',
+    targetDir: '',
+    name: '',
+    error: null,
+  });
+
+  let renameModal = $state<{
+    open: boolean;
+    node: FileNode | null;
+    name: string;
+    error: string | null;
+  }>({
+    open: false,
+    node: null,
+    name: '',
+    error: null,
+  });
+
+  let deleteModal = $state<{
+    open: boolean;
+    node: FileNode | null;
+    loading: boolean;
+  }>({
+    open: false,
+    node: null,
+    loading: false,
+  });
   let isVaultMode = $state<boolean>(false);
   let isVaultUnlocked = $state<boolean>(false);
   let vaultModalOpen = $state<boolean>(false);
@@ -644,6 +697,50 @@ graph TD;
         e.preventDefault();
         if (activeTabId) {
           handleCloseTab(activeTabId);
+        }
+      }
+
+      const isSidebarTarget = Boolean((e.target as HTMLElement)?.closest('.file-tree-sidebar'));
+      const isInputTarget = Boolean((e.target as HTMLElement)?.closest('input, textarea, [contenteditable="true"]'));
+
+      if (e.key === 'F2') {
+        if (!isInputTarget && selectedFileNode) {
+          e.preventDefault();
+          triggerRename(selectedFileNode);
+        }
+      }
+
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'd' || e.key === 'D')) {
+        if (!isInputTarget && selectedFileNode) {
+          e.preventDefault();
+          handleDuplicate(selectedFileNode);
+        }
+      }
+
+      if (isSidebarTarget && !isInputTarget) {
+        if (e.key === 'Delete') {
+          if (selectedFileNode) {
+            e.preventDefault();
+            triggerDelete(selectedFileNode);
+          }
+        }
+        if ((e.ctrlKey || e.metaKey) && (e.key === 'c' || e.key === 'C')) {
+          if (selectedFileNode) {
+            e.preventDefault();
+            handleCopy(selectedFileNode);
+          }
+        }
+        if ((e.ctrlKey || e.metaKey) && (e.key === 'x' || e.key === 'X')) {
+          if (selectedFileNode) {
+            e.preventDefault();
+            handleCut(selectedFileNode);
+          }
+        }
+        if ((e.ctrlKey || e.metaKey) && (e.key === 'v' || e.key === 'V')) {
+          if (fileClipboard) {
+            e.preventDefault();
+            handlePaste(selectedFileNode?.is_dir ? selectedFileNode.path : workspacePath);
+          }
         }
       }
     };
@@ -1334,16 +1431,109 @@ graph TD;
     });
   }
 
-  async function createNewFile() {
+  function getParentPath(filePath: string): string {
+    const parts = filePath.split('/');
+    if (parts.length <= 1) return '.';
+    parts.pop();
+    return parts.join('/') || '/';
+  }
+
+  function getDuplicateName(originalName: string, isDir: boolean): string {
+    if (isDir) {
+      return `${originalName} copy`;
+    }
+    const lastDot = originalName.lastIndexOf('.');
+    if (lastDot > 0) {
+      const base = originalName.substring(0, lastDot);
+      const ext = originalName.substring(lastDot);
+      return `${base} copy${ext}`;
+    }
+    return `${originalName} copy`;
+  }
+
+  function openFileContextMenu(e: MouseEvent, node: FileNode) {
+    e.preventDefault();
+    e.stopPropagation();
+    selectedFileNode = node;
+    fileContextMenu = {
+      open: true,
+      x: Math.min(e.clientX, window.innerWidth - 240),
+      y: Math.min(e.clientY, window.innerHeight - 380),
+      node,
+      isBackground: false,
+    };
+  }
+
+  function openSidebarBackgroundContextMenu(e: MouseEvent) {
+    if ((e.target as HTMLElement)?.closest('button, [role="button"], input')) return;
+    e.preventDefault();
+    fileContextMenu = {
+      open: true,
+      x: Math.min(e.clientX, window.innerWidth - 240),
+      y: Math.min(e.clientY, window.innerHeight - 240),
+      node: null,
+      isBackground: true,
+    };
+  }
+
+  function closeFileContextMenu() {
+    fileContextMenu.open = false;
+    fileContextMenu.node = null;
+  }
+
+  function triggerNewFile(targetDir?: string) {
+    closeFileContextMenu();
     if (isVaultMode) {
       if (!isVaultUnlocked) {
-        await enterVaultMode();
+        enterVaultMode();
         return;
       }
-      const nextIndex = vaultDocs.length + 1;
-      const defaultVaultTitle = `files-${nextIndex}.md`;
-      let title = prompt(t('editor.vaultNotePrompt'), defaultVaultTitle);
-      if (!title) return;
+      fileModal = {
+        open: true,
+        type: 'file',
+        targetDir: 'vault',
+        name: `files-${vaultDocs.length + 1}.md`,
+        error: null,
+      };
+      return;
+    }
+
+    const dir = targetDir || (selectedFileNode?.is_dir ? selectedFileNode.path : workspacePath);
+    fileModal = {
+      open: true,
+      type: 'file',
+      targetDir: dir,
+      name: 'new_document.md',
+      error: null,
+    };
+  }
+
+  function triggerNewFolder(targetDir?: string) {
+    closeFileContextMenu();
+    if (isVaultMode) {
+      showToast(t('editor.createDirFilesOnly'), 'info');
+      return;
+    }
+
+    const dir = targetDir || (selectedFileNode?.is_dir ? selectedFileNode.path : workspacePath);
+    fileModal = {
+      open: true,
+      type: 'folder',
+      targetDir: dir,
+      name: 'new_folder',
+      error: null,
+    };
+  }
+
+  async function submitCreateFileOrFolder() {
+    const cleanName = fileModal.name.trim();
+    if (!cleanName) {
+      fileModal.error = 'Name cannot be empty';
+      return;
+    }
+
+    if (fileModal.targetDir === 'vault') {
+      let title = cleanName;
       if (!title.endsWith('.md')) {
         title = `${title}.md`;
       }
@@ -1354,44 +1544,424 @@ graph TD;
         });
         await loadVaultDocs();
         openVaultDoc(newDoc);
+        fileModal.open = false;
         showToast(t('editor.vaultNoteCreated', { title }), 'success');
       } catch (e) {
-        alert(`${t('editor.vaultNoteFailed')}${e}`);
+        fileModal.error = `${t('editor.vaultNoteFailed')}${e}`;
       }
       return;
     }
 
-    const fileName = prompt(t('editor.createNewFilePrompt'), t('editor.defaultNewFileName'));
-    if (!fileName) return;
-    const targetPath = workspacePath === '.' ? fileName : `${workspacePath}/${fileName}`;
-    try {
-      await invoke('workspace_create_file', { filePath: targetPath });
-      await loadDirectory(workspacePath);
-      openFile({ name: fileName, path: targetPath, is_dir: false });
-      showToast(t('editor.fileCreated', { name: fileName }), 'success');
-    } catch (e) {
-      alert(`${t('editor.fileFailed')}${e}`);
+    const dir = fileModal.targetDir || workspacePath;
+    const targetPath = dir === '.' ? cleanName : `${dir}/${cleanName}`;
+
+    if (fileModal.type === 'file') {
+      try {
+        await invoke('workspace_create_file', { filePath: targetPath });
+        await loadDirectory(workspacePath);
+        if (dir !== '.' && dir !== workspacePath) {
+          const next = new Set(expandedDirs);
+          next.add(dir);
+          expandedDirs = next;
+        }
+        openFile({ name: cleanName, path: targetPath, is_dir: false });
+        fileModal.open = false;
+        showToast(t('editor.fileCreated', { name: cleanName }), 'success');
+      } catch (e) {
+        fileModal.error = `${t('editor.fileFailed')}${e}`;
+      }
+    } else {
+      try {
+        await invoke('workspace_create_directory', { dirPath: targetPath });
+        await loadDirectory(workspacePath);
+        const next = new Set(expandedDirs);
+        next.add(targetPath);
+        if (dir !== '.' && dir !== workspacePath) {
+          next.add(dir);
+        }
+        expandedDirs = next;
+        fileModal.open = false;
+        showToast(t('editor.folderCreated', { name: cleanName }), 'success');
+      } catch (e) {
+        fileModal.error = `${t('editor.folderFailed')}${e}`;
+      }
     }
   }
 
+  async function createNewFile() {
+    triggerNewFile();
+  }
+
   async function createNewDirectory() {
-    if (isVaultMode) {
-      showToast(t('editor.createDirFilesOnly'), 'info');
+    triggerNewFolder();
+  }
+
+  function triggerRename(node?: FileNode | null) {
+    closeFileContextMenu();
+    const target = node || selectedFileNode;
+    if (!target) return;
+    renameModal = {
+      open: true,
+      node: target,
+      name: target.name,
+      error: null,
+    };
+  }
+
+  async function submitRename() {
+    if (!renameModal.node) return;
+    const target = renameModal.node;
+    const cleanName = renameModal.name.trim();
+    if (!cleanName) {
+      renameModal.error = 'Name cannot be empty';
       return;
     }
-    const dirName = prompt(t('editor.createNewFolderPrompt'), t('editor.defaultNewFolderName'));
-    if (!dirName) return;
-    const targetPath = workspacePath === '.' ? dirName : `${workspacePath}/${dirName}`;
-    try {
-      await invoke('workspace_create_directory', { dirPath: targetPath });
-      await loadDirectory(workspacePath);
-      const next = new Set(expandedDirs);
-      next.add(targetPath);
-      expandedDirs = next;
-      showToast(t('editor.folderCreated', { name: dirName }), 'success');
-    } catch (e) {
-      alert(`${t('editor.folderFailed')}${e}`);
+    if (cleanName === target.name) {
+      renameModal.open = false;
+      return;
     }
+
+    const parentDir = getParentPath(target.path);
+    const newPath = parentDir === '.' ? cleanName : `${parentDir}/${cleanName}`;
+
+    try {
+      await invoke('workspace_rename_file', { oldPath: target.path, newPath });
+
+      // Sync tabs
+      if (!target.is_dir) {
+        for (const tab of tabs) {
+          if (tab.path === target.path) {
+            tab.path = newPath;
+            tab.title = cleanName;
+            if (tab.id === activeTabId) {
+              currentFilePath = newPath;
+              currentDocTitle = cleanName;
+              updateDocumentContext({
+                active_doc_path: newPath,
+                active_doc_title: cleanName,
+              });
+            }
+          }
+        }
+      } else {
+        const prefix = target.path.endsWith('/') ? target.path : target.path + '/';
+        const newPrefix = newPath.endsWith('/') ? newPath : newPath + '/';
+        for (const tab of tabs) {
+          if (tab.path === target.path || tab.path.startsWith(prefix)) {
+            tab.path = newPrefix + tab.path.slice(prefix.length);
+            tab.title = tab.path.split('/').pop() || tab.title;
+            if (tab.id === activeTabId) {
+              currentFilePath = tab.path;
+              currentDocTitle = tab.title;
+              updateDocumentContext({
+                active_doc_path: tab.path,
+                active_doc_title: tab.title,
+              });
+            }
+          }
+        }
+      }
+
+      if (selectedFileNode?.path === target.path) {
+        selectedFileNode = { ...target, name: cleanName, path: newPath };
+      }
+
+      await loadDirectory(workspacePath);
+      renameModal.open = false;
+      showToast(`Renamed to "${cleanName}"`, 'success');
+    } catch (e) {
+      renameModal.error = `Rename failed: ${e}`;
+    }
+  }
+
+  function triggerDelete(node?: FileNode | null) {
+    closeFileContextMenu();
+    const target = node || selectedFileNode;
+    if (!target) return;
+    deleteModal = {
+      open: true,
+      node: target,
+      loading: false,
+    };
+  }
+
+  async function submitDelete() {
+    if (!deleteModal.node) return;
+    const target = deleteModal.node;
+    deleteModal.loading = true;
+
+    try {
+      await invoke('workspace_delete_file', { filePath: target.path });
+
+      if (!target.is_dir) {
+        const tabToClose = tabs.find((t) => t.path === target.path);
+        if (tabToClose) {
+          await handleCloseTab(tabToClose.id);
+        }
+      } else {
+        const prefix = target.path.endsWith('/') ? target.path : target.path + '/';
+        const tabsToClose = tabs.filter(
+          (t) => t.path === target.path || t.path.startsWith(prefix)
+        );
+        for (const tab of tabsToClose) {
+          await handleCloseTab(tab.id);
+        }
+      }
+
+      if (selectedFileNode?.path === target.path) {
+        selectedFileNode = null;
+      }
+
+      await loadDirectory(workspacePath);
+      deleteModal.open = false;
+      showToast(`Deleted "${target.name}"`, 'success');
+    } catch (e) {
+      showToast(`Failed to delete: ${e}`, 'error');
+    } finally {
+      deleteModal.loading = false;
+    }
+  }
+
+  async function handleDuplicate(node?: FileNode | null) {
+    closeFileContextMenu();
+    const target = node || selectedFileNode;
+    if (!target) return;
+
+    const parentDir = getParentPath(target.path);
+    const dupName = getDuplicateName(target.name, target.is_dir);
+    const destPath = parentDir === '.' ? dupName : `${parentDir}/${dupName}`;
+
+    try {
+      await invoke('workspace_copy_file', {
+        srcPath: target.path,
+        destPath,
+      });
+      await loadDirectory(workspacePath);
+      showToast(`Duplicated "${dupName}"`, 'success');
+    } catch (e) {
+      showToast(`Failed to duplicate: ${e}`, 'error');
+    }
+  }
+
+  function handleCut(node?: FileNode | null) {
+    closeFileContextMenu();
+    const target = node || selectedFileNode;
+    if (!target) return;
+    fileClipboard = { mode: 'cut', node: target };
+    showToast(`Cut "${target.name}" to clipboard`, 'info');
+  }
+
+  function handleCopy(node?: FileNode | null) {
+    closeFileContextMenu();
+    const target = node || selectedFileNode;
+    if (!target) return;
+    fileClipboard = { mode: 'copy', node: target };
+    showToast(`Copied "${target.name}" to clipboard`, 'info');
+  }
+
+  async function handlePaste(destDir?: string) {
+    closeFileContextMenu();
+    if (!fileClipboard) return;
+    const src = fileClipboard.node;
+    const targetDir = destDir || (selectedFileNode?.is_dir ? selectedFileNode.path : workspacePath);
+
+    if (src.is_dir) {
+      const srcPrefix = src.path.endsWith('/') ? src.path : src.path + '/';
+      if (targetDir === src.path || targetDir.startsWith(srcPrefix)) {
+        showToast('Cannot copy or move a folder into itself', 'error');
+        return;
+      }
+    }
+
+    const srcParent = getParentPath(src.path);
+    let destName = src.name;
+    if (fileClipboard.mode === 'copy' && targetDir === srcParent) {
+      destName = getDuplicateName(src.name, src.is_dir);
+    }
+
+    const targetPath = targetDir === '.' ? destName : `${targetDir}/${destName}`;
+
+    try {
+      if (fileClipboard.mode === 'copy') {
+        await invoke('workspace_copy_file', {
+          srcPath: src.path,
+          destPath: targetPath,
+        });
+        showToast(`Pasted copy "${destName}"`, 'success');
+      } else {
+        await invoke('workspace_rename_file', {
+          oldPath: src.path,
+          newPath: targetPath,
+        });
+
+        if (!src.is_dir) {
+          for (const tab of tabs) {
+            if (tab.path === src.path) {
+              tab.path = targetPath;
+              tab.title = destName;
+              if (tab.id === activeTabId) {
+                currentFilePath = targetPath;
+                currentDocTitle = destName;
+                updateDocumentContext({
+                  active_doc_path: targetPath,
+                  active_doc_title: destName,
+                });
+              }
+            }
+          }
+        } else {
+          const prefix = src.path.endsWith('/') ? src.path : src.path + '/';
+          const newPrefix = targetPath.endsWith('/') ? targetPath : targetPath + '/';
+          for (const tab of tabs) {
+            if (tab.path === src.path || tab.path.startsWith(prefix)) {
+              tab.path = newPrefix + tab.path.slice(prefix.length);
+              tab.title = tab.path.split('/').pop() || tab.title;
+              if (tab.id === activeTabId) {
+                currentFilePath = tab.path;
+                currentDocTitle = tab.title;
+                updateDocumentContext({
+                  active_doc_path: tab.path,
+                  active_doc_title: tab.title,
+                });
+              }
+            }
+          }
+        }
+
+        fileClipboard = null;
+        showToast(`Moved "${destName}"`, 'success');
+      }
+
+      await loadDirectory(workspacePath);
+    } catch (e) {
+      showToast(`Paste failed: ${e}`, 'error');
+    }
+  }
+
+  async function handleSendToVault(node: FileNode) {
+    closeFileContextMenu();
+    if (node.is_dir) {
+      showToast('Only markdown documents can be sent to Vault', 'info');
+      return;
+    }
+
+    let content = '';
+    if (currentFilePath === node.path) {
+      content = rawMarkdown;
+    } else {
+      try {
+        content = await invoke<string>('workspace_read_file', { filePath: node.path });
+      } catch (e) {
+        showToast(`Failed to read file: ${e}`, 'error');
+        return;
+      }
+    }
+
+    try {
+      await invoke('vault_save_document', {
+        input: {
+          title: node.name,
+          content: content || '# ' + node.name + '\n\n',
+          tags: ['workspace-export'],
+        },
+        callerProfileId: 'default',
+      });
+      if (isVaultUnlocked) {
+        await loadVaultDocs();
+      }
+      showToast(`Encrypted & saved "${node.name}" to Vault`, 'success');
+    } catch (e) {
+      showToast(`Failed to save to vault: ${e}`, 'error');
+    }
+  }
+
+  async function handleSendToHanaAi(node: FileNode) {
+    closeFileContextMenu();
+    if (node.is_dir) {
+      showToast('Please select a file to send to Hana AI', 'info');
+      return;
+    }
+
+    let content = '';
+    if (currentFilePath === node.path) {
+      content = rawMarkdown;
+    } else {
+      try {
+        content = await invoke<string>('workspace_read_file', { filePath: node.path });
+      } catch (e) {
+        showToast(`Failed to read file: ${e}`, 'error');
+        return;
+      }
+    }
+
+    updateDocumentContext({
+      active_doc_path: node.path,
+      active_doc_title: node.name,
+      active_doc_content: content,
+      selected_text: '',
+      is_vault_doc: false,
+    });
+
+    openAiChat();
+    showToast(`"${node.name}" context attached to Hana AI`, 'success');
+  }
+
+  async function handleCopyFullPath(node: FileNode) {
+    closeFileContextMenu();
+    try {
+      await navigator.clipboard.writeText(node.path);
+      showToast(t('editor.pathCopied'), 'success');
+    } catch {
+      showToast('Failed to copy full path', 'error');
+    }
+  }
+
+  async function handleCopyRelativePath(node: FileNode) {
+    closeFileContextMenu();
+    try {
+      let rel = node.path;
+      if (workspacePath !== '.' && rel.startsWith(workspacePath)) {
+        rel = rel.slice(workspacePath.length).replace(/^\/+/, '');
+      }
+      await navigator.clipboard.writeText(rel);
+      showToast(t('editor.copyRelativePath') + ' copied!', 'success');
+    } catch {
+      showToast('Failed to copy relative path', 'error');
+    }
+  }
+
+  async function handleRevealFile(filePath: string) {
+    closeFileContextMenu();
+    try {
+      await invoke('workspace_reveal_file', { filePath });
+    } catch (err) {
+      console.warn('Failed to reveal file:', err);
+      showToast(t('editor.revealFailed'), 'error');
+    }
+  }
+
+  async function handleRefreshWorkspace() {
+    closeFileContextMenu();
+    if (isVaultMode) {
+      if (isVaultUnlocked) {
+        await loadVaultDocs();
+      }
+    } else {
+      await loadDirectory(workspacePath);
+    }
+    showToast(t('editor.refresh') + ' OK', 'success');
+  }
+
+  function handleSelectNode(node: FileNode) {
+    selectedFileNode = node;
+  }
+
+  function handleQuickNewFile(node: FileNode) {
+    triggerNewFile(node.path);
+  }
+
+  function handleQuickNewFolder(node: FileNode) {
+    triggerNewFolder(node.path);
   }
 
   async function exportHtml() {
@@ -1678,17 +2248,32 @@ graph TD;
         </button>
       </div>
 
-      <!-- Action Sub-header: Title & New File/Folder Buttons -->
+      <!-- Action Sub-header: Title & Top Action Toolbar (New File, New Folder, Refresh) -->
       <div class="p-2.5 px-3 border-b border-neutral-200 dark:border-neutral-800/80 flex items-center justify-between">
         <span class="text-[10px] font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
           {isVaultMode ? t('editor.vaultNotes') : t('editor.filesAndFolders')}
         </span>
         <div class="flex items-center gap-1">
+          <!-- Refresh Button -->
+          <button
+            type="button"
+            onclick={handleRefreshWorkspace}
+            class="p-1 rounded-md hover:bg-neutral-200 dark:hover:bg-neutral-800 text-neutral-500 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-white transition-colors"
+            title={t('editor.refresh')}
+            aria-label={t('editor.refresh')}
+          >
+            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+          </button>
+
           {#if !isVaultMode}
+            <!-- New Folder Button (+ Folder) -->
             <button
-              onclick={createNewDirectory}
+              type="button"
+              onclick={() => triggerNewFolder()}
               class="p-1 rounded-md hover:bg-neutral-200 dark:hover:bg-neutral-800 text-amber-600 dark:text-amber-400 transition-colors"
-              title={t('editor.newFolder')}
+              title="{t('editor.newFolder')} (+ Folder)"
               aria-label={t('editor.newFolder')}
             >
               <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1696,10 +2281,13 @@ graph TD;
               </svg>
             </button>
           {/if}
+
+          <!-- New File Button (+ File) -->
           <button
-            onclick={createNewFile}
+            type="button"
+            onclick={() => triggerNewFile()}
             class="p-1 rounded-md hover:bg-neutral-200 dark:hover:bg-neutral-800 {isVaultMode ? 'text-amber-600 dark:text-amber-400' : 'text-cyan-600 dark:text-cyan-400'} transition-colors"
-            title={isVaultMode ? t('editor.createNewVaultNoteTitle') : t('editor.createNewFileTitle')}
+            title="{isVaultMode ? t('editor.createNewVaultNoteTitle') : t('editor.createNewFileTitle')} (+ File)"
             aria-label={t('editor.newFile')}
           >
             <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1743,7 +2331,11 @@ graph TD;
       {/if}
 
       <!-- Scrollable File / Vault Tree -->
-      <div class="flex-1 overflow-y-auto p-2 space-y-0.5 text-xs font-mono scrollbar-none">
+      <div
+        class="flex-1 overflow-y-auto p-2 space-y-0.5 text-xs font-mono scrollbar-none"
+        oncontextmenu={openSidebarBackgroundContextMenu}
+        role="presentation"
+      >
         {#if isVaultMode}
           {#each vaultDocs as doc (doc.id)}
             <button
@@ -1781,9 +2373,14 @@ graph TD;
               {node}
               depth={0}
               {currentFilePath}
+              selectedNodePath={selectedFileNode?.path}
               {expandedDirs}
               onOpenFile={openFile}
               onToggleDir={toggleDir}
+              onSelectNode={handleSelectNode}
+              onContextMenu={openFileContextMenu}
+              onQuickNewFile={handleQuickNewFile}
+              onQuickNewFolder={handleQuickNewFolder}
             />
           {/each}
           {#if fileTree.length === 0}
@@ -2014,6 +2611,495 @@ graph TD;
           <span>{t('editor.revealInFileManager')}</span>
         </button>
       {/if}
+    </div>
+  {/if}
+
+  <!-- Files & Folders Right-Click Context Menu -->
+  {#if fileContextMenu.open}
+    <!-- Backdrop for dismissing -->
+    <div
+      role="presentation"
+      class="fixed inset-0 z-50 bg-transparent cursor-default"
+      onclick={closeFileContextMenu}
+      oncontextmenu={(e) => { e.preventDefault(); closeFileContextMenu(); }}
+    ></div>
+
+    <!-- Menu Panel (CAUI Theme) -->
+    <div
+      role="menu"
+      tabindex="-1"
+      class="fixed z-50 w-56 py-1 bg-neutral-900 border border-neutral-700/80 rounded-xl shadow-2xl shadow-black/80 text-xs font-sans text-neutral-300 select-none animate-in fade-in duration-75 overflow-hidden"
+      style="left: {fileContextMenu.x}px; top: {fileContextMenu.y}px;"
+      onclick={(e) => e.stopPropagation()}
+      onkeydown={(e) => { if (e.key === 'Escape') closeFileContextMenu(); }}
+    >
+      {#if fileContextMenu.node}
+        {@const node = fileContextMenu.node}
+        <div class="px-3 py-1.5 text-[11px] font-mono font-semibold text-neutral-400 border-b border-neutral-800 truncate flex items-center gap-1.5">
+          {#if node.is_dir}
+            <svg class="w-3.5 h-3.5 text-amber-500 shrink-0" fill="currentColor" viewBox="0 0 24 24"><path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z" /></svg>
+          {:else}
+            <svg class="w-3.5 h-3.5 text-cyan-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+          {/if}
+          <span class="truncate">{node.name}</span>
+        </div>
+
+        {#if node.is_dir}
+          <button
+            type="button"
+            role="menuitem"
+            onclick={() => triggerNewFile(node.path)}
+            class="w-full px-3 py-1.5 flex items-center justify-between text-left hover:bg-cyan-500/15 hover:text-cyan-400 transition-colors"
+          >
+            <span class="flex items-center gap-2">
+              <svg class="w-3.5 h-3.5 text-cyan-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" /></svg>
+              <span>{t('editor.newFile')}</span>
+            </span>
+            <span class="text-[10px] text-neutral-500 font-mono">+ File</span>
+          </button>
+
+          <button
+            type="button"
+            role="menuitem"
+            onclick={() => triggerNewFolder(node.path)}
+            class="w-full px-3 py-1.5 flex items-center justify-between text-left hover:bg-amber-500/15 hover:text-amber-400 transition-colors"
+          >
+            <span class="flex items-center gap-2">
+              <svg class="w-3.5 h-3.5 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h4l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" /></svg>
+              <span>{t('editor.newFolder')}</span>
+            </span>
+            <span class="text-[10px] text-neutral-500 font-mono">+ Folder</span>
+          </button>
+
+          <div class="h-px bg-neutral-800 my-1"></div>
+        {:else}
+          <button
+            type="button"
+            role="menuitem"
+            onclick={() => { closeFileContextMenu(); openFile(node); }}
+            class="w-full px-3 py-1.5 flex items-center justify-between text-left hover:bg-cyan-500/15 hover:text-cyan-400 transition-colors"
+          >
+            <span class="flex items-center gap-2">
+              <svg class="w-3.5 h-3.5 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
+              <span>Open</span>
+            </span>
+            <span class="text-[10px] text-neutral-500 font-mono">Enter</span>
+          </button>
+
+          <div class="h-px bg-neutral-800 my-1"></div>
+        {/if}
+
+        <button
+          type="button"
+          role="menuitem"
+          onclick={() => handleCut(node)}
+          class="w-full px-3 py-1.5 flex items-center justify-between text-left hover:bg-cyan-500/15 hover:text-cyan-400 transition-colors"
+        >
+          <span class="flex items-center gap-2">
+            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.121 14.121L19 19m-7-7l7-7m-7 7l-2.879 2.879a3 3 0 11-4.242-4.242 3 3 0 014.242 0z" /></svg>
+            <span>{t('editor.cut')}</span>
+          </span>
+          <span class="text-[10px] text-neutral-500 font-mono">Ctrl+X</span>
+        </button>
+
+        <button
+          type="button"
+          role="menuitem"
+          onclick={() => handleCopy(node)}
+          class="w-full px-3 py-1.5 flex items-center justify-between text-left hover:bg-cyan-500/15 hover:text-cyan-400 transition-colors"
+        >
+          <span class="flex items-center gap-2">
+            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+            <span>{t('editor.copy')}</span>
+          </span>
+          <span class="text-[10px] text-neutral-500 font-mono">Ctrl+C</span>
+        </button>
+
+        {#if node.is_dir}
+          <button
+            type="button"
+            role="menuitem"
+            disabled={!fileClipboard}
+            onclick={() => handlePaste(node.path)}
+            class="w-full px-3 py-1.5 flex items-center justify-between text-left disabled:opacity-30 disabled:pointer-events-none hover:bg-cyan-500/15 hover:text-cyan-400 transition-colors"
+          >
+            <span class="flex items-center gap-2">
+              <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
+              <span>{t('editor.paste')}</span>
+            </span>
+            <span class="text-[10px] text-neutral-500 font-mono">Ctrl+V</span>
+          </button>
+        {/if}
+
+        <button
+          type="button"
+          role="menuitem"
+          onclick={() => handleDuplicate(node)}
+          class="w-full px-3 py-1.5 flex items-center justify-between text-left hover:bg-cyan-500/15 hover:text-cyan-400 transition-colors"
+        >
+          <span class="flex items-center gap-2">
+            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" /></svg>
+            <span>{t('editor.duplicate')}</span>
+          </span>
+          <span class="text-[10px] text-neutral-500 font-mono">Ctrl+D</span>
+        </button>
+
+        <div class="h-px bg-neutral-800 my-1"></div>
+
+        <button
+          type="button"
+          role="menuitem"
+          onclick={() => triggerRename(node)}
+          class="w-full px-3 py-1.5 flex items-center justify-between text-left hover:bg-cyan-500/15 hover:text-cyan-400 transition-colors"
+        >
+          <span class="flex items-center gap-2">
+            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+            <span>{t('editor.rename')}</span>
+          </span>
+          <span class="text-[10px] text-neutral-500 font-mono">F2</span>
+        </button>
+
+        <button
+          type="button"
+          role="menuitem"
+          onclick={() => triggerDelete(node)}
+          class="w-full px-3 py-1.5 flex items-center justify-between text-left hover:bg-rose-500/15 hover:text-rose-400 text-rose-300 transition-colors"
+        >
+          <span class="flex items-center gap-2">
+            <svg class="w-3.5 h-3.5 text-rose-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+            <span>{t('editor.delete')}</span>
+          </span>
+          <span class="text-[10px] text-neutral-500 font-mono">Del</span>
+        </button>
+
+        <div class="h-px bg-neutral-800 my-1"></div>
+
+        <button
+          type="button"
+          role="menuitem"
+          onclick={() => handleCopyFullPath(node)}
+          class="w-full px-3 py-1.5 flex items-center justify-between text-left hover:bg-cyan-500/15 hover:text-cyan-400 transition-colors"
+        >
+          <span>{t('editor.copyFullPath')}</span>
+        </button>
+
+        <button
+          type="button"
+          role="menuitem"
+          onclick={() => handleCopyRelativePath(node)}
+          class="w-full px-3 py-1.5 flex items-center justify-between text-left hover:bg-cyan-500/15 hover:text-cyan-400 transition-colors"
+        >
+          <span>{t('editor.copyRelativePath')}</span>
+        </button>
+
+        {#if !node.is_dir}
+          <button
+            type="button"
+            role="menuitem"
+            onclick={() => handleSendToVault(node)}
+            class="w-full px-3 py-1.5 flex items-center justify-between text-left hover:bg-amber-500/15 hover:text-amber-400 text-amber-300 transition-colors"
+          >
+            <span class="flex items-center gap-2">
+              <span>🔒</span>
+              <span>{t('editor.sendToVault')}</span>
+            </span>
+          </button>
+
+          <button
+            type="button"
+            role="menuitem"
+            onclick={() => handleSendToHanaAi(node)}
+            class="w-full px-3 py-1.5 flex items-center justify-between text-left hover:bg-rose-500/15 hover:text-rose-400 text-rose-300 transition-colors"
+          >
+            <span class="flex items-center gap-2">
+              <span>🌸</span>
+              <span>{t('editor.sendToAiChat')}</span>
+            </span>
+          </button>
+        {/if}
+
+        <button
+          type="button"
+          role="menuitem"
+          onclick={() => handleRevealFile(node.path)}
+          class="w-full px-3 py-1.5 flex items-center justify-between text-left hover:bg-cyan-500/15 hover:text-cyan-400 transition-colors"
+        >
+          <span>{t('editor.revealInFileManager')}</span>
+        </button>
+      {:else}
+        <!-- Background Context Menu (Clicked on empty sidebar space) -->
+        <button
+          type="button"
+          role="menuitem"
+          onclick={() => triggerNewFile(workspacePath)}
+          class="w-full px-3 py-1.5 flex items-center justify-between text-left hover:bg-cyan-500/15 hover:text-cyan-400 transition-colors"
+        >
+          <span class="flex items-center gap-2">
+            <svg class="w-3.5 h-3.5 text-cyan-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" /></svg>
+            <span>{t('editor.newFile')}</span>
+          </span>
+          <span class="text-[10px] text-neutral-500 font-mono">+ File</span>
+        </button>
+
+        {#if !isVaultMode}
+          <button
+            type="button"
+            role="menuitem"
+            onclick={() => triggerNewFolder(workspacePath)}
+            class="w-full px-3 py-1.5 flex items-center justify-between text-left hover:bg-amber-500/15 hover:text-amber-400 transition-colors"
+          >
+            <span class="flex items-center gap-2">
+              <svg class="w-3.5 h-3.5 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h4l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" /></svg>
+              <span>{t('editor.newFolder')}</span>
+            </span>
+            <span class="text-[10px] text-neutral-500 font-mono">+ Folder</span>
+          </button>
+
+          <button
+            type="button"
+            role="menuitem"
+            disabled={!fileClipboard}
+            onclick={() => handlePaste(workspacePath)}
+            class="w-full px-3 py-1.5 flex items-center justify-between text-left disabled:opacity-30 disabled:pointer-events-none hover:bg-cyan-500/15 hover:text-cyan-400 transition-colors"
+          >
+            <span class="flex items-center gap-2">
+              <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
+              <span>{t('editor.paste')}</span>
+            </span>
+            <span class="text-[10px] text-neutral-500 font-mono">Ctrl+V</span>
+          </button>
+        {/if}
+
+        <div class="h-px bg-neutral-800 my-1"></div>
+
+        <button
+          type="button"
+          role="menuitem"
+          onclick={handleRefreshWorkspace}
+          class="w-full px-3 py-1.5 flex items-center justify-between text-left hover:bg-cyan-500/15 hover:text-cyan-400 transition-colors"
+        >
+          <span class="flex items-center gap-2">
+            <svg class="w-3.5 h-3.5 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+            <span>{t('editor.refresh')}</span>
+          </span>
+        </button>
+
+        {#if !isVaultMode}
+          <button
+            type="button"
+            role="menuitem"
+            onclick={() => handleRevealFile(workspacePath)}
+            class="w-full px-3 py-1.5 flex items-center justify-between text-left hover:bg-cyan-500/15 hover:text-cyan-400 transition-colors"
+          >
+            <span>{t('editor.revealInFileManager')}</span>
+          </button>
+        {/if}
+      {/if}
+    </div>
+  {/if}
+
+  <!-- New File / Folder Modal -->
+  {#if fileModal.open}
+    <div
+      role="presentation"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-xs p-4 select-none animate-in fade-in duration-100"
+      onclick={(e) => {
+        if (e.target === e.currentTarget) fileModal.open = false;
+      }}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        class="w-full max-w-sm rounded-2xl bg-neutral-900 border border-neutral-700/80 p-5 shadow-2xl shadow-black text-neutral-200"
+      >
+        <div class="flex items-center gap-2 mb-2 {fileModal.type === 'folder' ? 'text-amber-400' : 'text-cyan-400'}">
+          {#if fileModal.type === 'folder'}
+            <svg class="w-5 h-5 shrink-0" fill="currentColor" viewBox="0 0 24 24"><path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z" /></svg>
+            <h2 class="text-sm font-bold text-white tracking-wide">{t('editor.newFolderModalTitle')}</h2>
+          {:else}
+            <svg class="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+            <h2 class="text-sm font-bold text-white tracking-wide">{t('editor.newFileModalTitle')}</h2>
+          {/if}
+        </div>
+
+        <p class="text-xs text-neutral-400 mb-3 truncate">
+          {fileModal.targetDir === 'vault' ? 'Secret SQLCipher Vault' : fileModal.targetDir}
+        </p>
+
+        <form
+          onsubmit={(e) => {
+            e.preventDefault();
+            submitCreateFileOrFolder();
+          }}
+          class="space-y-3"
+        >
+          <div>
+            <Input
+              type="text"
+              bind:value={fileModal.name}
+              placeholder={t('editor.namePlaceholder')}
+              class="w-full font-mono text-xs"
+              autofocus
+            />
+          </div>
+
+          {#if fileModal.error}
+            <div class="text-[11px] text-rose-400 font-mono">
+              {fileModal.error}
+            </div>
+          {/if}
+
+          <div class="flex items-center justify-end gap-2 pt-2">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onclick={() => fileModal.open = false}
+              class="text-neutral-400 hover:text-white"
+            >
+              {t('editor.cancelBtn')}
+            </Button>
+            <Button
+              type="submit"
+              variant="primary"
+              size="sm"
+              class="{fileModal.type === 'folder' ? '!bg-amber-600 hover:!bg-amber-500' : '!bg-cyan-600 hover:!bg-cyan-500'} text-white"
+            >
+              {t('editor.createBtn')}
+            </Button>
+          </div>
+        </form>
+      </div>
+    </div>
+  {/if}
+
+  <!-- Rename Modal -->
+  {#if renameModal.open && renameModal.node}
+    <div
+      role="presentation"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-xs p-4 select-none animate-in fade-in duration-100"
+      onclick={(e) => {
+        if (e.target === e.currentTarget) renameModal.open = false;
+      }}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        class="w-full max-w-sm rounded-2xl bg-neutral-900 border border-neutral-700/80 p-5 shadow-2xl shadow-black text-neutral-200"
+      >
+        <div class="flex items-center gap-2 mb-2 text-cyan-400">
+          <svg class="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+          <h2 class="text-sm font-bold text-white tracking-wide">
+            {t('editor.renameModalTitle', { type: renameModal.node.is_dir ? 'Folder' : 'File' })}
+          </h2>
+        </div>
+
+        <p class="text-xs text-neutral-400 mb-3 truncate">
+          {renameModal.node.path}
+        </p>
+
+        <form
+          onsubmit={(e) => {
+            e.preventDefault();
+            submitRename();
+          }}
+          class="space-y-3"
+        >
+          <div>
+            <label for="rename-input" class="block text-[11px] text-neutral-400 mb-1">{t('editor.newNameLabel')}</label>
+            <Input
+              id="rename-input"
+              type="text"
+              bind:value={renameModal.name}
+              placeholder={t('editor.namePlaceholder')}
+              class="w-full font-mono text-xs"
+              autofocus
+            />
+          </div>
+
+          {#if renameModal.error}
+            <div class="text-[11px] text-rose-400 font-mono">
+              {renameModal.error}
+            </div>
+          {/if}
+
+          <div class="flex items-center justify-end gap-2 pt-2">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onclick={() => renameModal.open = false}
+              class="text-neutral-400 hover:text-white"
+            >
+              {t('editor.cancelBtn')}
+            </Button>
+            <Button
+              type="submit"
+              variant="primary"
+              size="sm"
+              class="!bg-cyan-600 hover:!bg-cyan-500 text-white"
+            >
+              {t('editor.renameBtn')}
+            </Button>
+          </div>
+        </form>
+      </div>
+    </div>
+  {/if}
+
+  <!-- Delete Confirmation Modal -->
+  {#if deleteModal.open && deleteModal.node}
+    <div
+      role="presentation"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-xs p-4 select-none animate-in fade-in duration-100"
+      onclick={(e) => {
+        if (e.target === e.currentTarget && !deleteModal.loading) deleteModal.open = false;
+      }}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        class="w-full max-w-sm rounded-2xl bg-neutral-900 border border-neutral-700/80 p-5 shadow-2xl shadow-black text-neutral-200"
+      >
+        <div class="flex items-center gap-2 mb-2 text-rose-400">
+          <svg class="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+          <h2 class="text-sm font-bold text-white tracking-wide">
+            {t('editor.deleteModalTitle', { type: deleteModal.node.is_dir ? 'Folder' : 'File' })}
+          </h2>
+        </div>
+
+        <p class="text-xs text-neutral-300 mb-2 leading-relaxed">
+          {t('editor.deleteModalDesc', { name: deleteModal.node.name })}
+        </p>
+
+        <div class="p-2.5 rounded-lg bg-neutral-950/80 border border-neutral-800 text-[11px] font-mono text-neutral-400 mb-4 truncate">
+          {deleteModal.node.path}
+        </div>
+
+        <div class="flex items-center justify-end gap-2">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            disabled={deleteModal.loading}
+            onclick={() => deleteModal.open = false}
+            class="text-neutral-400 hover:text-white"
+          >
+            {t('editor.cancelBtn')}
+          </Button>
+          <Button
+            type="button"
+            variant="danger"
+            size="sm"
+            disabled={deleteModal.loading}
+            loading={deleteModal.loading}
+            onclick={submitDelete}
+            class="!bg-rose-600 hover:!bg-rose-500 text-white"
+          >
+            {t('editor.deleteBtn')}
+          </Button>
+        </div>
+      </div>
     </div>
   {/if}
 

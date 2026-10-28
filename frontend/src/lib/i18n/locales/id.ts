@@ -506,7 +506,28 @@ export const id: Dictionary = {
     setupVaultBtn: 'Simpan Password & Buka',
     passwordMismatch: 'Password dan konfirmasi tidak cocok.',
     passwordMinLength: 'Master password minimal 8 karakter.',
-    cancelBtn: 'Batal'
+    cancelBtn: 'Batal',
+    rename: 'Ganti Nama',
+    duplicate: 'Duplikat',
+    cut: 'Potong',
+    copy: 'Salin',
+    paste: 'Tempel',
+    delete: 'Hapus',
+    copyFullPath: 'Salin Path Lengkap',
+    copyRelativePath: 'Salin Path Relatif',
+    sendToVault: 'Kirim ke Vault',
+    sendToAiChat: 'Kirim ke Hana AI',
+    refresh: 'Segarkan',
+    deleteModalTitle: 'Hapus {{type}}',
+    deleteModalDesc: 'Apakah Anda yakin ingin menghapus {{name}}? Tindakan ini tidak dapat dibatalkan.',
+    renameModalTitle: 'Ganti Nama {{type}}',
+    newNameLabel: 'Nama Baru',
+    newFileModalTitle: 'Buat Berkas Baru',
+    newFolderModalTitle: 'Buat Folder Baru',
+    namePlaceholder: 'Masukkan nama...',
+    createBtn: 'Buat',
+    renameBtn: 'Ganti Nama',
+    deleteBtn: 'Hapus'
   }
 };
 
