@@ -40,6 +40,7 @@ pub mod notes;
 pub mod paths;
 pub mod prefs;
 pub mod pro;
+pub mod license_local;
 pub mod profiles;
 pub mod rbac;
 pub mod secret;
