@@ -464,7 +464,7 @@ export const en: Dictionary = {
     liveMode: 'Live Smart',
     splitMode: 'Split',
     previewMode: 'Preview',
-    toggleFilePanel: 'Toggle Files Panel (Ctrl+B)',
+    toggleFilePanel: 'Toggle Files Panel (Ctrl+\\)',
     printPdf: 'Print or Save as PDF (Ctrl+P)',
     newDocument: 'New Document',
     unsavedChanges: 'Unsaved changes',

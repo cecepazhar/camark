@@ -11,6 +11,8 @@ export default defineConfig(() => ({
   build: {
     target: ["chrome61", "es2018"],
   },
+  // Component tests need Svelte's browser build (otherwise mount() is unavailable).
+  resolve: process.env.VITEST ? { conditions: ["browser"] } : undefined,
   test: {
     environment: "jsdom",
   },

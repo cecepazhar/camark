@@ -464,6 +464,22 @@ pub fn chat(
     chat_with_doc_context(session, prompt, privacy_level, consent_given, None)
 }
 
+/// Truncate `s` to at most `max_bytes` without splitting a UTF-8 character, preferring
+/// to cut at the last newline. Appends a marker when something was removed. (H-06)
+pub(crate) fn truncate_on_char_boundary(s: &str, max_bytes: usize) -> String {
+    if s.len() <= max_bytes {
+        return s.to_string();
+    }
+    let mut end = max_bytes;
+    while end > 0 && !s.is_char_boundary(end) {
+        end -= 1;
+    }
+    let head = s.get(..end).unwrap_or("");
+    let cut = head.rfind('\n').unwrap_or(end);
+    let kept = s.get(..cut).unwrap_or(head);
+    format!("{kept}\n\n... [remaining document content truncated for length]")
+}
+
 pub fn chat_with_doc_context(
     session: &crate::session::Session,
     prompt: &str,
@@ -506,22 +522,27 @@ pub fn chat_with_doc_context(
 
         doc_parts.push(format!("Active Document: \"{}\" (Path: {}, Storage: {})", doc_title, doc_path, storage_kind));
 
-        if !doc_ctx.selected_text.trim().is_empty() {
+        // H-06: vault documents must not leave the machine unless the endpoint is
+        // loopback or the caller gave explicit consent for this request.
+        let withhold_body = doc_ctx.is_vault_doc && !is_loopback(&cfg.base_url) && !consent_given;
+
+        if withhold_body {
+            doc_parts.push(
+                "[Content of this encrypted-vault document withheld: endpoint is not local and no consent was given]"
+                    .to_string(),
+            );
+        }
+
+        if !withhold_body && !doc_ctx.selected_text.trim().is_empty() {
             let (scrubbed_sel, sel_redactions) = scrub_text(&doc_ctx.selected_text);
             total_redactions += sel_redactions;
             doc_parts.push(format!("User Selected Text in Editor:\n\"\"\"\n{}\n\"\"\"", scrubbed_sel));
         }
 
-        if !doc_ctx.active_doc_content.trim().is_empty() {
-            // Generous token budget (~25000 chars / ~6000 tokens) to accommodate full documents
+        if !withhold_body && !doc_ctx.active_doc_content.trim().is_empty() {
+            // Generous token budget (~25000 bytes / ~6000 tokens) to accommodate full documents
             let raw_content = &doc_ctx.active_doc_content;
-            let truncated_content = if raw_content.len() > 25000 {
-                let slice = &raw_content[..25000];
-                let cut_pos = slice.rfind('\n').unwrap_or(25000);
-                format!("{}\n\n... [remaining document content truncated for length]", &raw_content[..cut_pos])
-            } else {
-                raw_content.clone()
-            };
+            let truncated_content = truncate_on_char_boundary(raw_content, 25000);
             let (scrubbed_content, doc_redactions) = scrub_text(&truncated_content);
             total_redactions += doc_redactions;
             doc_parts.push(format!("Active Document Content:\n```markdown\n{}\n```", scrubbed_content));
@@ -895,5 +916,23 @@ pub mod tests {
         let (scrubbed, count) = scrub_text(&doc_ctx.active_doc_content);
         assert!(count > 0);
         assert!(!scrubbed.contains("secret@fathforce.com"));
+    }
+
+    #[test]
+    fn h06_truncate_never_splits_multibyte_char() {
+        // 24_999 ASCII bytes then a 3-byte em dash straddling the 25_000 boundary.
+        let s = format!("{}—tail", "a".repeat(24_999));
+        let out = truncate_on_char_boundary(&s, 25_000);
+        assert!(out.contains("truncated"));
+        assert!(!out.contains('—'));
+        // Emoji (4 bytes) variant.
+        let s2 = format!("{}😀tail", "b".repeat(24_998));
+        let out2 = truncate_on_char_boundary(&s2, 25_000);
+        assert!(out2.starts_with('b'));
+    }
+
+    #[test]
+    fn h06_short_text_is_returned_unchanged() {
+        assert_eq!(truncate_on_char_boundary("halo — dunia", 25_000), "halo — dunia");
     }
 }

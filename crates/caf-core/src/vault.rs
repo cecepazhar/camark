@@ -1,6 +1,6 @@
 //! Zero-Knowledge Argon2id Vault Manager.
 
-use crate::error::{CatermError, DbError, VaultError};
+use crate::error::{CatermError, VaultError};
 use argon2::{
     Argon2, Params, Version,
     password_hash::rand_core::{OsRng, RngCore},
@@ -180,14 +180,24 @@ pub fn change_master_password(old_pass: &str, new_pass: &str) -> Result<(), Cate
 
     let new_key = derive_key(new_pass, &salt)?;
 
-    // PRAGMA rekey on active DB
-    let conn = crate::db::open()?;
-    let hex_new = hex::encode(new_key);
-    conn.execute(&format!("PRAGMA rekey = \"x'{hex_new}'\";"), [])
-        .map_err(|e| CatermError::Db(DbError::Generic(e.to_string())))?;
-
+    // NOTE (H-02): the SQLCipher database is keyed by `vault.key`, NOT by the
+    // master-password-derived key (see H-01 for binding them together). Rekeying
+    // the DB with `new_key` here made every later `db::open()` fail and used to
+    // trigger a silent "rename to .bak + create empty DB". We therefore only
+    // replace the canary, and do it atomically: write a temp file, verify it
+    // decrypts with `new_key`, then rename over the old canary. Any failure
+    // leaves the old canary (and old password) fully intact.
     let encrypted = crate::secret::encrypt_bytes(&new_key, CANARY_PLAINTEXT)?;
-    std::fs::write(&canary_path, encrypted).map_err(|e| vault_err(e.to_string()))?;
+    let tmp_path = data_dir.join(format!("{CANARY_FILE}.tmp"));
+    std::fs::write(&tmp_path, &encrypted).map_err(|e| vault_err(e.to_string()))?;
+    if let Err(e) = verify_canary(&new_key, &tmp_path) {
+        let _ = std::fs::remove_file(&tmp_path);
+        return Err(e);
+    }
+    if let Err(e) = std::fs::rename(&tmp_path, &canary_path) {
+        let _ = std::fs::remove_file(&tmp_path);
+        return Err(vault_err(e.to_string()));
+    }
 
     {
         let mut guard = ACTIVE_VAULT_KEY.write();
@@ -213,4 +223,86 @@ pub fn load_or_create_local_key(data_dir: &std::path::Path) -> Result<String, Ca
     let hex_key = hex::encode(bytes);
     std::fs::write(&path, &hex_key).map_err(|e| vault_err(e.to_string()))?;
     Ok(hex_key)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const OLD_PASS: &str = "password-lama-123";
+    const NEW_PASS: &str = "password-baru-456";
+
+    fn seed_rows() {
+        let conn = crate::db::open().expect("open db");
+        for i in 0..3 {
+            conn.execute(
+                "INSERT INTO app_kv (key, value) VALUES (?1, ?2)",
+                [format!("h02_k{i}"), format!("v{i}")],
+            )
+            .expect("insert");
+        }
+    }
+
+    fn count_rows() -> i64 {
+        let conn = crate::db::open().expect("open db");
+        conn.query_row(
+            "SELECT count(*) FROM app_kv WHERE key LIKE 'h02_k%'",
+            [],
+            |r| r.get(0),
+        )
+        .expect("count")
+    }
+
+    #[test]
+    fn h02_change_password_keeps_data_and_swaps_password() {
+        let dir = crate::test_support::isolated_data_dir("h02_change_pw");
+        assert!(validate_password(OLD_PASS).expect("init"));
+        seed_rows();
+        assert_eq!(count_rows(), 3);
+
+        change_master_password(OLD_PASS, NEW_PASS).expect("change password");
+        lock();
+
+        assert!(validate_password(OLD_PASS).is_err(), "old password must be rejected");
+        assert!(validate_password(NEW_PASS).expect("unlock new"));
+        assert_eq!(count_rows(), 3, "rows must survive password change");
+
+        let leftovers: Vec<_> = std::fs::read_dir(&dir.path)
+            .expect("read dir")
+            .filter_map(|e| e.ok())
+            .map(|e| e.file_name().to_string_lossy().to_string())
+            .filter(|n| n.contains(".bak") || n.ends_with(".tmp"))
+            .collect();
+        assert!(leftovers.is_empty(), "no .bak/.tmp files expected: {leftovers:?}");
+    }
+
+    #[test]
+    fn h02_wrong_old_password_changes_nothing() {
+        let _dir = crate::test_support::isolated_data_dir("h02_wrong_old");
+        assert!(validate_password(OLD_PASS).expect("init"));
+        seed_rows();
+
+        assert!(change_master_password("salah-total-999", NEW_PASS).is_err());
+        lock();
+        assert!(validate_password(OLD_PASS).expect("old still works"));
+        assert_eq!(count_rows(), 3);
+    }
+
+    #[test]
+    fn h02_failed_canary_swap_keeps_old_password() {
+        let dir = crate::test_support::isolated_data_dir("h02_swap_fail");
+        assert!(validate_password(OLD_PASS).expect("init"));
+        seed_rows();
+
+        // Force the temp-canary write to fail by occupying its path with a directory.
+        let tmp = dir.path.join(format!("{CANARY_FILE}.tmp"));
+        std::fs::create_dir(&tmp).expect("mkdir at tmp path");
+
+        assert!(change_master_password(OLD_PASS, NEW_PASS).is_err());
+        std::fs::remove_dir(&tmp).expect("cleanup");
+
+        lock();
+        assert!(validate_password(OLD_PASS).expect("old password still valid"));
+        assert_eq!(count_rows(), 3);
+    }
 }

@@ -462,7 +462,7 @@ export const id: Dictionary = {
     liveMode: 'Live Smart',
     splitMode: 'Split',
     previewMode: 'Pratinjau',
-    toggleFilePanel: 'Panel Berkas (Ctrl+B)',
+    toggleFilePanel: 'Panel Berkas (Ctrl+\\)',
     printPdf: 'Cetak atau Simpan PDF (Ctrl+P)',
     newDocument: 'Dokumen Baru',
     unsavedChanges: 'Ada perubahan belum tersimpan',
