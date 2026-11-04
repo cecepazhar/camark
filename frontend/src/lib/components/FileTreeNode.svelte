@@ -14,6 +14,7 @@
     onContextMenu?: (e: MouseEvent, node: FileNode) => void;
     onQuickNewFile?: (node: FileNode) => void;
     onQuickNewFolder?: (node: FileNode) => void;
+    onDropOnDir?: (srcPath: string, dirPath: string) => void;
   }
 
   let {
@@ -27,8 +28,12 @@
     onSelectNode,
     onContextMenu,
     onQuickNewFile,
-    onQuickNewFolder
+    onQuickNewFolder,
+    onDropOnDir
   }: Props = $props();
+
+  let isDropTarget = $state(false);
+  const DND_TYPE = 'application/x-camark-file';
 
   let isExpanded = $derived(expandedDirs.has(node.path));
   let isSelected = $derived(
@@ -47,9 +52,29 @@
 <div class="w-full">
   {#if node.is_dir}
     <div
-      class="w-full flex items-center rounded-lg transition-colors select-none group {isSelected ? 'bg-amber-500/15 text-amber-600 dark:text-amber-300 font-medium' : 'text-neutral-700 dark:text-neutral-300 hover:bg-neutral-200/60 dark:hover:bg-neutral-800/60 hover:text-neutral-900 dark:hover:text-white'}"
+      class="w-full flex items-center rounded-lg transition-colors select-none group {isDropTarget ? 'ring-1 ring-cyan-400 bg-cyan-500/10' : ''} {isSelected ? 'bg-amber-500/15 text-amber-600 dark:text-amber-300 font-medium' : 'text-neutral-700 dark:text-neutral-300 hover:bg-neutral-200/60 dark:hover:bg-neutral-800/60 hover:text-neutral-900 dark:hover:text-white'}"
       style="padding-left: {depth * 14 + 6}px; padding-right: 4px;"
       oncontextmenu={handleContextMenu}
+      ondragover={(e) => {
+        if (onDropOnDir && e.dataTransfer?.types.includes(DND_TYPE)) {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'move';
+          isDropTarget = true;
+        }
+      }}
+      ondragleave={() => (isDropTarget = false)}
+      ondrop={(e) => {
+        isDropTarget = false;
+        const raw = e.dataTransfer?.getData(DND_TYPE);
+        if (!raw || !onDropOnDir) return;
+        e.preventDefault();
+        try {
+          const payload = JSON.parse(raw) as { path: string; isVault?: boolean };
+          if (!payload.isVault && payload.path) onDropOnDir(payload.path, node.path);
+        } catch {
+          /* ignore foreign payloads */
+        }
+      }}
       role="presentation"
     >
       <button
@@ -151,6 +176,7 @@
             {onContextMenu}
             {onQuickNewFile}
             {onQuickNewFolder}
+            {onDropOnDir}
           />
         {/each}
       </div>

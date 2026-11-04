@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, tick } from 'svelte';
+  import { onMount, tick, untrack } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
   import { listen } from '@tauri-apps/api/event';
   import { open } from '@tauri-apps/plugin-dialog';
@@ -23,7 +23,8 @@
     defaultHighlightStyle,
     syntaxHighlighting,
   } from '@codemirror/language';
-  import { closeBrackets } from '@codemirror/autocomplete';
+  import { closeBrackets, autocompletion } from '@codemirror/autocomplete';
+  import { search } from '@codemirror/search';
   import { Compartment } from '@codemirror/state';
   import { markdown } from '@codemirror/lang-markdown';
   import { oneDark } from '@codemirror/theme-one-dark';
@@ -46,7 +47,7 @@
     m.initialize({
       startOnLoad: false,
       theme: 'dark',
-      securityLevel: 'loose',
+      securityLevel: 'strict',
       suppressErrorRendering: true,
     });
     mermaidInitialized = true;
@@ -85,6 +86,33 @@
     type EditorApplyMode,
   } from '$lib/stores/documentContext.svelte';
   import { createLiveMarkdownPlugin } from '$lib/utils/liveMarkdown';
+  import {
+    installMarkdownExtensions,
+    renderMarkdownToHtml,
+    toggleNthTask,
+  } from '$lib/utils/markdownRender';
+  import { highlightToHtml } from '$lib/utils/highlight';
+  import { extractSection, hashString } from '$lib/utils/markdownRender';
+  import {
+    buildIndex,
+    getBacklinks,
+    findUnlinkedMentions,
+    renameLinksInContent,
+    noteKey,
+    parseNote,
+    slugify,
+    type NoteIndex,
+    type Backlink,
+  } from '$lib/utils/knowledge';
+  import QuickSwitcher from '$lib/components/QuickSwitcher.svelte';
+  import KnowledgePanel from '$lib/components/KnowledgePanel.svelte';
+  import GraphView from '$lib/components/GraphView.svelte';
+  import {
+    markdownKeymap,
+    editingKeymap,
+    slashCompletionSource,
+    wikilinkCompletionSource,
+  } from '$lib/utils/editorCommands';
 
   import FileTreeNode from '$lib/components/FileTreeNode.svelte';
   import MarkdownFormatToolbar from '$lib/components/MarkdownFormatToolbar.svelte';
@@ -453,23 +481,24 @@ graph TD;
     const lang = (typeof token === 'object' ? token.lang : arguments[1]) || 'text';
 
     if (lang === 'mermaid') {
-      return `<pre class="mermaid-block"><code class="language-mermaid">${code}</code></pre>`;
+      return `<pre class="mermaid-block"><code class="language-mermaid">${escapeHtml(code)}</code></pre>`;
     }
 
     const encodedCode = encodeURIComponent(code);
-    return `<div class="code-block-wrapper" data-lang="${lang}">
+    return `<div class="code-block-wrapper" data-lang="${escapeHtml(String(lang))}">
       <div class="code-block-header">
-        <span class="code-lang-pill">${lang}</span>
+        <span class="code-lang-pill">${escapeHtml(String(lang))}</span>
         <button type="button" class="code-copy-btn" data-code="${encodedCode}">
           <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
           ${t('common.copy')}
         </button>
       </div>
-      <pre><code class="language-${lang}">${code}</code></pre>
+      <pre><code class="language-${escapeHtml(String(lang))}">${escapeHtml(code)}</code></pre>
     </div>`;
   };
 
   marked.use({ renderer: proRenderer });
+  installMarkdownExtensions();
 
   function toggleFileTree() {
     showFileTree = !showFileTree;
@@ -699,7 +728,25 @@ graph TD;
     });
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && (e.key === 'b' || e.key === 'B')) {
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && (e.key === 'o' || e.key === 'O')) {
+        e.preventDefault();
+        showSwitcher = true;
+      }
+      if ((e.ctrlKey || e.metaKey) && e.altKey && (e.key === 'g' || e.key === 'G' || e.code === 'KeyG')) {
+        e.preventDefault();
+        showGraph = !showGraph;
+      }
+      if ((e.ctrlKey || e.metaKey) && e.altKey && (e.key === 'l' || e.key === 'L' || e.code === 'KeyL')) {
+        e.preventDefault();
+        showKnowledge = !showKnowledge;
+      }
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && !e.altKey && e.code === 'KeyC' && !isInputLikeTarget(e.target)) {
+        e.preventDefault();
+        copyAsRichText();
+      }
+      if (e.key === 'Escape' && lightboxSrc) lightboxSrc = null;
+      // Ctrl+B is now bold inside the editor; the file panel moved to Ctrl+\\.
+      if ((e.ctrlKey || e.metaKey) && e.key === '\\') {
         e.preventDefault();
         toggleFileTree();
       }
@@ -781,7 +828,14 @@ graph TD;
               return handleEditorPaste(event);
             },
           }),
+          search({ top: true }),
+          autocompletion({
+            override: [slashCompletionSource, wikilinkCompletionSource(noteNames, noteHeadings)],
+            activateOnTyping: true,
+          }),
           keymap.of([
+            ...markdownKeymap,
+            ...editingKeymap,
             ...defaultKeymap,
             ...historyKeymap,
           ]),
@@ -794,7 +848,7 @@ graph TD;
           EditorView.updateListener.of((update) => {
             if (update.docChanged) {
               rawMarkdown = update.state.doc.toString();
-              renderMarkdown(rawMarkdown);
+              scheduleRender();
               if (!isLoadingTabDoc) {
                 if (activeTabId) setDirty(activeTabId, true);
                 autoSave();
@@ -893,6 +947,293 @@ graph TD;
     };
   });
 
+  // ---------------- Knowledge layer (backlinks, mentions, tags, switcher, graph, embeds)
+  let knowledgeIndex = $state<NoteIndex | null>(null);
+  let isIndexing = $state(false);
+  let showKnowledge = $state(false);
+  let showSwitcher = $state(false);
+  let showGraph = $state(false);
+  let recentPaths = $state<string[]>([]);
+  let lightboxSrc = $state<string | null>(null);
+  const noteContentCache = new Map<string, { mtime: number | undefined; content: string }>();
+  const mermaidSvgCache = new Map<string, string>();
+  const MAX_INDEXED_NOTES = 3000;
+
+  const currentNoteKey = $derived(currentFilePath ? noteKey(currentFilePath) : '');
+  const currentNoteName = $derived(currentFilePath ? (currentFilePath.split('/').pop() ?? '') : '');
+  const currentBacklinks = $derived(
+    knowledgeIndex && currentNoteKey ? getBacklinks(knowledgeIndex, currentNoteKey) : []
+  );
+  const currentMentions = $derived(
+    showKnowledge && knowledgeIndex && currentNoteKey ? findUnlinkedMentions(knowledgeIndex, currentNoteKey) : []
+  );
+  const tagList = $derived(
+    knowledgeIndex
+      ? [...knowledgeIndex.tags.entries()]
+          .map(([tag, paths]) => ({ tag, paths }))
+          .sort((a, b) => b.paths.length - a.paths.length || a.tag.localeCompare(b.tag))
+      : []
+  );
+  const switcherItems = $derived(collectAllFiles(fileTree).map((n) => ({ name: n.name, path: n.path })));
+
+  function collectAllFiles(nodes: FileNode[], out: FileNode[] = []): FileNode[] {
+    for (const n of nodes) {
+      if (n.is_dir) collectAllFiles(n.children ?? [], out);
+      else out.push(n);
+    }
+    return out;
+  }
+  function findNodeByPath(nodes: FileNode[], path: string): FileNode | undefined {
+    for (const n of nodes) {
+      if (n.path === path) return n;
+      if (n.is_dir && n.children) {
+        const hit = findNodeByPath(n.children, path);
+        if (hit) return hit;
+      }
+    }
+    return undefined;
+  }
+
+  function rebuildIndexFromCache() {
+    const inputs = [];
+    for (const [path, v] of noteContentCache) {
+      const content = path === currentFilePath ? rawMarkdown : v.content;
+      inputs.push({ path, name: path.split('/').pop() ?? path, content });
+    }
+    knowledgeIndex = buildIndex(inputs);
+  }
+
+  let indexGeneration = 0;
+  async function refreshKnowledgeIndex() {
+    const gen = ++indexGeneration;
+    const notes = collectNotes(fileTree).slice(0, MAX_INDEXED_NOTES);
+    const alive = new Set(notes.map((n) => n.path));
+    for (const k of [...noteContentCache.keys()]) if (!alive.has(k)) noteContentCache.delete(k);
+    isIndexing = true;
+    try {
+      const stale = notes.filter((n) => noteContentCache.get(n.path)?.mtime !== n.modified_at || !noteContentCache.has(n.path));
+      for (let i = 0; i < stale.length; i += 16) {
+        const batch = stale.slice(i, i + 16);
+        await Promise.all(
+          batch.map(async (n) => {
+            try {
+              const content = await invoke<string>('workspace_read_file', { filePath: n.path });
+              noteContentCache.set(n.path, { mtime: n.modified_at, content });
+            } catch {
+              noteContentCache.delete(n.path);
+            }
+          })
+        );
+        if (gen !== indexGeneration) return;
+      }
+      rebuildIndexFromCache();
+    } finally {
+      if (gen === indexGeneration) isIndexing = false;
+    }
+  }
+
+  function noteHeadings(name: string): string[] {
+    const n = knowledgeIndex?.notes.get(noteKey(name));
+    return n ? n.headings.map((h) => h.text) : [];
+  }
+
+  function jumpToLine(line: number) {
+    if (!editorView) return;
+    const doc = editorView.state.doc;
+    const ln = doc.line(Math.min(Math.max(1, line + 1), doc.lines));
+    editorView.dispatch({ selection: { anchor: ln.from }, scrollIntoView: true });
+    editorView.focus();
+  }
+
+  async function openPathAtLine(path: string, line = 0, heading = '') {
+    const node = findNodeByPath(fileTree, path) ?? { name: path.split('/').pop() ?? path, path, is_dir: false };
+    await openFile(node);
+    await tick();
+    setTimeout(() => {
+      let target = line;
+      if (heading) {
+        const h = parseNote(rawMarkdown).headings.find((x) => x.text.toLowerCase() === heading.toLowerCase());
+        if (h) {
+          target = h.line;
+          previewElement?.querySelector(`#${CSS.escape(slugify(h.text))}`)?.scrollIntoView({ block: 'start' });
+        }
+      }
+      if (target > 0 || heading) jumpToLine(target);
+    }, 120);
+  }
+
+  async function writeNoteContent(path: string, content: string) {
+    if (path === currentFilePath && editorView) {
+      editorView.dispatch({ changes: { from: 0, to: editorView.state.doc.length, insert: content } });
+    } else {
+      await invoke('workspace_write_file', { filePath: path, content });
+    }
+    const prev = noteContentCache.get(path);
+    noteContentCache.set(path, { mtime: prev?.mtime, content });
+  }
+
+  async function linkMention(m: Backlink) {
+    const name = currentNoteName.replace(/\.(md|markdown)$/i, '');
+    const content = m.sourcePath === currentFilePath ? rawMarkdown : (noteContentCache.get(m.sourcePath)?.content ?? '');
+    const lines = content.split('\n');
+    const esc = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const re = new RegExp(`(^|[^\\p{L}\\p{N}_\\[])(${esc})(?=$|[^\\p{L}\\p{N}_\\]])`, 'iu');
+    if (!re.test(lines[m.line] ?? '')) return;
+    lines[m.line] = lines[m.line].replace(re, (_all, pre: string, word: string) =>
+      word === name ? `${pre}[[${name}]]` : `${pre}[[${name}|${word}]]`
+    );
+    try {
+      await writeNoteContent(m.sourcePath, lines.join('\n'));
+      rebuildIndexFromCache();
+      showToast(`Tautan ditambahkan di ${m.sourceName}`, 'success');
+    } catch (e) {
+      showToast(`Gagal menulis ${m.sourceName}: ${e}`, 'error');
+    }
+  }
+
+  /** After renaming a note, rewrite [[old]] links everywhere (Obsidian "update links"). */
+  async function updateLinksAfterRename(oldName: string, newName: string) {
+    if (!/\.(md|markdown)$/i.test(oldName) || noteKey(oldName) === noteKey(newName)) return;
+    let files = 0;
+    let links = 0;
+    const failed: string[] = [];
+    for (const [path, v] of [...noteContentCache]) {
+      const content = path === currentFilePath ? rawMarkdown : v.content;
+      const r = renameLinksInContent(content, oldName, newName);
+      if (r.count === 0) continue;
+      try {
+        await writeNoteContent(path, r.text);
+        files++;
+        links += r.count;
+      } catch {
+        failed.push(path.split('/').pop() ?? path);
+      }
+    }
+    if (links > 0) showToast(`${links} tautan diperbarui di ${files} catatan`, 'success');
+    if (failed.length) showToast(`Gagal memperbarui: ${failed.join(', ')}`, 'error');
+  }
+
+  async function createNoteFromSwitcher(name: string) {
+    const clean = name.replace(/[\\/:*?"<>|]/g, '-').replace(/\.md$/i, '');
+    const base = workspacePath === '.' ? '' : workspacePath.replace(/\/+$/, '') + '/';
+    const path = `${base}${clean}.md`;
+    try {
+      await invoke('workspace_create_file', { filePath: path });
+      await loadDirectory(workspacePath);
+      showSwitcher = false;
+      await openFile({ name: `${clean}.md`, path, is_dir: false });
+    } catch (e) {
+      showToast(`Gagal membuat catatan: ${e}`, 'error');
+    }
+  }
+
+  async function fillNoteEmbeds() {
+    if (!previewElement) return;
+    const embeds = previewElement.querySelectorAll<HTMLElement>('.note-embed:not([data-filled])');
+    for (const el of embeds) {
+      el.dataset.filled = '1';
+      const name = el.dataset.embed ?? '';
+      const heading = el.dataset.heading ?? '';
+      const note = knowledgeIndex?.notes.get(noteKey(name));
+      if (!note) continue;
+      const src = note.path === currentFilePath ? rawMarkdown : (noteContentCache.get(note.path)?.content ?? note.lines.join('\n'));
+      const section = extractSection(src, heading);
+      if (section === null) continue;
+      try {
+        const { html } = await renderMarkdownToHtml(section);
+        const safe = DOMPurify.sanitize(html, { ADD_TAGS: ['span', 'div'], ADD_ATTR: ['data-wikilink', 'data-heading', 'data-embed'] });
+        el.innerHTML = `<div class="note-embed-title"><a href="#" class="wikilink" data-wikilink="${escapeHtml(name)}" data-heading="${escapeHtml(heading)}">${escapeHtml(heading ? `${name} › ${heading}` : name)}</a></div><div class="note-embed-body">${safe}</div>`;
+        el.classList.add('note-embed-filled');
+      } catch {
+        /* keep plain link */
+      }
+    }
+  }
+
+  async function copyAsRichText() {
+    const html = previewElement?.innerHTML || renderedHtml;
+    if (!html) return;
+    try {
+      const item = new ClipboardItem({
+        'text/html': new Blob([`<meta charset="utf-8">${html}`], { type: 'text/html' }),
+        'text/plain': new Blob([rawMarkdown], { type: 'text/plain' }),
+      });
+      await navigator.clipboard.write([item]);
+      showToast('Disalin sebagai rich text (tempel ke email / Word)', 'success');
+    } catch {
+      await navigator.clipboard.writeText(rawMarkdown);
+      showToast('Rich text tidak didukung di sini; Markdown disalin sebagai teks', 'info');
+    }
+  }
+
+  async function moveNodeToDir(srcPath: string, dirPath: string) {
+    const node = findNodeByPath(fileTree, srcPath);
+    if (!node || srcPath === dirPath || dirPath.startsWith(srcPath + '/')) return;
+    if (getParentPath(srcPath) === dirPath) return;
+    fileClipboard = { mode: 'cut', node };
+    await handlePaste(dirPath);
+  }
+
+  // Re-index only when the file tree changes (untrack: typing must not trigger a re-index).
+  $effect(() => {
+    void fileTree;
+    untrack(() => {
+      refreshKnowledgeIndex();
+    });
+  });
+
+  // Debounced preview render: typing no longer re-parses the whole document on every keystroke.
+  let renderTimer: ReturnType<typeof setTimeout> | null = null;
+  function scheduleRender() {
+    if (renderTimer) clearTimeout(renderTimer);
+    const delay = rawMarkdown.length > 100_000 ? 400 : rawMarkdown.length > 20_000 ? 200 : 80;
+    renderTimer = setTimeout(() => {
+      renderTimer = null;
+      renderMarkdown(rawMarkdown);
+    }, delay);
+  }
+
+  async function highlightPreviewCode() {
+    if (!previewElement) return;
+    const blocks = previewElement.querySelectorAll<HTMLElement>(
+      '.code-block-wrapper code[class^="language-"]:not([data-hl])'
+    );
+    for (const block of blocks) {
+      block.dataset.hl = '1';
+      const lang = block.className.replace('language-', '');
+      if (lang === 'mermaid' || lang === 'text') continue;
+      try {
+        const html = await highlightToHtml(block.textContent ?? '', lang);
+        if (html !== null) block.innerHTML = html;
+      } catch {
+        /* unsupported or parser failed: keep plain text */
+      }
+    }
+  }
+
+  // Names of notes in the open workspace for [[wikilink]] autocomplete and click-through.
+  function collectNotes(nodes: FileNode[], out: FileNode[] = []): FileNode[] {
+    for (const n of nodes) {
+      if (n.is_dir) collectNotes(n.children ?? [], out);
+      else if (/\.(md|markdown)$/i.test(n.name)) out.push(n);
+    }
+    return out;
+  }
+  function noteNames(): string[] {
+    return collectNotes(fileTree).map((n) => n.name.replace(/\.(md|markdown)$/i, ''));
+  }
+  function findNoteByName(name: string): FileNode | undefined {
+    const wanted = name.trim().toLowerCase();
+    return collectNotes(fileTree).find(
+      (n) => n.name.replace(/\.(md|markdown)$/i, '').toLowerCase() === wanted
+    );
+  }
+
+  function isInputLikeTarget(t: EventTarget | null): boolean {
+    const el = t as HTMLElement | null;
+    return Boolean(el?.closest('input, textarea'));
+  }
+
   async function renderMarkdown(content: string) {
     try {
       if (isHtmlFile(currentFilePath)) {
@@ -941,24 +1282,11 @@ graph TD;
         return;
       }
 
-      // 1. Process math blocks ($$...$$ and $...$)
-      let processed = content.replace(/\$\$([\s\S]+?)\$\$/g, (_, math) => {
-        try {
-          return katex.renderToString(math, { displayMode: true, throwOnError: false });
-        } catch {
-          return `$$${math}$$`;
-        }
-      });
-      processed = processed.replace(/\$([^\$\n]+?)\$/g, (_, math) => {
-        try {
-          return katex.renderToString(math, { displayMode: false, throwOnError: false });
-        } catch {
-          return `$${math}$`;
-        }
-      });
-
-      // 2. Parse GFM markdown to sanitized HTML
-      const rawHtml = await marked.parse(processed, { gfm: true, breaks: true });
+      // Frontmatter, footnotes, callouts, wikilinks and math are handled in markdownRender.ts.
+      // CommonMark soft breaks by default; opt back into <br> with localStorage camark_soft_breaks=true.
+      const softBreaks =
+        typeof localStorage !== 'undefined' && localStorage.getItem('camark_soft_breaks') === 'true';
+      const { html: rawHtml } = await renderMarkdownToHtml(content, { breaks: softBreaks });
       renderedHtml = DOMPurify.sanitize(rawHtml, {
         ADD_TAGS: ['button', 'span', 'div', 'svg', 'path'],
         ADD_ATTR: [
@@ -977,6 +1305,8 @@ graph TD;
 
       // 3. Render Mermaid blocks on next tick (lazy-load mermaid only if needed)
       setTimeout(async () => {
+        void highlightPreviewCode();
+        void fillNoteEmbeds();
         if (previewElement) {
           const mermaidBlocks = previewElement.querySelectorAll('code.language-mermaid');
           if (mermaidBlocks.length > 0) {
@@ -986,10 +1316,18 @@ graph TD;
               const code = block.textContent || '';
               const id = `mermaid-svg-${index}-${Date.now()}`;
               try {
-                const { svg } = await m.render(id, code);
+                // Cache by source: unchanged diagrams are not re-rendered on every edit.
+                const cacheKey = hashString(code);
+                let safeSvg = mermaidSvgCache.get(cacheKey);
+                if (!safeSvg) {
+                  const { svg } = await m.render(id, code);
+                  safeSvg = DOMPurify.sanitize(svg, { USE_PROFILES: { svg: true, svgFilters: true }, ADD_TAGS: ['foreignObject'], HTML_INTEGRATION_POINTS: { foreignobject: true } });
+                  if (mermaidSvgCache.size > 100) mermaidSvgCache.clear();
+                  mermaidSvgCache.set(cacheKey, safeSvg);
+                }
                 const container = document.createElement('div');
                 container.className = 'my-4 flex justify-center overflow-x-auto';
-                container.innerHTML = svg;
+                container.innerHTML = safeSvg;
                 block.parentElement?.replaceWith(container);
               } catch (err: any) {
                 console.error('Mermaid render error:', err);
@@ -1099,6 +1437,10 @@ graph TD;
         } else if (currentFilePath) {
           await invoke('workspace_write_file', { filePath: currentFilePath, content: rawMarkdown });
           if (activeTabId) setDirty(activeTabId, false);
+          if (/\.(md|markdown)$/i.test(currentFilePath)) {
+            noteContentCache.set(currentFilePath, { mtime: noteContentCache.get(currentFilePath)?.mtime, content: rawMarkdown });
+            rebuildIndexFromCache();
+          }
         }
       } catch (e) {
         console.error('Save failed:', e);
@@ -1335,6 +1677,7 @@ graph TD;
 
   async function openFile(node: FileNode) {
     if (node.is_dir) return;
+    recentPaths = [node.path, ...recentPaths.filter((p) => p !== node.path)].slice(0, 30);
     try {
       openTab(node.path, node.name, false);
       const target = getActiveTab();
@@ -1663,6 +2006,14 @@ graph TD;
 
     try {
       await invoke('workspace_rename_file', { oldPath: target.path, newPath });
+      if (!target.is_dir) {
+        const cached = noteContentCache.get(target.path);
+        if (cached) {
+          noteContentCache.delete(target.path);
+          noteContentCache.set(newPath, cached);
+        }
+        await updateLinksAfterRename(target.name, cleanName);
+      }
 
       // Sync tabs
       if (!target.is_dir) {
@@ -2061,29 +2412,41 @@ graph TD;
     // Interactive GFM Task List Checkboxes
     if (target.tagName === 'INPUT' && target.getAttribute('type') === 'checkbox') {
       const checkbox = target as HTMLInputElement;
-      const listItem = checkbox.closest('li');
-      if (listItem && listItem.textContent) {
-        const text = listItem.textContent.trim();
-        const checked = checkbox.checked;
-        const targetSearch = checked ? `[ ] ${text}` : `[x] ${text}`;
-        const targetReplace = checked ? `[x] ${text}` : `[ ] ${text}`;
-
-        if (rawMarkdown.includes(targetSearch)) {
-          const updated = rawMarkdown.replace(targetSearch, targetReplace);
-          rawMarkdown = updated;
-          if (editorView) {
-            editorView.dispatch({
-              changes: { from: 0, to: editorView.state.doc.length, insert: updated },
-            });
-          }
-          renderMarkdown(updated);
-          autoSave();
+      const all = Array.from(
+        (previewElement ?? document).querySelectorAll('input[type="checkbox"]')
+      );
+      const idx = all.indexOf(checkbox);
+      const updated = idx >= 0 ? toggleNthTask(rawMarkdown, idx, checkbox.checked) : null;
+      if (updated !== null) {
+        rawMarkdown = updated;
+        if (editorView) {
+          editorView.dispatch({
+            changes: { from: 0, to: editorView.state.doc.length, insert: updated },
+          });
         }
+        renderMarkdown(updated);
+        autoSave();
       }
       return;
     }
 
     // Markdown Links & Anchors (TOC internal headings, relative .md, external web)
+    if (target.tagName === 'IMG' && !target.closest('a')) {
+      lightboxSrc = (target as HTMLImageElement).src;
+      return;
+    }
+
+    const wiki = target.closest('a.wikilink') as HTMLAnchorElement | null;
+    if (wiki) {
+      e.preventDefault();
+      const name = wiki.getAttribute('data-wikilink') ?? '';
+      const heading = wiki.getAttribute('data-heading') ?? '';
+      const note = findNoteByName(name);
+      if (note) await openPathAtLine(note.path, 0, heading);
+      else showToast(`Catatan "${name}" tidak ditemukan di workspace`, 'error');
+      return;
+    }
+
     const anchor = target.closest('a') as HTMLAnchorElement | null;
     if (anchor) {
       const href = anchor.getAttribute('href');
@@ -2418,6 +2781,7 @@ graph TD;
               onContextMenu={openFileContextMenu}
               onQuickNewFile={handleQuickNewFile}
               onQuickNewFolder={handleQuickNewFolder}
+              onDropOnDir={moveNodeToDir}
             />
           {/each}
           {#if fileTree.length === 0}
@@ -2490,7 +2854,7 @@ graph TD;
           <iframe
             title="Live Web Preview"
             srcdoc={rawMarkdown}
-            sandbox="allow-scripts allow-forms allow-same-origin allow-modals"
+            sandbox="allow-scripts allow-forms allow-modals"
             class="w-full flex-1 border-0 bg-white"
           ></iframe>
         </div>
@@ -2539,6 +2903,17 @@ graph TD;
     {/if}
 
     <!-- Live Document Outline Drawer -->
+    <KnowledgePanel
+      open={showKnowledge}
+      noteName={currentNoteName}
+      backlinks={currentBacklinks}
+      mentions={currentMentions}
+      tags={tagList}
+      indexing={isIndexing}
+      onOpen={(path, line) => openPathAtLine(path, line)}
+      onLinkMention={linkMention}
+      onClose={() => (showKnowledge = false)}
+    />
     <OutlineDrawer
       isOpen={isOutlineOpen && !isZenMode}
       {rawMarkdown}
@@ -2555,6 +2930,33 @@ graph TD;
     onClose={() => (isPresentationOpen = false)}
   />
 
+  <QuickSwitcher
+    open={showSwitcher}
+    items={switcherItems}
+    recent={recentPaths}
+    onPick={(item) => {
+      showSwitcher = false;
+      openPathAtLine(item.path);
+    }}
+    onCreate={createNoteFromSwitcher}
+    onClose={() => (showSwitcher = false)}
+  />
+  <GraphView
+    open={showGraph}
+    index={knowledgeIndex}
+    currentKey={currentNoteKey}
+    onOpen={(path) => {
+      showGraph = false;
+      openPathAtLine(path);
+    }}
+    onClose={() => (showGraph = false)}
+  />
+  {#if lightboxSrc}
+    <div class="fixed inset-0 z-[70] bg-black/85 flex items-center justify-center p-6 cursor-zoom-out" role="presentation" onclick={() => (lightboxSrc = null)}>
+      <img src={lightboxSrc} alt="" class="max-w-full max-h-full object-contain rounded shadow-2xl" />
+    </div>
+  {/if}
+
   <!-- Sleek Status Bar in Card Footer -->
   <footer class="h-7 border-t border-neutral-200 dark:border-neutral-800 bg-neutral-100 dark:bg-[#111111] px-3 sm:px-4 flex items-center justify-between text-[11px] font-mono text-neutral-500 dark:text-neutral-400 z-10 shrink-0 select-none no-print">
     <div class="flex items-center gap-3 sm:gap-4 truncate">
@@ -2562,6 +2964,9 @@ graph TD;
       <span class="hidden sm:inline">{t('editor.chars')}: <strong class="text-neutral-800 dark:text-neutral-200">{charCount}</strong></span>
       <span>{t('editor.lines')}: <strong class="text-neutral-800 dark:text-neutral-200">{lineCount}</strong></span>
       <span class="hidden md:inline">{t('editor.readTime')}: ~{readingTimeMin} {t('editor.minutes')}</span>
+      <button type="button" class="hover:text-cyan-400" title="Backlinks, mentions & tags (Ctrl+Alt+L)" onclick={() => (showKnowledge = !showKnowledge)}>🔗 {currentBacklinks.length}</button>
+      <button type="button" class="hover:text-cyan-400 hidden sm:inline" title="Graph view (Ctrl+Alt+G)" onclick={() => (showGraph = true)}>Graph</button>
+      <button type="button" class="hover:text-cyan-400 hidden sm:inline" title="Quick switcher (Ctrl+O)" onclick={() => (showSwitcher = true)}>Ctrl+O</button>
     </div>
 
     <div class="flex items-center gap-3 shrink-0">
@@ -3572,4 +3977,34 @@ graph TD;
   :global(html:not(.dark) .cm-live-mode .cm-live-hr) {
     border-top-color: rgba(0, 0, 0, 0.1) !important;
   }
+
+  /* ---- Stage A: callouts, footnotes, wikilinks, frontmatter, syntax tokens ---- */
+  :global(.callout) { margin: 1rem 0; padding: 0.75rem 1rem; border-left: 4px solid #06b6d4; border-radius: 0.5rem; background: rgba(6, 182, 212, 0.08); }
+  :global(.callout-title) { font-weight: 600; margin-bottom: 0.25rem; }
+  :global(.callout-body > :first-child) { margin-top: 0; }
+  :global(.callout-body > :last-child) { margin-bottom: 0; }
+  :global(.callout-warning), :global(.callout-caution) { border-left-color: #f59e0b; background: rgba(245, 158, 11, 0.1); }
+  :global(.callout-danger), :global(.callout-failure), :global(.callout-bug) { border-left-color: #ef4444; background: rgba(239, 68, 68, 0.1); }
+  :global(.callout-success), :global(.callout-tip) { border-left-color: #10b981; background: rgba(16, 185, 129, 0.1); }
+  :global(.callout-important) { border-left-color: #a855f7; background: rgba(168, 85, 247, 0.1); }
+  :global(.footnotes) { font-size: 0.875em; opacity: 0.9; margin-top: 2rem; }
+  :global(.footnote-ref) { font-size: 0.75em; }
+  :global(.footnote-back) { text-decoration: none; margin-left: 0.25rem; }
+  :global(a.wikilink) { color: #22d3ee; text-decoration: none; border-bottom: 1px dashed currentColor; cursor: pointer; }
+  :global(.frontmatter-block) { margin-bottom: 1rem; font-size: 0.8rem; opacity: 0.85; }
+  :global(.frontmatter-block summary) { cursor: pointer; }
+  :global(.katex-block) { overflow-x: auto; }
+  :global(.tok-keyword), :global(.tok-controlKeyword), :global(.tok-operatorKeyword), :global(.tok-definitionKeyword), :global(.tok-moduleKeyword) { color: #c084fc; }
+  :global(.tok-string), :global(.tok-string2), :global(.tok-regexp) { color: #86efac; }
+  :global(.tok-number), :global(.tok-bool), :global(.tok-null), :global(.tok-atom) { color: #fbbf24; }
+  :global(.tok-comment), :global(.tok-lineComment), :global(.tok-blockComment) { color: #71717a; font-style: italic; }
+  :global(.tok-typeName), :global(.tok-className), :global(.tok-namespace) { color: #67e8f9; }
+  :global(.tok-propertyName), :global(.tok-variableName), :global(.tok-labelName) { color: #93c5fd; }
+  :global(.tok-function) { color: #60a5fa; }
+  :global(.tok-meta), :global(.tok-punctuation) { color: #a1a1aa; }
+
+  /* ---- Stage B: embeds, lightbox cursor ---- */
+  :global(.note-embed-filled) { display: block; margin: 1rem 0; padding: 0.5rem 1rem; border-left: 3px solid #22d3ee; border-radius: 0.375rem; background: rgba(34, 211, 238, 0.05); }
+  :global(.note-embed-title) { font-size: 0.75rem; margin-bottom: 0.25rem; opacity: 0.8; }
+  :global(.markdown-preview img), :global(.prose img) { cursor: zoom-in; }
 </style>

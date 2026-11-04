@@ -1,6 +1,7 @@
 <script lang="ts">
   import "../app.css";
   import LockScreen from '$lib/components/LockScreen.svelte';
+  import { createIdleWatcher, autoLockMinutes, type IdleWatcher } from '$lib/utils/idleLock';
   import NotificationCenter from '$lib/components/NotificationCenter.svelte';
   import AiChatPanel from '$lib/components/AiChatPanel.svelte';
   import Logo from '$lib/components/Logo.svelte';
@@ -151,6 +152,31 @@
     lockVault().catch((err) => console.warn('lock_vault failed:', err));
   }
 
+  // Auto-lock after inactivity (minutes in localStorage `camark_autolock_min`, default 10, 0 = off).
+  let idleWatcher: IdleWatcher | null = null;
+  $effect(() => {
+    if (!isVaultUnlocked) return;
+    const minutes = autoLockMinutes(
+      typeof localStorage !== 'undefined' ? localStorage.getItem('camark_autolock_min') : null
+    );
+    idleWatcher = createIdleWatcher(minutes * 60_000, () => handleLock());
+    let last = 0;
+    const poke = () => {
+      const now = Date.now();
+      if (now - last > 1000) {
+        last = now;
+        idleWatcher?.poke();
+      }
+    };
+    const events = ['mousemove', 'mousedown', 'keydown', 'wheel', 'touchstart'] as const;
+    for (const ev of events) window.addEventListener(ev, poke, { passive: true });
+    return () => {
+      for (const ev of events) window.removeEventListener(ev, poke);
+      idleWatcher?.stop();
+      idleWatcher = null;
+    };
+  });
+
   function toggleSidebar() {
     isCollapsed = !isCollapsed;
   }
@@ -183,7 +209,8 @@
       .catch(() => {});
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+      // The editor owns Ctrl+K (insert link) and calls preventDefault; only open the palette otherwise.
+      if (!e.defaultPrevented && (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
         openPalette('all');
       } else if (e.key === 'Escape') {

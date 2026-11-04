@@ -45,8 +45,11 @@ export function createLiveMarkdownPlugin() {
 
     const items: Array<{ from: number; to: number; deco: Decoration; isLine: boolean }> = [];
 
-    if (tree) {
+    // Only decorate what is on screen: keeps typing fast in very long documents.
+    if (tree) for (const vr of view.visibleRanges) {
       tree.iterate({
+        from: vr.from,
+        to: vr.to,
         enter: (node) => {
           if (node.from >= doc.length) return;
           const nodeTo = Math.min(node.to, doc.length);
