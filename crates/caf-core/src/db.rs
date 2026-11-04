@@ -36,21 +36,9 @@ pub fn open_encrypted(data_dir: &Path, passphrase: &str) -> Result<Connection, C
         Ok(conn)
     };
 
-    match try_open(&db_path) {
-        Ok(conn) => Ok(conn),
-        Err(e) => {
-            if db_path.exists() {
-                let backup_path =
-                    data_dir.join(format!("camark.db.bak.{}", chrono::Utc::now().timestamp()));
-                let _ = std::fs::rename(&db_path, &backup_path);
-                let _ = std::fs::remove_file(data_dir.join("camark.db-wal"));
-                let _ = std::fs::remove_file(data_dir.join("camark.db-shm"));
-                try_open(&db_path)
-            } else {
-                Err(e)
-            }
-        }
-    }
+    // H-02: no silent recovery. A wrong key / corrupted DB is reported as an error;
+    // we never rename the database, delete WAL/SHM, or create a fresh empty DB.
+    try_open(&db_path)
 }
 
 fn passphrase_literal(passphrase: &str) -> String {
@@ -180,5 +168,39 @@ mod tests {
 
         drop(conn);
         let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn h02_wrong_key_errors_without_touching_files() {
+        let dir = std::env::temp_dir().join(format!("caf_db_h02_{}", uuid::Uuid::new_v4()));
+        let key_a = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+        let key_b = "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210";
+        let conn = open_encrypted(&dir, key_a).expect("create");
+        conn.execute("INSERT INTO app_kv (key, value) VALUES ('k', 'v')", [])
+            .expect("insert");
+        drop(conn);
+
+        let db_file = crate::paths::db_path(&dir);
+        let before = std::fs::read(&db_file).expect("read db");
+
+        assert!(open_encrypted(&dir, key_b).is_err(), "wrong key must error");
+
+        let after = std::fs::read(&db_file).expect("db still there");
+        assert_eq!(before, after, "database bytes must be unchanged");
+        let baks = std::fs::read_dir(&dir)
+            .expect("read dir")
+            .filter_map(|e| e.ok())
+            .filter(|e| e.file_name().to_string_lossy().contains(".bak"))
+            .count();
+        assert_eq!(baks, 0, "no .bak file may be created");
+
+        // Original key still works and data is intact.
+        let conn = open_encrypted(&dir, key_a).expect("reopen with right key");
+        let v: String = conn
+            .query_row("SELECT value FROM app_kv WHERE key='k'", [], |r| r.get(0))
+            .expect("row");
+        assert_eq!(v, "v");
+        drop(conn);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
