@@ -29,8 +29,9 @@ sysinfo = "0.32"
 opt-level = "z"
 lto = "fat"
 codegen-units = 1
-panic = "unwind"
+panic = "abort"
 strip = true
+overflow-checks = false
 
 [profile.dev]
 panic = "unwind"

@@ -90,7 +90,20 @@ pub fn get_pro_status() -> Result<ProStatus, CafError> {
         )
         .unwrap_or_else(|_| "free".to_string());
 
-    let is_pro = plan == "pro" || license_key.is_some();
+    let lic_status = crate::license_client::get_license_status().unwrap_or_else(|_| {
+        crate::license_client::LicenseStatusInfo {
+            active: false,
+            valid: false,
+            license_key: None,
+            product_sku: None,
+            plan_tier: None,
+            device_id: None,
+            expires_at: None,
+            offline_capable: false,
+        }
+    });
+
+    let is_pro = lic_status.valid || plan == "pro" || license_key.is_some();
     let account = email.as_ref().map(|e| ProAccount {
         id: "usr_gcc".to_string(),
         email: e.clone(),
@@ -192,15 +205,15 @@ pub fn activate_license(key: &str) -> Result<ProStatus, CafError> {
             "INVALID_LICENSE_KEY: Minimal 8 karakter".into(),
         )));
     }
-    let conn = db::open()?;
-    let _ = conn.execute(
-        "INSERT OR REPLACE INTO app_kv (key, value) VALUES ('billing.license_key', ?1), ('billing.plan', 'pro')",
-        [clean],
-    );
+
+    // Call official GCC license backend activation
+    let _ = crate::license_client::activate_license(None, clean, None)?;
+
     get_pro_status()
 }
 
 pub fn logout() -> Result<(), CafError> {
+    let _ = crate::license_client::deactivate_license(None, None);
     let conn = db::open()?;
     let _ = conn.execute(
         "DELETE FROM app_kv WHERE key IN ('billing.email', 'billing.license_key', 'billing.plan')",
