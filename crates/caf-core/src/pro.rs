@@ -1,6 +1,5 @@
 //! Generic Pro Licensing & Account client for CAMark.
 
-use crate::db;
 use crate::error::{CafError, ProError};
 use ed25519_dalek::VerifyingKey;
 use serde::{Deserialize, Serialize};
@@ -66,61 +65,22 @@ pub fn public_key(version: u32) -> Option<VerifyingKey> {
     VerifyingKey::from_bytes(&bytes).ok()
 }
 
+/// Pro status, read from the local license file only. No network and no vault access, so it
+/// also works on the lock screen.
+///
+/// The single source of truth is [`crate::license_client::get_license_status`]: a license
+/// activated against GCC. Nothing stored in the vault's `app_kv` table grants Pro.
 pub fn get_pro_status() -> Result<ProStatus, CafError> {
-    let conn = db::open()?;
-    let license_key: Option<String> = conn
-        .query_row(
-            "SELECT value FROM app_kv WHERE key = 'billing.license_key'",
-            [],
-            |row| row.get(0),
-        )
-        .ok();
-    let email: Option<String> = conn
-        .query_row(
-            "SELECT value FROM app_kv WHERE key = 'billing.email'",
-            [],
-            |row| row.get(0),
-        )
-        .ok();
-    let plan: String = conn
-        .query_row(
-            "SELECT value FROM app_kv WHERE key = 'billing.plan'",
-            [],
-            |row| row.get(0),
-        )
-        .unwrap_or_else(|_| "free".to_string());
+    let lic_status = crate::license_client::get_license_status().unwrap_or_default();
+    let is_pro = lic_status.valid;
 
-    let lic_status = crate::license_client::get_license_status().unwrap_or_else(|_| {
-        crate::license_client::LicenseStatusInfo {
-            active: false,
-            valid: false,
-            license_key: None,
-            product_sku: None,
-            plan_tier: None,
-            device_id: None,
-            expires_at: None,
-            offline_capable: false,
-        }
+    let license = is_pro.then(|| ProLicense {
+        status: "active".to_string(),
+        tier: "pro".to_string(),
+        trial_ends_at: None,
+        current_period_end: lic_status.expires_at_unix,
+        entitled: true,
     });
-
-    let is_pro = lic_status.valid || plan == "pro" || license_key.is_some();
-    let account = email.as_ref().map(|e| ProAccount {
-        id: "usr_gcc".to_string(),
-        email: e.clone(),
-        name: e.split('@').next().unwrap_or("Pro User").to_string(),
-    });
-
-    let license = if is_pro {
-        Some(ProLicense {
-            status: "active".to_string(),
-            tier: "pro".to_string(),
-            trial_ends_at: None,
-            current_period_end: Some(chrono::Utc::now().timestamp() + 365 * 86400),
-            entitled: true,
-        })
-    } else {
-        None
-    };
 
     let entitlement = if is_pro {
         Entitlement {
@@ -142,12 +102,12 @@ pub fn get_pro_status() -> Result<ProStatus, CafError> {
     };
 
     Ok(ProStatus {
-        signed_in: account.is_some() || is_pro,
+        signed_in: is_pro,
         pending: false,
-        account,
+        account: None,
         license,
         entitlement,
-        last_sync_at: Some(chrono::Utc::now().timestamp()),
+        last_sync_at: None,
         key_configured: true,
         is_pro,
         plan: if is_pro {
@@ -155,12 +115,8 @@ pub fn get_pro_status() -> Result<ProStatus, CafError> {
         } else {
             "free".to_string()
         },
-        email,
-        expires_at: if is_pro {
-            Some("Lifetime / 2027-12-31".to_string())
-        } else {
-            None
-        },
+        email: None,
+        expires_at: if is_pro { lic_status.expires_at } else { None },
     })
 }
 
@@ -168,56 +124,70 @@ pub fn server_available() -> bool {
     true
 }
 
-pub fn login(email: &str, _password: &str) -> Result<ProAccount, CafError> {
-    if email.trim().is_empty() || !email.contains('@') {
-        return Err(CafError::Pro(ProError::Generic(
-            "INVALID_CREDENTIALS".into(),
-        )));
-    }
-    let conn = db::open()?;
-    let _ = conn.execute(
-        "INSERT OR REPLACE INTO app_kv (key, value) VALUES ('billing.email', ?1), ('billing.plan', 'pro')",
-        [email.trim()],
-    );
-    Ok(ProAccount {
-        id: "usr_gcc".to_string(),
-        email: email.trim().to_string(),
-        name: email.split('@').next().unwrap_or("Pro User").to_string(),
-    })
+/// GCC account sign-in is not built yet. This used to mark any email as Pro without checking
+/// anything; it now always fails and grants nothing. Pro is unlocked with a license key.
+pub fn login(_email: &str, _password: &str) -> Result<ProAccount, CafError> {
+    Err(CafError::Pro(ProError::Generic(
+        "ACCOUNT_LOGIN_UNAVAILABLE: Login akun belum tersedia. Aktifkan Pro dengan kunci lisensi."
+            .into(),
+    )))
 }
 
-pub fn register(email: &str, _password: &str, name: &str, _locale: &str) -> Result<(), CafError> {
-    if email.trim().is_empty() || !email.contains('@') {
-        return Err(CafError::Pro(ProError::Generic("INVALID_EMAIL".into())));
-    }
-    let conn = db::open()?;
-    let _ = conn.execute(
-        "INSERT OR REPLACE INTO app_kv (key, value) VALUES ('billing.email', ?1), ('billing.name', ?2), ('billing.plan', 'pro')",
-        [email.trim(), name.trim()],
-    );
-    Ok(())
+/// See [`login`]: account registration is not built yet and grants nothing.
+pub fn register(_email: &str, _password: &str, _name: &str, _locale: &str) -> Result<(), CafError> {
+    Err(CafError::Pro(ProError::Generic(
+        "ACCOUNT_LOGIN_UNAVAILABLE: Pendaftaran akun belum tersedia. Aktifkan Pro dengan kunci lisensi."
+            .into(),
+    )))
 }
 
+/// Activates a license key against GCC and returns the resulting status. The key's format,
+/// checksum and product are checked before anything is sent.
 pub fn activate_license(key: &str) -> Result<ProStatus, CafError> {
-    let clean = key.trim();
-    if clean.len() < 8 {
-        return Err(CafError::Pro(ProError::Generic(
-            "INVALID_LICENSE_KEY: Minimal 8 karakter".into(),
-        )));
-    }
-
-    // Call official GCC license backend activation
-    let _ = crate::license_client::activate_license(None, clean, None)?;
-
+    crate::license_client::activate_license(None, key, None)?;
     get_pro_status()
 }
 
 pub fn logout() -> Result<(), CafError> {
-    let _ = crate::license_client::deactivate_license(None, None);
-    let conn = db::open()?;
-    let _ = conn.execute(
-        "DELETE FROM app_kv WHERE key IN ('billing.email', 'billing.license_key', 'billing.plan')",
-        [],
-    );
+    crate::license_client::deactivate_license(None, None)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn login_and_register_grant_nothing() {
+        let _guard = crate::test_support::isolated_data_dir("pro_login_gate");
+        assert!(login("anyone@example.com", "whatever").is_err());
+        assert!(register("anyone@example.com", "whatever", "Anyone", "id").is_err());
+        let status = get_pro_status().expect("status");
+        assert!(!status.is_pro);
+        assert!(!status.signed_in);
+        assert_eq!(status.plan, "free");
+        assert!(status.entitlement.features.is_empty());
+    }
+
+    #[test]
+    fn legacy_billing_rows_grant_nothing() {
+        let _guard = crate::test_support::isolated_data_dir("pro_legacy_rows");
+        crate::vault::validate_password("test-password-p0-3").expect("unlock vault");
+        let conn = crate::db::open().expect("db");
+        conn.execute(
+            "INSERT OR REPLACE INTO app_kv (key, value) VALUES ('billing.plan', 'pro'), ('billing.license_key', '12345678'), ('billing.email', 'a@b.c')",
+            [],
+        )
+        .expect("seed legacy rows");
+        let status = get_pro_status().expect("status");
+        assert!(!status.is_pro);
+        assert!(status.license.is_none());
+    }
+
+    #[test]
+    fn activation_rejects_short_arbitrary_key() {
+        let _guard = crate::test_support::isolated_data_dir("pro_activate_gate");
+        assert!(activate_license("12345678").is_err());
+        assert!(!get_pro_status().expect("status").is_pro);
+    }
 }

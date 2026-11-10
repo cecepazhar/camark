@@ -150,7 +150,7 @@ pub async fn save_ai_settings(settings: ai::AiSettings) -> Result<(), CafError> 
 pub async fn test_ai_connection(
     base_url: String,
     model: String,
-    api_key: Option<String>
+    api_key: Option<String>,
 ) -> Result<String, CafError> {
     run_blocking(move || ai::test_connection(&base_url, &model, api_key.as_deref())).await
 }
@@ -327,10 +327,7 @@ pub async fn export_document_pdf(
 }
 
 #[tauri::command]
-pub async fn ai_copilot_action(
-    action: String,
-    selected_text: String,
-) -> Result<String, CafError> {
+pub async fn ai_copilot_action(action: String, selected_text: String) -> Result<String, CafError> {
     run_blocking(move || run_copilot_sync(&action, &selected_text)).await
 }
 
@@ -352,7 +349,12 @@ fn run_copilot_sync(action: &str, text: &str) -> Result<String, CafError> {
 // Pro & GCC Auth Commands
 #[tauri::command]
 pub async fn pro_status() -> Result<caf_core::pro::ProStatus, CafError> {
-    run_blocking(caf_core::pro::get_pro_status).await
+    run_blocking(|| {
+        // Once per app start: ask GCC whether the stored key is still good for this device.
+        caf_core::license_client::revalidate_once();
+        caf_core::pro::get_pro_status()
+    })
+    .await
 }
 
 #[tauri::command]
@@ -361,7 +363,10 @@ pub async fn pro_server_available() -> Result<bool, CafError> {
 }
 
 #[tauri::command]
-pub async fn pro_login(email: String, password: String) -> Result<caf_core::pro::ProAccount, CafError> {
+pub async fn pro_login(
+    email: String,
+    password: String,
+) -> Result<caf_core::pro::ProAccount, CafError> {
     run_blocking(move || caf_core::pro::login(&email, &password)).await
 }
 
@@ -376,7 +381,9 @@ pub async fn pro_register(
 }
 
 #[tauri::command]
-pub async fn pro_activate_license(license_key: String) -> Result<caf_core::pro::ProStatus, CafError> {
+pub async fn pro_activate_license(
+    license_key: String,
+) -> Result<caf_core::pro::ProStatus, CafError> {
     run_blocking(move || caf_core::pro::activate_license(&license_key)).await
 }
 
@@ -384,4 +391,3 @@ pub async fn pro_activate_license(license_key: String) -> Result<caf_core::pro::
 pub async fn pro_logout() -> Result<(), CafError> {
     run_blocking(caf_core::pro::logout).await
 }
-
