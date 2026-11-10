@@ -3,7 +3,7 @@
 use super::state::{EffectiveState, compute_effective_state};
 use super::store;
 use super::token::{EntitlementPayload, verify_and_parse_token};
-use crate::error::{CatermError, VaultError};
+use crate::error::{CafError, VaultError};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -68,7 +68,7 @@ impl GccBillingClient {
     }
 
     /// Step 1: Request OTP email
-    pub fn request_otp(&self, email: &str) -> Result<(), CatermError> {
+    pub fn request_otp(&self, email: &str) -> Result<(), CafError> {
         let url = format!(
             "{}/v1/auth/otp/request",
             self.config.gcc_base_url.trim_end_matches('/')
@@ -86,7 +86,7 @@ impl GccBillingClient {
             Ok(())
         } else {
             let body_str = resp.body_mut().read_to_string().unwrap_or_default();
-            Err(CatermError::Vault(VaultError::Generic(format!(
+            Err(CafError::Vault(VaultError::Generic(format!(
                 "Failed to request OTP (HTTP {}): {}",
                 resp.status(),
                 body_str
@@ -101,7 +101,7 @@ impl GccBillingClient {
         otp_code: &str,
         device_id: &str,
         device_name: &str,
-    ) -> Result<AuthResponse, CatermError> {
+    ) -> Result<AuthResponse, CafError> {
         let url = format!(
             "{}/v1/auth/otp/verify",
             self.config.gcc_base_url.trim_end_matches('/')
@@ -119,7 +119,7 @@ impl GccBillingClient {
             .map_err(|e| map_ureq_err("verify_otp", e))?;
 
         let auth: AuthResponse = resp.body_mut().read_json().map_err(|e| {
-            CatermError::Vault(VaultError::Generic(format!("invalid JSON response: {e}")))
+            CafError::Vault(VaultError::Generic(format!("invalid JSON response: {e}")))
         })?;
 
         store::save_device_info(device_id, &auth.device_token)?;
@@ -132,7 +132,7 @@ impl GccBillingClient {
         license_key: &str,
         device_id: &str,
         device_name: &str,
-    ) -> Result<AuthResponse, CatermError> {
+    ) -> Result<AuthResponse, CafError> {
         let url = format!(
             "{}/v1/licenses/activate",
             self.config.gcc_base_url.trim_end_matches('/')
@@ -149,7 +149,7 @@ impl GccBillingClient {
             .map_err(|e| map_ureq_err("activate_license", e))?;
 
         let auth: AuthResponse = resp.body_mut().read_json().map_err(|e| {
-            CatermError::Vault(VaultError::Generic(format!("invalid JSON response: {e}")))
+            CafError::Vault(VaultError::Generic(format!("invalid JSON response: {e}")))
         })?;
 
         store::save_device_info(device_id, &auth.device_token)?;
@@ -157,11 +157,11 @@ impl GccBillingClient {
     }
 
     /// Refresh and verify current signed entitlement token
-    pub fn refresh_entitlement(&self) -> Result<(EntitlementPayload, EffectiveState), CatermError> {
+    pub fn refresh_entitlement(&self) -> Result<(EntitlementPayload, EffectiveState), CafError> {
         let device_token = match store::get_device_token()? {
             Some(t) => t,
             None => {
-                return Err(CatermError::Vault(VaultError::Generic(
+                return Err(CafError::Vault(VaultError::Generic(
                     "No device token found. Please log in.".into(),
                 )));
             }
@@ -187,7 +187,7 @@ impl GccBillingClient {
         let body: TokenResp = resp
             .body_mut()
             .read_json()
-            .map_err(|e| CatermError::Vault(VaultError::Generic(format!("invalid JSON: {e}"))))?;
+            .map_err(|e| CafError::Vault(VaultError::Generic(format!("invalid JSON: {e}"))))?;
 
         let now_unix = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -212,7 +212,7 @@ impl GccBillingClient {
     }
 
     /// Fetch list of plans
-    pub fn get_plans(&self, currency: Option<&str>) -> Result<Vec<PlanItem>, CatermError> {
+    pub fn get_plans(&self, currency: Option<&str>) -> Result<Vec<PlanItem>, CafError> {
         let device_token = store::get_device_token()?.unwrap_or_default();
         let mut url = format!(
             "{}/v1/plans?product_code={}",
@@ -231,17 +231,17 @@ impl GccBillingClient {
         let plans: Vec<PlanItem> = resp
             .body_mut()
             .read_json()
-            .map_err(|e| CatermError::Vault(VaultError::Generic(format!("invalid JSON: {e}"))))?;
+            .map_err(|e| CafError::Vault(VaultError::Generic(format!("invalid JSON: {e}"))))?;
 
         Ok(plans)
     }
 
     /// Create Checkout URL
-    pub fn create_checkout(&self, plan_id: &str) -> Result<CheckoutResponse, CatermError> {
+    pub fn create_checkout(&self, plan_id: &str) -> Result<CheckoutResponse, CafError> {
         let device_token = match store::get_device_token()? {
             Some(t) => t,
             None => {
-                return Err(CatermError::Vault(VaultError::Generic(
+                return Err(CafError::Vault(VaultError::Generic(
                     "Device token required to checkout".into(),
                 )));
             }
@@ -261,13 +261,13 @@ impl GccBillingClient {
         let res: CheckoutResponse = resp
             .body_mut()
             .read_json()
-            .map_err(|e| CatermError::Vault(VaultError::Generic(format!("invalid JSON: {e}"))))?;
+            .map_err(|e| CafError::Vault(VaultError::Generic(format!("invalid JSON: {e}"))))?;
 
         Ok(res)
     }
 
     /// Poll Checkout Status
-    pub fn poll_checkout_status(&self, checkout_id: &str) -> Result<String, CatermError> {
+    pub fn poll_checkout_status(&self, checkout_id: &str) -> Result<String, CafError> {
         let device_token = store::get_device_token()?.unwrap_or_default();
         let url = format!(
             "{}/v1/checkout/{}",
@@ -283,13 +283,13 @@ impl GccBillingClient {
         let st: CheckoutStatusResponse = resp
             .body_mut()
             .read_json()
-            .map_err(|e| CatermError::Vault(VaultError::Generic(format!("invalid JSON: {e}"))))?;
+            .map_err(|e| CafError::Vault(VaultError::Generic(format!("invalid JSON: {e}"))))?;
 
         Ok(st.status)
     }
 
     /// List registered devices
-    pub fn list_devices(&self) -> Result<Vec<DeviceItem>, CatermError> {
+    pub fn list_devices(&self) -> Result<Vec<DeviceItem>, CafError> {
         let device_token = match store::get_device_token()? {
             Some(t) => t,
             None => return Ok(vec![]),
@@ -307,13 +307,13 @@ impl GccBillingClient {
         let items: Vec<DeviceItem> = resp
             .body_mut()
             .read_json()
-            .map_err(|e| CatermError::Vault(VaultError::Generic(format!("invalid JSON: {e}"))))?;
+            .map_err(|e| CafError::Vault(VaultError::Generic(format!("invalid JSON: {e}"))))?;
 
         Ok(items)
     }
 
     /// Deactivate device / Sign out
-    pub fn deactivate_device(&self, device_id: &str) -> Result<(), CatermError> {
+    pub fn deactivate_device(&self, device_id: &str) -> Result<(), CafError> {
         let device_token = match store::get_device_token()? {
             Some(t) => t,
             None => return Ok(()),
@@ -333,8 +333,8 @@ impl GccBillingClient {
     }
 }
 
-fn map_ureq_err(context: &str, err: ureq::Error) -> CatermError {
-    CatermError::Vault(VaultError::Generic(format!(
+fn map_ureq_err(context: &str, err: ureq::Error) -> CafError {
+    CafError::Vault(VaultError::Generic(format!(
         "GCC Billing Request Failed on {context}: {err}"
     )))
 }

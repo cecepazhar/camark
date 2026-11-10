@@ -1,46 +1,49 @@
--- 0001_baseline_schema.sql
-CREATE TABLE app_kv (
-    k TEXT PRIMARY KEY,
-    v TEXT NOT NULL
+-- 0001_baseline_schema.sql: True baseline schema for CAMark
+CREATE TABLE IF NOT EXISTS app_kv (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
-CREATE TABLE profiles (
+CREATE TABLE IF NOT EXISTS profiles (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
-    role TEXT NOT NULL,
+    role TEXT NOT NULL DEFAULT 'owner',
     avatar TEXT,
-    pin TEXT,
-    created_at INTEGER NOT NULL,
-    updated_at INTEGER NOT NULL,
-    deleted_at INTEGER,
+    pin_hash TEXT,
     rev INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    deleted_at TEXT,
     origin_device_id TEXT NOT NULL,
     owner_profile_id TEXT NOT NULL,
-    visibility TEXT NOT NULL CHECK (visibility IN ('shared','private_summary','private'))
+    visibility TEXT NOT NULL DEFAULT 'shared'
 );
 
-CREATE TABLE notes (
+CREATE TABLE IF NOT EXISTS notes (
     id TEXT PRIMARY KEY,
     title TEXT NOT NULL,
-    content TEXT,
-    tags TEXT,
-    created_at INTEGER NOT NULL,
-    updated_at INTEGER NOT NULL,
-    deleted_at INTEGER,
+    content TEXT NOT NULL DEFAULT '',
+    tags TEXT NOT NULL DEFAULT '[]',
     rev INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    deleted_at TEXT,
     origin_device_id TEXT NOT NULL,
     owner_profile_id TEXT NOT NULL,
-    visibility TEXT NOT NULL CHECK (visibility IN ('shared','private_summary','private'))
+    visibility TEXT NOT NULL DEFAULT 'shared'
 );
 
-CREATE TABLE change_log (
+CREATE TABLE IF NOT EXISTS change_log (
     seq INTEGER PRIMARY KEY AUTOINCREMENT,
-    entity TEXT NOT NULL,
+    entity_type TEXT NOT NULL,
     entity_id TEXT NOT NULL,
-    op TEXT NOT NULL CHECK (op IN ('insert','update','delete')),
     rev INTEGER NOT NULL,
-    at INTEGER NOT NULL,
-    profile_id TEXT,
-    device_id TEXT NOT NULL
+    action TEXT NOT NULL, -- 'create' | 'update' | 'delete'
+    payload TEXT,
+    synced_at TEXT,
+    timestamp TEXT NOT NULL DEFAULT (datetime('now')),
+    origin_device_id TEXT NOT NULL,
+    owner_profile_id TEXT NOT NULL,
+    visibility TEXT NOT NULL DEFAULT 'shared'
 );
-

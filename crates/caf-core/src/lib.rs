@@ -35,12 +35,13 @@ pub mod error;
 pub mod feedback;
 pub mod http;
 pub mod keyring;
+pub mod license_client;
+pub mod license_local;
 pub mod migrations;
 pub mod notes;
 pub mod paths;
 pub mod prefs;
 pub mod pro;
-pub mod license_local;
 pub mod profiles;
 pub mod rbac;
 pub mod secret;
@@ -48,7 +49,7 @@ pub mod session;
 pub mod vault;
 pub mod visibility;
 
-pub use error::{CafError, CatermError};
+pub use error::CafError;
 
 pub const CORE_VERSION: &str = env!("CARGO_PKG_VERSION");
 

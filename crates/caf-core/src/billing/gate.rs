@@ -3,7 +3,7 @@
 use super::state::{EffectiveState, EffectiveTier, compute_effective_state};
 use super::store;
 use super::token::verify_and_parse_token;
-use crate::error::{CatermError, ProError};
+use crate::error::{CafError, ProError};
 
 /// Checks if the current cached billing state grants access to a Pro feature.
 /// Returns Ok(EffectiveState) if Pro or ProGrace, otherwise returns Err(ProError::FeatureLocked).
@@ -11,7 +11,7 @@ pub fn require_pro(
     public_keys: &[(String, String)],
     product_code: &str,
     now_unix: u64,
-) -> Result<EffectiveState, CatermError> {
+) -> Result<EffectiveState, CafError> {
     let device_id = store::get_device_id()?.unwrap_or_else(|| "default_dev".to_string());
     let cached_token = store::get_cached_token()?;
     let last_verified_at = store::get_last_verified_at()?;
@@ -35,6 +35,6 @@ pub fn require_pro(
     {
         Ok(effective)
     } else {
-        Err(CatermError::Pro(ProError::FeatureLocked))
+        Err(CafError::Pro(ProError::FeatureLocked))
     }
 }

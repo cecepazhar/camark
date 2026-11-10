@@ -19,8 +19,9 @@ export const PAYPAL_URL = '';
 
 /**
  * Pricing page for the signed-in CAMark account: the landing page passes the account id on to
- * Lemon Squeezy as checkout custom data, so the subscription lands on this account whatever email
- * is typed at checkout. Only the opaque account id travels, never the email.
+ * the checkout gateway (Mayar for IDR, Creem / Ko-fi for USD) as checkout metadata, so the
+ * subscription lands on this account whatever email is typed at checkout. Only the opaque
+ * account id travels, never the email.
  */
 export function pricingUrl(accountId?: string | null): string {
   if (!accountId || !/^[0-9a-f-]{36}$/i.test(accountId)) return PRICING_URL;
