@@ -1,7 +1,5 @@
 <script lang="ts">
   import "../app.css";
-  import LockScreen from '$lib/components/LockScreen.svelte';
-  import { createIdleWatcher, autoLockMinutes, type IdleWatcher } from '$lib/utils/idleLock';
   import NotificationCenter from '$lib/components/NotificationCenter.svelte';
   import AiChatPanel from '$lib/components/AiChatPanel.svelte';
   import Logo from '$lib/components/Logo.svelte';
@@ -148,34 +146,11 @@
 
   function handleLock() {
     closePalette();
-    isVaultUnlocked = false;
-    lockVault().catch((err) => console.warn('lock_vault failed:', err));
+    // Do not lock main studio app; CAMark is a document studio, not a session terminal.
   }
 
-  // Auto-lock after inactivity (minutes in localStorage `camark_autolock_min`, default 10, 0 = off).
-  let idleWatcher: IdleWatcher | null = null;
-  $effect(() => {
-    if (!isVaultUnlocked) return;
-    const minutes = autoLockMinutes(
-      typeof localStorage !== 'undefined' ? localStorage.getItem('camark_autolock_min') : null
-    );
-    idleWatcher = createIdleWatcher(minutes * 60_000, () => handleLock());
-    let last = 0;
-    const poke = () => {
-      const now = Date.now();
-      if (now - last > 1000) {
-        last = now;
-        idleWatcher?.poke();
-      }
-    };
-    const events = ['mousemove', 'mousedown', 'keydown', 'wheel', 'touchstart'] as const;
-    for (const ev of events) window.addEventListener(ev, poke, { passive: true });
-    return () => {
-      for (const ev of events) window.removeEventListener(ev, poke);
-      idleWatcher?.stop();
-      idleWatcher = null;
-    };
-  });
+  // Auto-lock feature completely removed per architecture guidelines.
+  // CAMark must always stay open in the studio without kicking users out.
 
   function toggleSidebar() {
     isCollapsed = !isCollapsed;
@@ -244,15 +219,10 @@
 />
 
 <NotificationCenter />
-{#if isVaultUnlocked}
-  <CommandPalette onLock={handleLock} />
-{/if}
+<CommandPalette onLock={handleLock} />
 
-{#if !isVaultUnlocked}
-  <LockScreen onUnlocked={() => (isVaultUnlocked = true)} />
-{:else}
-  <!-- Pro Shell Frameless Layout Matching CATerm -->
-  <div class="flex flex-col h-screen w-screen overflow-hidden bg-neutral-100 dark:bg-[#0e0e0e] text-neutral-800 dark:text-neutral-300 font-sans transition-colors duration-150 pb-[env(safe-area-inset-bottom,0px)]">
+<!-- Pro Shell Frameless Layout Matching CATerm -->
+<div class="flex flex-col h-screen w-screen overflow-hidden bg-neutral-100 dark:bg-[#0e0e0e] text-neutral-800 dark:text-neutral-300 font-sans transition-colors duration-150 pb-[env(safe-area-inset-bottom,0px)]">
     <!-- Sleek Frameless Unified Header (h-12 / 48px) -->
     <header
       class="min-h-[3rem] h-[calc(3rem+env(safe-area-inset-top,0px))] pt-[env(safe-area-inset-top,0px)] flex items-center gap-1 md:gap-2 pl-2 pr-1 md:pl-3 shrink-0 select-none cursor-default border-b border-transparent"
@@ -697,4 +667,3 @@
       <AboutModal onClose={() => (showAboutModal = false)} />
     {/if}
   </div>
-{/if}

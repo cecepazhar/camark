@@ -7,16 +7,95 @@ use std::sync::Mutex;
 
 pub const SUPPORTED_TEXT_EXTENSIONS: &[&str] = &[
     // Markdown & Documentation
-    "md", "markdown", "mdown", "mkd", "txt", "text", "org", "rst", "adoc", "asciidoc",
+    "md",
+    "markdown",
+    "mdown",
+    "mkd",
+    "txt",
+    "text",
+    "org",
+    "rst",
+    "adoc",
+    "asciidoc",
+    // Binary / Office / Web Documents (renderable in preview viewer)
+    "pdf",
+    "docx",
+    "doc",
+    "pptx",
+    "xlsx",
+    "csv",
+    "tsv",
+    "html",
+    "htm",
     // Config & Data
-    "json", "jsonc", "json5", "yaml", "yml", "toml", "xml", "csv", "tsv", "ini", "conf", "cfg", "env", "properties",
+    "json",
+    "jsonc",
+    "json5",
+    "yaml",
+    "yml",
+    "toml",
+    "xml",
+    "ini",
+    "conf",
+    "cfg",
+    "env",
+    "properties",
     // Web
-    "html", "htm", "css", "scss", "sass", "less", "js", "mjs", "cjs", "jsx", "ts", "mts", "cts", "tsx", "svelte", "vue", "svg",
+    "html",
+    "htm",
+    "css",
+    "scss",
+    "sass",
+    "less",
+    "js",
+    "mjs",
+    "cjs",
+    "jsx",
+    "ts",
+    "mts",
+    "cts",
+    "tsx",
+    "svelte",
+    "vue",
+    "svg",
     // Programming Languages
-    "rs", "py", "pyw", "go", "sh", "bash", "zsh", "fish", "sql", "c", "cpp", "cc", "cxx", "h", "hpp", "hxx",
-    "java", "php", "rb", "lua", "r", "swift", "kt", "kts", "dart", "zig", "ex", "exs", "erl", "clj",
+    "rs",
+    "py",
+    "pyw",
+    "go",
+    "sh",
+    "bash",
+    "zsh",
+    "fish",
+    "sql",
+    "c",
+    "cpp",
+    "cc",
+    "cxx",
+    "h",
+    "hpp",
+    "hxx",
+    "java",
+    "php",
+    "rb",
+    "lua",
+    "r",
+    "swift",
+    "kt",
+    "kts",
+    "dart",
+    "zig",
+    "ex",
+    "exs",
+    "erl",
+    "clj",
     // Scripts & Build
-    "dockerfile", "makefile", "cmake", "diff", "patch", "log",
+    "dockerfile",
+    "makefile",
+    "cmake",
+    "diff",
+    "patch",
+    "log",
 ];
 
 pub fn is_supported_file(name: &str) -> bool {
@@ -83,7 +162,7 @@ pub async fn list_dir(dir_path: String) -> Result<Vec<FileNode>, String> {
         if !path.exists() || !path.is_dir() {
             return Err("Directory does not exist".to_string());
         }
-        read_dir_recursive(path, 3)
+        read_dir_recursive(path, 8)
     })
     .await
     .map_err(|e| e.to_string())?
@@ -92,6 +171,16 @@ pub async fn list_dir(dir_path: String) -> Result<Vec<FileNode>, String> {
 pub async fn read_file(file_path: String) -> Result<String, String> {
     tokio::task::spawn_blocking(move || {
         fs::read_to_string(&file_path).map_err(|e| format!("Failed to read file: {e}"))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+pub async fn read_file_base64(file_path: String) -> Result<String, String> {
+    tokio::task::spawn_blocking(move || {
+        let bytes = fs::read(&file_path).map_err(|e| format!("Failed to read binary file: {e}"))?;
+        use base64::Engine;
+        Ok(base64::engine::general_purpose::STANDARD.encode(bytes))
     })
     .await
     .map_err(|e| e.to_string())?

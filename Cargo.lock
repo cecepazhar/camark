@@ -691,6 +691,7 @@ name = "camark"
 version = "1.0.31"
 dependencies = [
  "async-trait",
+ "base64 0.22.1",
  "caf-core",
  "mimalloc",
  "parking_lot",

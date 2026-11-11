@@ -55,16 +55,6 @@
       }
     ];
 
-    if (onLock) {
-      actions.push({
-        id: 'action:lock',
-        group: 'actions',
-        label: t('profileMenu.lockScreen') || 'Kunci Brankas Vault',
-        hint: 'SQLCipher',
-        run: () => onLock()
-      });
-    }
-
     return [...pages, ...actions];
   });
 

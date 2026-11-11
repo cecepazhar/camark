@@ -142,6 +142,113 @@
   let selectedFileNode = $state<FileNode | null>(null);
   let fileClipboard = $state<{ mode: 'copy' | 'cut'; node: FileNode } | null>(null);
 
+  interface FolderBookmark {
+    id: string;
+    name: string;
+    path: string;
+  }
+
+  interface CustomWorkspace {
+    id: string;
+    name: string;
+    folders: string[];
+    favoritePaths: { path: string; name: string; is_dir: boolean }[];
+  }
+
+  interface FolderFormationTemplate {
+    id: string;
+    title: string;
+    description: string;
+    folders: string[];
+    isCustom?: boolean;
+  }
+
+  const baseFormations = $derived([
+    {
+      id: 'numeric_01_05',
+      title: t('editor.templateTitle'),
+      description: t('editor.templateDesc'),
+      folders: [
+        '01 - Planning & Requirement',
+        '02 - Research & Architecture',
+        '03 - Development & Sprints',
+        '04 - QA & Testing',
+        '05 - Release & Deployment'
+      ]
+    },
+    {
+      id: 'biz_startup',
+      title: t('editor.templateBizTitle'),
+      description: t('editor.templateBizDesc'),
+      folders: [
+        'Marketing',
+        'Product',
+        'Meeting & Minutes',
+        'Finance & Legal',
+        'Operations & Support'
+      ]
+    },
+    {
+      id: 'admin_kadin',
+      title: t('editor.templateAdminTitle'),
+      description: t('editor.templateAdminDesc'),
+      folders: [
+        'Administrasi Kadin Mukab',
+        'CV Team',
+        'Surat SP PKL',
+        'Undangan',
+        'Notulensi Rapat',
+        'Laporan Kegiatan',
+        'Arsip Dokumen'
+      ]
+    },
+    {
+      id: 'product_docs',
+      title: t('editor.templateDocsTitle'),
+      description: t('editor.templateDocsDesc'),
+      folders: [
+        '00 - Brief & Riset',
+        '01 - Spesifikasi PRD',
+        '02 - Arsitektur & Database',
+        '03 - API & Integrasi',
+        '04 - Rilis & Changelog'
+      ]
+    },
+    {
+      id: 'academic_writing',
+      title: t('editor.templateAcademicTitle'),
+      description: t('editor.templateAcademicDesc'),
+      folders: [
+        'Bab 1 - Pendahuluan',
+        'Bab 2 - Tinjauan Pustaka',
+        'Bab 3 - Metodologi',
+        'Bab 4 - Hasil & Pembahasan',
+        'Bab 5 - Kesimpulan',
+        'Lampiran & Data'
+      ]
+    }
+  ]);
+
+  // Workspace Multi-Root State
+  let customWorkspaces = $state<CustomWorkspace[]>([]);
+  let activeWorkspace = $state<CustomWorkspace | null>(null);
+  let multiRootFolders = $state<string[]>([]);
+  let multiRootTrees = $state<FileNode[]>([]);
+  let customTemplates = $state<FolderFormationTemplate[]>([]);
+
+  let showWorkspaceManagerModal = $state<boolean>(false);
+  let showSaveWorkspaceModal = $state<boolean>(false);
+  let workspaceModalName = $state<string>('');
+
+  let showCreateTemplateModal = $state<boolean>(false);
+  let newTemplateTitle = $state<string>('');
+  let newTemplateDesc = $state<string>('');
+  let newTemplateFoldersText = $state<string>('');
+
+  let folderBookmarks = $state<FolderBookmark[]>([]);
+  let showBookmarksDropdown = $state<boolean>(false);
+  let showFormationModal = $state<boolean>(false);
+
   let fileContextMenu = $state<{
     open: boolean;
     x: number;
@@ -195,6 +302,12 @@
   let isVaultUnlocked = $state<boolean>(false);
   let vaultModalOpen = $state<boolean>(false);
   let vaultPassword = $state<string>('');
+
+  // Split Comparison Pane State
+  let isCompareMode = $state<boolean>(false);
+  let compareTabId = $state<string | null>(null);
+  let compareContent = $state<string>('');
+  let compareTitle = $state<string>('');
   let vaultConfirmPassword = $state<string>('');
   let isVaultSetup = $state<boolean>(false);
   let vaultPasswordError = $state<string>('');
@@ -427,10 +540,22 @@ graph TD;
     );
   }
 
-  function isHtmlFile(pathOrTitle: string | null): boolean {
+  function isSvgFile(pathOrTitle: string | null): boolean {
     if (!pathOrTitle) return false;
     const lower = pathOrTitle.toLowerCase();
-    return lower.endsWith('.html') || lower.endsWith('.htm');
+    return lower.endsWith('.svg') || lower.endsWith('svg://');
+  }
+
+  function isPdfFile(pathOrTitle: string | null): boolean {
+    if (!pathOrTitle) return false;
+    const lower = pathOrTitle.toLowerCase();
+    return lower.endsWith('.pdf');
+  }
+
+  function isOfficeFile(pathOrTitle: string | null): boolean {
+    if (!pathOrTitle) return false;
+    const lower = pathOrTitle.toLowerCase();
+    return lower.endsWith('.docx') || lower.endsWith('.doc') || lower.endsWith('.xlsx') || lower.endsWith('.pptx');
   }
 
   function isSvgFile(pathOrTitle: string | null): boolean {
@@ -507,14 +632,27 @@ graph TD;
     }
   }
 
-  function toggleDir(path: string) {
+  async function toggleDir(path: string) {
     const next = new Set(expandedDirs);
     if (next.has(path)) {
       next.delete(path);
+      expandedDirs = next;
     } else {
       next.add(path);
+      expandedDirs = next;
+
+      // Lazy load children if not loaded or empty
+      const node = findNodeByPath(fileTree, path);
+      if (node && (!node.children || node.children.length === 0)) {
+        try {
+          const freshChildren = await invoke<FileNode[]>('workspace_list_directory', { dirPath: path });
+          node.children = freshChildren;
+          fileTree = [...fileTree]; // trigger reactivity
+        } catch (e) {
+          console.warn('Failed to lazy load dir:', path, e);
+        }
+      }
     }
-    expandedDirs = next;
   }
 
   // Synchronized Scrolling Logic
@@ -924,11 +1062,17 @@ graph TD;
       }
     }).catch((e) => console.warn('Failed to listen to open-file event:', e));
 
+    loadBookmarks();
+    const hasActiveWs = loadWorkspacesAndTemplates();
+
     if (page.url.searchParams.get('mode') === 'vault') {
       isVaultMode = true;
       loadVaultDocs();
-    } else {
-      loadDirectory(workspacePath);
+    } else if (!hasActiveWs) {
+      // First launch without active workspace: start with clean empty workspace arena!
+      fileTree = [];
+      workspacePath = '';
+      activeWorkspace = null;
     }
 
     updateDocumentContext({
@@ -1085,9 +1229,9 @@ graph TD;
     try {
       await writeNoteContent(m.sourcePath, lines.join('\n'));
       rebuildIndexFromCache();
-      showToast(`Tautan ditambahkan di ${m.sourceName}`, 'success');
+      showToast(t('editor.linkAdded', { name: m.sourceName }), 'success');
     } catch (e) {
-      showToast(`Gagal menulis ${m.sourceName}: ${e}`, 'error');
+      showToast(t('editor.linkWriteFailed', { name: m.sourceName, error: String(e) }), 'error');
     }
   }
 
@@ -1109,8 +1253,8 @@ graph TD;
         failed.push(path.split('/').pop() ?? path);
       }
     }
-    if (links > 0) showToast(`${links} tautan diperbarui di ${files} catatan`, 'success');
-    if (failed.length) showToast(`Gagal memperbarui: ${failed.join(', ')}`, 'error');
+    if (links > 0) showToast(t('editor.linksUpdated', { count: links, files }), 'success');
+    if (failed.length) showToast(t('editor.linksUpdateFailed', { failed: failed.join(', ') }), 'error');
   }
 
   async function createNoteFromSwitcher(name: string) {
@@ -1123,7 +1267,7 @@ graph TD;
       showSwitcher = false;
       await openFile({ name: `${clean}.md`, path, is_dir: false });
     } catch (e) {
-      showToast(`Gagal membuat catatan: ${e}`, 'error');
+      showToast(t('editor.noteCreateFailed', { error: String(e) }), 'error');
     }
   }
 
@@ -1159,10 +1303,10 @@ graph TD;
         'text/plain': new Blob([rawMarkdown], { type: 'text/plain' }),
       });
       await navigator.clipboard.write([item]);
-      showToast('Disalin sebagai rich text (tempel ke email / Word)', 'success');
+      showToast(t('editor.richTextCopied'), 'success');
     } catch {
       await navigator.clipboard.writeText(rawMarkdown);
-      showToast('Rich text tidak didukung di sini; Markdown disalin sebagai teks', 'info');
+      showToast(t('editor.richTextFallback'), 'info');
     }
   }
 
@@ -1366,10 +1510,308 @@ graph TD;
 
   async function loadDirectory(path: string) {
     workspacePath = path;
+    if (typeof localStorage !== 'undefined' && path) {
+      localStorage.setItem('camark_last_workspace_path', path);
+    }
     try {
       fileTree = await invoke<FileNode[]>('workspace_list_directory', { dirPath: path });
     } catch (e) {
       console.warn('Cannot list directory:', e);
+    }
+  }
+
+  function loadWorkspacesAndTemplates(): boolean {
+    if (typeof localStorage === 'undefined') return false;
+    try {
+      const rawWs = localStorage.getItem('camark_custom_workspaces');
+      if (rawWs) {
+        customWorkspaces = JSON.parse(rawWs);
+      }
+      const rawTmpl = localStorage.getItem('camark_custom_formations');
+      if (rawTmpl) {
+        customTemplates = JSON.parse(rawTmpl);
+      }
+      const rawActive = localStorage.getItem('camark_active_workspace_id');
+      if (rawActive && customWorkspaces.length > 0) {
+        const found = customWorkspaces.find((w) => w.id === rawActive);
+        if (found) {
+          openCustomWorkspace(found, false);
+          return true;
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to load workspaces:', e);
+    }
+    return false;
+  }
+
+  function saveCustomWorkspaces(list: CustomWorkspace[]) {
+    customWorkspaces = list;
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('camark_custom_workspaces', JSON.stringify(list));
+    }
+  }
+
+  function createNewEmptyWorkspace() {
+    activeWorkspace = {
+      id: `ws_${Date.now()}`,
+      name: 'Untitled Workspace',
+      folders: [],
+      favoritePaths: []
+    };
+    multiRootFolders = [];
+    multiRootTrees = [];
+    workspacePath = '';
+    showToast(t('editor.workspaceCreatedEmpty'), 'info');
+  }
+
+  async function addFolderToCurrentWorkspace() {
+    try {
+      const selected = await open({
+        directory: true,
+        multiple: false,
+        title: t('editor.selectFolderForWorkspace'),
+      });
+      if (selected && typeof selected === 'string') {
+        const clean = selected.replace(/\/+$/, '');
+        if (multiRootFolders.includes(clean)) {
+          showToast(t('editor.folderAlreadyInWorkspace'), 'info');
+          return;
+        }
+        multiRootFolders = [...multiRootFolders, clean];
+        if (!activeWorkspace) {
+          activeWorkspace = {
+            id: `ws_${Date.now()}`,
+            name: clean.split('/').filter(Boolean).pop() || 'Workspace',
+            folders: [clean],
+            favoritePaths: []
+          };
+        } else {
+          activeWorkspace.folders = multiRootFolders;
+        }
+        await refreshMultiRootTrees();
+        persistActiveWorkspace();
+        showToast(t('editor.folderAddedToWorkspace'), 'success');
+      }
+    } catch (e) {
+      console.warn('Failed to add folder to workspace:', e);
+    }
+  }
+
+  function removeFolderFromCurrentWorkspace(pathToRemove: string) {
+    multiRootFolders = multiRootFolders.filter((f) => f !== pathToRemove);
+    if (activeWorkspace) {
+      activeWorkspace.folders = multiRootFolders;
+    }
+    refreshMultiRootTrees();
+    persistActiveWorkspace();
+    showToast(t('editor.folderRemovedFromWorkspace'), 'info');
+  }
+
+  async function refreshMultiRootTrees() {
+    if (multiRootFolders.length === 0) {
+      multiRootTrees = [];
+      fileTree = [];
+      return;
+    }
+    const trees: FileNode[] = [];
+    for (const folder of multiRootFolders) {
+      try {
+        const children = await invoke<FileNode[]>('workspace_list_directory', { dirPath: folder });
+        const folderName = folder.split('/').filter(Boolean).pop() || folder;
+        trees.push({
+          name: folderName,
+          path: folder,
+          is_dir: true,
+          children,
+          size_bytes: undefined,
+          modified_at: undefined,
+        });
+      } catch (e) {
+        console.warn(`Failed to list root folder ${folder}:`, e);
+      }
+    }
+    multiRootTrees = trees;
+    fileTree = trees;
+  }
+
+  function persistActiveWorkspace() {
+    if (!activeWorkspace) return;
+    const idx = customWorkspaces.findIndex((w) => w.id === activeWorkspace!.id);
+    if (idx >= 0) {
+      customWorkspaces[idx] = { ...activeWorkspace };
+    } else {
+      customWorkspaces = [...customWorkspaces, { ...activeWorkspace }];
+    }
+    saveCustomWorkspaces(customWorkspaces);
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('camark_active_workspace_id', activeWorkspace.id);
+    }
+  }
+
+  function openCustomWorkspace(ws: CustomWorkspace, toast: boolean = true) {
+    activeWorkspace = { ...ws };
+    multiRootFolders = [...ws.folders];
+    expandedDirs = new Set(ws.folders);
+    refreshMultiRootTrees();
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('camark_active_workspace_id', ws.id);
+    }
+    if (toast) {
+      showToast(t('editor.workspaceLoaded', { name: ws.name }), 'success');
+    }
+  }
+
+  function deleteCustomWorkspace(wsId: string) {
+    customWorkspaces = customWorkspaces.filter((w) => w.id !== wsId);
+    saveCustomWorkspaces(customWorkspaces);
+    if (activeWorkspace?.id === wsId) {
+      activeWorkspace = null;
+      multiRootFolders = [];
+      multiRootTrees = [];
+      fileTree = [];
+      if (typeof localStorage !== 'undefined') {
+        localStorage.removeItem('camark_active_workspace_id');
+      }
+    }
+    showToast(t('editor.workspaceDeleted'), 'info');
+  }
+
+  function saveCurrentWorkspaceAs(name: string) {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    const wsId = activeWorkspace?.id || `ws_${Date.now()}`;
+    const ws: CustomWorkspace = {
+      id: wsId,
+      name: trimmed,
+      folders: [...multiRootFolders],
+      favoritePaths: activeWorkspace?.favoritePaths || []
+    };
+    activeWorkspace = ws;
+    persistActiveWorkspace();
+    showSaveWorkspaceModal = false;
+    showToast(t('editor.workspaceSaved', { name: trimmed }), 'success');
+  }
+
+  function pinNodeToFavorites(node: FileNode) {
+    if (!activeWorkspace) {
+      activeWorkspace = {
+        id: `ws_${Date.now()}`,
+        name: 'My Workspace',
+        folders: [...multiRootFolders],
+        favoritePaths: []
+      };
+    }
+    if (activeWorkspace.favoritePaths.some((f) => f.path === node.path)) {
+      showToast(t('editor.favoriteAlready', { name: node.name }), 'info');
+      return;
+    }
+    activeWorkspace.favoritePaths = [
+      ...activeWorkspace.favoritePaths,
+      { path: node.path, name: node.name, is_dir: node.is_dir }
+    ];
+    persistActiveWorkspace();
+    showToast(t('editor.favoritePinned', { name: node.name }), 'success');
+  }
+
+  function unpinFavorite(path: string) {
+    if (!activeWorkspace) return;
+    activeWorkspace.favoritePaths = activeWorkspace.favoritePaths.filter((f) => f.path !== path);
+    persistActiveWorkspace();
+    showToast(t('editor.favoriteUnpinned'), 'info');
+  }
+
+  function saveNewCustomTemplate() {
+    if (!pro.isPro) {
+      showToast(t('editor.proExclusiveNotice'), 'error');
+      return;
+    }
+    const title = newTemplateTitle.trim();
+    if (!title) return;
+    const folders = newTemplateFoldersText
+      .split('\n')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (folders.length === 0) {
+      showToast(t('editor.templateNeedFolders'), 'error');
+      return;
+    }
+    const tmpl: FolderFormationTemplate = {
+      id: `tmpl_${Date.now()}`,
+      title,
+      description: newTemplateDesc.trim() || 'Custom user formation',
+      folders,
+      isCustom: true
+    };
+    customTemplates = [...customTemplates, tmpl];
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('camark_custom_formations', JSON.stringify(customTemplates));
+    }
+    showCreateTemplateModal = false;
+    newTemplateTitle = '';
+    newTemplateDesc = '';
+    newTemplateFoldersText = '';
+    showToast(t('editor.folderTemplateSaved', { name: title }), 'success');
+  }
+  function loadBookmarks() {
+    if (typeof localStorage === 'undefined') return;
+    try {
+      const raw = localStorage.getItem('camark_folder_bookmarks');
+      if (raw) {
+        folderBookmarks = JSON.parse(raw);
+      }
+    } catch (e) {
+      console.warn('Failed to parse bookmarks:', e);
+    }
+  }
+
+  function saveBookmarks(list: FolderBookmark[]) {
+    folderBookmarks = list;
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('camark_folder_bookmarks', JSON.stringify(list));
+    }
+  }
+
+  function bookmarkCurrentFolder() {
+    if (!workspacePath || workspacePath === '.') return;
+    const clean = workspacePath.replace(/\/+$/, '');
+    const folderName = clean.split('/').filter(Boolean).pop() || clean;
+    if (folderBookmarks.some((b) => b.path === clean)) {
+      showToast(t('editor.folderAlreadyBookmarked', { name: folderName }), 'info');
+      return;
+    }
+    const updated = [
+      ...folderBookmarks,
+      {
+        id: `bm_${Date.now()}`,
+        name: folderName,
+        path: clean,
+      },
+    ];
+    saveBookmarks(updated);
+    showToast(t('editor.folderBookmarkedSuccess', { name: folderName }), 'success');
+  }
+
+  function removeBookmark(id: string, e?: MouseEvent) {
+    e?.stopPropagation();
+    const updated = folderBookmarks.filter((b) => b.id !== id);
+    saveBookmarks(updated);
+    showToast(t('editor.bookmarkRemoved'), 'info');
+  }
+
+  async function applyFolderFormation(template: FolderFormationTemplate) {
+    if (!workspacePath) return;
+    try {
+      const baseDir = workspacePath === '.' ? '' : workspacePath.replace(/\/+$/, '') + '/';
+      for (const f of template.folders) {
+        const fullDir = `${baseDir}${f}`;
+        await invoke('workspace_create_directory', { dirPath: fullDir });
+      }
+      await loadDirectory(workspacePath);
+      showFormationModal = false;
+      showToast(t('editor.templateApplied'), 'success');
+    } catch (e) {
+      showToast(String(e), 'error');
     }
   }
 
@@ -1550,6 +1992,39 @@ graph TD;
     setDirty(tab.id, false);
   }
 }
+
+  async function toggleSplitCompare(tabId?: string) {
+    const targetTabId = tabId ?? compareTabId ?? tabs.find((t) => t.id !== activeTabId && t.id !== getActiveTab()?.id)?.id;
+    if (isCompareMode && !tabId) {
+      // Turn off compare mode entirely
+      isCompareMode = false;
+      compareTabId = null;
+      compareContent = '';
+      compareTitle = '';
+      return;
+    }
+    const targetTab = tabs.find((t) => t.id === targetTabId);
+    if (!targetTab || targetTab.id === activeTabId) {
+      showToast('Pilih dokumen kedua yang berbeda untuk dibandingkan di Split View.', 'info');
+      return;
+    }
+    isCompareMode = true;
+    compareTabId = targetTab.id;
+    compareTitle = targetTab.title;
+    try {
+      if (targetTab.isVault) {
+        const docs = await invoke<any[]>('vault_list_documents', { callerProfileId: 'default' });
+        const doc = docs.find((d) => String(d.id) === String(targetTab.id.replace('vault://', '')));
+        compareContent = doc?.content || '';
+      } else {
+        compareContent = await invoke<string>('workspace_read_file', { filePath: targetTab.path });
+      }
+      setViewMode('split');
+    } catch (e) {
+      console.warn('Failed to load comparison document:', e);
+      showToast(`Gagal memuat dokumen perbandingan: ${e}`, 'error');
+    }
+  }
 
   async function handleSelectTab(id: string) {
     setActiveTab(id);
@@ -2698,35 +3173,178 @@ graph TD;
       </div>
 
       {#if !isVaultMode}
-        <!-- Breadcrumb / Active Folder Bar with Parent and Open Folder actions -->
-        <div class="px-2.5 py-1.5 border-b border-neutral-200 dark:border-neutral-800/80 bg-neutral-100/50 dark:bg-neutral-900/40 flex items-center justify-between gap-1 text-[11px] font-mono">
-          <div class="flex items-center gap-1.5 min-w-0 flex-1" title={workspacePath}>
+        <!-- Multi-Folder Workspace Header (Zed / VS Code style) -->
+        <div class="px-2.5 py-1.5 border-b border-neutral-200 dark:border-neutral-800/80 bg-neutral-100/70 dark:bg-neutral-900/60 flex items-center justify-between gap-1 text-[11px] font-mono relative">
+          <div class="flex items-center gap-1.5 min-w-0 flex-1">
+            <!-- Workspace Switcher Dropdown Trigger -->
             <button
-              onclick={navigateUp}
-              disabled={workspacePath === '.' || workspacePath === '/'}
-              class="p-1 rounded hover:bg-neutral-200 dark:hover:bg-neutral-800 text-neutral-600 dark:text-neutral-300 disabled:opacity-30 disabled:pointer-events-none transition-colors shrink-0"
-              title={t('editor.parentDirUp')}
-              aria-label={t('editor.parentDir')}
+              type="button"
+              onclick={() => (showBookmarksDropdown = !showBookmarksDropdown)}
+              class="truncate text-neutral-800 dark:text-neutral-200 font-semibold hover:text-cyan-600 dark:hover:text-cyan-400 flex items-center gap-1 max-w-[130px] sm:max-w-[150px] transition-colors"
+              title="Ganti atau kelola workspace"
             >
-              <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18" />
+              <span class="text-xs">⚡</span>
+              <span class="truncate">{activeWorkspace ? activeWorkspace.name : (workspacePath === '.' ? './ (Default)' : workspacePath.split('/').filter(Boolean).pop() || '/')}</span>
+              <svg class="w-2.5 h-2.5 shrink-0 opacity-60" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
               </svg>
             </button>
-            <span class="truncate text-neutral-700 dark:text-neutral-300 font-medium">
-              {workspacePath === '.' ? './ (Workspace)' : workspacePath.split('/').filter(Boolean).pop() || '/'}
-            </span>
           </div>
 
-          <button
-            onclick={openWorkspaceFolder}
-            class="px-1.5 py-0.5 rounded text-[10px] bg-neutral-200/70 hover:bg-neutral-300/80 dark:bg-neutral-800 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-200 transition-colors shrink-0 flex items-center gap-1"
-            title={t('editor.selectFolderOther')}
-          >
-            <svg class="w-3 h-3 text-cyan-600 dark:text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 19a2 2 0 01-2-2V7a2 2 0 012-2h4l2 2h4a2 2 0 012 2v1M5 19h14a2 2 0 002-2v-5a2 2 0 00-2-2H9a2 2 0 00-2 2v5a2 2 0 01-2 2z" />
-            </svg>
-            <span>{t('editor.openFolder')}</span>
-          </button>
+          <div class="flex items-center gap-1 shrink-0">
+            <!-- Add Folder to Workspace (+) -->
+            <button
+              type="button"
+              onclick={addFolderToCurrentWorkspace}
+              class="p-1 rounded text-neutral-500 hover:text-cyan-600 dark:text-neutral-400 dark:hover:text-cyan-400 hover:bg-neutral-200 dark:hover:bg-neutral-800 transition-colors"
+              title="{t('editor.addFolderToWorkspace')}"
+            >
+              <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+              </svg>
+            </button>
+
+            <!-- Save Workspace Icon -->
+            <button
+              type="button"
+              onclick={() => {
+                workspaceModalName = activeWorkspace?.name || 'My Project Workspace';
+                showSaveWorkspaceModal = true;
+              }}
+              class="p-1 rounded text-neutral-500 hover:text-amber-500 dark:text-neutral-400 dark:hover:text-amber-400 hover:bg-neutral-200 dark:hover:bg-neutral-800 transition-colors"
+              title="{t('editor.saveWorkspace')}"
+            >
+              <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+              </svg>
+            </button>
+
+            <!-- Workspace Manager / Cog -->
+            <button
+              type="button"
+              onclick={() => (showWorkspaceManagerModal = true)}
+              class="p-1 rounded text-neutral-500 hover:text-neutral-800 dark:text-neutral-400 dark:hover:text-white hover:bg-neutral-200 dark:hover:bg-neutral-800 transition-colors"
+              title="{t('editor.manageWorkspaces')}"
+            >
+              <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+            </button>
+          </div>
+
+          <!-- Workspace Switcher & Presets Dropdown Menu -->
+          {#if showBookmarksDropdown}
+            <!-- Backdrop -->
+            <div
+              class="fixed inset-0 z-40"
+              onclick={() => (showBookmarksDropdown = false)}
+              role="presentation"
+            ></div>
+
+            <div class="absolute left-2 top-8 z-50 w-72 bg-white dark:bg-[#1a1a1f] border border-neutral-200 dark:border-neutral-800 rounded-xl shadow-2xl p-2 text-xs font-sans text-neutral-800 dark:text-neutral-200 animate-in fade-in zoom-in-95 duration-100">
+              <div class="px-2 py-1 text-[10px] font-semibold tracking-wider text-neutral-400 uppercase flex items-center justify-between">
+                <span>📁 {t('editor.workspaces')}</span>
+                <span class="text-[9px] font-mono opacity-60">{customWorkspaces.length} {t('editor.itemsCount', { count: customWorkspaces.length })}</span>
+              </div>
+
+              <!-- List of Saved Workspaces -->
+              <div class="max-h-44 overflow-y-auto space-y-0.5 my-1">
+                {#if customWorkspaces.length === 0}
+                  <div class="px-3 py-2 text-[11px] text-neutral-400 dark:text-neutral-500 italic text-center">
+                    Belum ada workspace tersimpan.
+                  </div>
+                {:else}
+                  {#each customWorkspaces as ws (ws.id)}
+                    <div class="flex items-center justify-between group rounded-lg hover:bg-neutral-100 dark:hover:bg-neutral-800/70 px-2 py-1.5 transition-colors">
+                      <button
+                        type="button"
+                        onclick={() => {
+                          openCustomWorkspace(ws);
+                          showBookmarksDropdown = false;
+                        }}
+                        class="flex items-center gap-2 truncate text-left flex-1"
+                        title={ws.name}
+                      >
+                        <span class="text-cyan-500 shrink-0">⚡</span>
+                        <div class="truncate">
+                          <div class="font-medium text-xs truncate {activeWorkspace?.id === ws.id ? 'text-cyan-600 dark:text-cyan-400 font-bold' : ''}">{ws.name}</div>
+                          <div class="text-[10px] text-neutral-400 truncate font-mono">{ws.folders.length} folder ({ws.folders.map(f => f.split('/').pop()).join(', ')})</div>
+                        </div>
+                      </button>
+                      <button
+                        type="button"
+                        onclick={(e) => {
+                          e.stopPropagation();
+                          deleteCustomWorkspace(ws.id);
+                        }}
+                        class="opacity-0 group-hover:opacity-100 p-1 text-neutral-400 hover:text-red-500 rounded transition-all shrink-0"
+                        title={t('editor.deleteWorkspace')}
+                      >
+                        <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </div>
+                  {/each}
+                {/if}
+              </div>
+
+              <div class="border-t border-neutral-100 dark:border-neutral-800 pt-1 mt-1 space-y-0.5">
+                <!-- New Workspace (Empty) -->
+                <button
+                  type="button"
+                  onclick={() => {
+                    createNewEmptyWorkspace();
+                    showBookmarksDropdown = false;
+                  }}
+                  class="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-left text-[11px] text-cyan-600 dark:text-cyan-400 hover:bg-cyan-500/10 transition-colors"
+                >
+                  <span>✨</span>
+                  <span>{t('editor.newWorkspace')} ({t('editor.emptyWorkspacePrompt').replace('.', '').trim()})</span>
+                </button>
+
+                <!-- Add Folder to Workspace -->
+                <button
+                  type="button"
+                  onclick={() => {
+                    showBookmarksDropdown = false;
+                    addFolderToCurrentWorkspace();
+                  }}
+                  class="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-left text-[11px] text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 transition-colors"
+                >
+                  <span>➕</span>
+                  <span>{t('editor.addFolderToWorkspace')}</span>
+                </button>
+
+                <!-- Open Single Folder -->
+                <button
+                  type="button"
+                  onclick={() => {
+                    showBookmarksDropdown = false;
+                    openWorkspaceFolder();
+                  }}
+                  class="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-left text-[11px] text-neutral-600 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors"
+                >
+                  <span>📂</span>
+                  <span>{t('editor.openSingleFolder', { default: 'Buka Satu Folder Biasa (Single-root)' })}</span>
+                </button>
+
+                <!-- Formasi Template Kustom -->
+                <button
+                  type="button"
+                  onclick={() => {
+                    showBookmarksDropdown = false;
+                    showFormationModal = true;
+                  }}
+                  class="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-left text-[11px] text-purple-600 dark:text-purple-400 hover:bg-purple-500/10 transition-colors"
+                >
+                  <span>🏗️</span>
+                  <span>{t('editor.createFolderTemplate')}</span>
+                </button>
+              </div>
+            </div>
+          {/if}
         </div>
       {/if}
 
@@ -2768,26 +3386,81 @@ graph TD;
             </div>
           {/if}
         {:else}
-          {#each fileTree as node (node.path)}
-            <FileTreeNode
-              {node}
-              depth={0}
-              {currentFilePath}
-              selectedNodePath={selectedFileNode?.path}
-              {expandedDirs}
-              onOpenFile={openFile}
-              onToggleDir={toggleDir}
-              onSelectNode={handleSelectNode}
-              onContextMenu={openFileContextMenu}
-              onQuickNewFile={handleQuickNewFile}
-              onQuickNewFolder={handleQuickNewFolder}
-              onDropOnDir={moveNodeToDir}
-            />
-          {/each}
-          {#if fileTree.length === 0}
-            <div class="p-4 text-center text-neutral-400 dark:text-neutral-500 text-[11px]">
-              {t('editor.noFilesFound')}
+          <!-- Pinned Favorites Section -->
+          {#if activeWorkspace?.favoritePaths && activeWorkspace.favoritePaths.length > 0}
+            <div class="mb-2 pb-1.5 border-b border-neutral-200 dark:border-neutral-800/80">
+              <div class="px-2 py-0.5 text-[10px] font-semibold text-amber-500 uppercase flex items-center justify-between">
+                <span>⭐ {t('editor.favoriteItems')}</span>
+                <span class="text-[9px] opacity-60 font-mono">{activeWorkspace.favoritePaths.length}</span>
+              </div>
+              <div class="space-y-0.5 mt-1">
+                {#each activeWorkspace.favoritePaths as fav (fav.path)}
+                  <div class="flex items-center justify-between group rounded hover:bg-neutral-200/50 dark:hover:bg-neutral-800/50 px-2 py-1 transition-colors">
+                    <button
+                      type="button"
+                      onclick={() => {
+                        if (fav.is_dir) {
+                          loadDirectory(fav.path);
+                        } else {
+                          openFile({ name: fav.name, path: fav.path, is_dir: false });
+                        }
+                      }}
+                      class="flex items-center gap-1.5 truncate text-left flex-1"
+                      title={fav.path}
+                    >
+                      <span class="text-xs">{fav.is_dir ? '📂' : '📄'}</span>
+                      <span class="truncate text-neutral-700 dark:text-neutral-300 font-medium {currentFilePath === fav.path ? 'text-cyan-500 font-bold' : ''}">{fav.name}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onclick={() => unpinFavorite(fav.path)}
+                      class="opacity-0 group-hover:opacity-100 p-0.5 text-neutral-400 hover:text-red-500 rounded transition-all shrink-0"
+                      title="{t('editor.unpinFavorite')}"
+                    >
+                      <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                {/each}
+              </div>
             </div>
+          {/if}
+
+          <!-- Empty Workspace State (Zed / VS Code style) -->
+          {#if fileTree.length === 0}
+            <div class="p-4 flex flex-col items-center justify-center text-center text-neutral-400 dark:text-neutral-500 my-auto">
+              <span class="text-2xl mb-2">📁</span>
+              <p class="text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">{t('editor.emptyWorkspacePrompt')}</p>
+              <p class="text-[11px] leading-relaxed mb-4 max-w-[200px] text-neutral-500 dark:text-neutral-400">
+                {t('editor.emptyWorkspaceHint')}
+              </p>
+              <button
+                type="button"
+                onclick={addFolderToCurrentWorkspace}
+                class="px-3 py-1.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-medium text-xs flex items-center gap-1.5 shadow-md shadow-cyan-600/20 transition-all cursor-pointer"
+              >
+                <span>➕</span>
+                <span>{t('editor.addFolderToWorkspace')}</span>
+              </button>
+            </div>
+          {:else}
+            {#each fileTree as node (node.path)}
+              <FileTreeNode
+                {node}
+                depth={0}
+                {currentFilePath}
+                selectedNodePath={selectedFileNode?.path}
+                {expandedDirs}
+                onOpenFile={openFile}
+                onToggleDir={toggleDir}
+                onSelectNode={handleSelectNode}
+                onContextMenu={openFileContextMenu}
+                onQuickNewFile={handleQuickNewFile}
+                onQuickNewFolder={handleQuickNewFolder}
+                onDropOnDir={moveNodeToDir}
+              />
+            {/each}
           {/if}
         {/if}
       </div>
@@ -2813,6 +3486,25 @@ graph TD;
         }}
         onFormatDocumentTable={handleFormatDocumentTable}
       />
+
+      <!-- Split Comparison Toggle Button (Compared side by side) -->
+      <div class="px-3 py-1 border-b border-neutral-200 dark:border-neutral-800/80 flex items-center justify-between bg-neutral-50 dark:bg-[#0f141c] text-[10px] font-mono shrink-0">
+        <button
+          type="button"
+          onclick={() => toggleSplitCompare()}
+          class="flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-mono text-neutral-500 dark:text-neutral-400 hover:text-cyan-600 dark:hover:text-cyan-400 hover:bg-cyan-500/10 transition-colors cursor-pointer"
+          title="Bandingkan dengan tab dokumen lain di samping (Split View Compare)"
+        >
+          <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17V7m0 10h11m-11-10h11M4 5h16a1 1 0 011 1v12a1 1 0 01-1 1H4a1 1 0 01-1-1V6a1 1 0 011-1z" />
+          </svg>
+          <span>{isCompareMode ? 'Tutup Perbandingan Split' : 'Split & Bandingkan 2 Dokumen'}</span>
+        </button>
+
+        {#if isCompareMode}
+          <span class="text-neutral-400 truncate max-w-[200px]">vs. {compareTitle}</span>
+        {/if}
+      </div>
 
       <!-- CodeMirror Editor Viewport (no overflow-auto or padding that would push gutters out of alignment) -->
       <div
@@ -2881,10 +3573,64 @@ graph TD;
             </div>
           </div>
         </div>
+      {:else if isPdfFile(currentFilePath)}
+        <div class="w-full h-full flex flex-col bg-white dark:bg-[#111111] overflow-hidden">
+          <div class="h-8 px-3 bg-neutral-100 dark:bg-[#161616] border-b border-neutral-200 dark:border-neutral-800 flex items-center justify-between text-xs text-neutral-500 font-mono select-none shrink-0">
+            <span class="flex items-center gap-1.5 text-rose-500 dark:text-rose-400 font-semibold text-[11px]">
+              <span class="w-2 h-2 rounded-full bg-rose-500 animate-pulse"></span>
+              <span>PDF RENDERER</span>
+            </span>
+            <span class="text-[10px] text-neutral-400">{currentDocTitle || currentFilePath}</span>
+          </div>
+          <iframe
+            title="PDF Preview"
+            src={`data:application/pdf;filename=${encodeURIComponent(currentDocTitle || 'document.pdf')},<object data="data:application/pdf;base64,${compareContent ? btoa(compareContent) : ''}"></object>`}
+            class="w-full flex-1 border-0 bg-white"
+          ></iframe>
+        </div>
+      {:else if isOfficeFile(currentFilePath)}
+        <div class="w-full h-full flex flex-col items-center justify-center min-h-[400px]">
+          <div class="p-6 rounded-2xl bg-neutral-100 dark:bg-neutral-900/90 border border-neutral-200 dark:border-neutral-800 shadow-xl max-w-xl w-full text-center space-y-3">
+            <span class="text-4xl">📄</span>
+            <h3 class="text-sm font-bold text-white dark:text-neutral-200">Office Document</h3>
+            <p class="text-xs text-neutral-400 font-mono">{currentDocTitle}</p>
+            <p class="text-[11px] text-neutral-500 leading-relaxed">
+              Pratinjau dokumen Office ({currentDocTitle?.split('.').pop()?.toUpperCase()}) tersedia sebagai teks mentah di panel editor kiri.
+            </p>
+            <button
+              type="button"
+              class="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold transition-colors"
+              onclick={() => handleRevealFile(currentFilePath)}
+            >
+              Buka di Aplikasi Native
+            </button>
+          </div>
+        </div>
       {:else}
         {@html renderedHtml}
       {/if}
-    </section>
+
+      <!-- Split Comparison Pane (Second document side-by-side) -->
+      {#if isCompareMode && compareTabId}
+        <div class="border-l border-neutral-200 dark:border-neutral-800 flex-1 min-w-[320px] flex flex-col bg-neutral-50 dark:bg-[#0f141c]">
+          <div class="h-8 px-3 bg-neutral-100 dark:bg-[#161616] border-b border-neutral-200 dark:border-neutral-800 flex items-center justify-between text-xs font-mono text-neutral-500 shrink-0 select-none">
+            <span class="truncate">📄 Perbandingan (Compare): {compareTitle}</span>
+            <button
+              type="button"
+              onclick={() => toggleSplitCompare()}
+              class="text-neutral-400 hover:text-rose-500 transition-colors shrink-0"
+              title="Tutup Perbandingan"
+            >
+              <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+          <div class="flex-1 overflow-y-auto p-4 font-mono text-xs text-neutral-700 dark:text-neutral-300 whitespace-pre-wrap select-text">
+            {compareContent}
+          </div>
+        </div>
+      {/if}
 
     {#if viewMode === 'preview'}
       <div class="absolute top-4 right-6 z-20 no-print">
@@ -3243,6 +3989,42 @@ graph TD;
 
         <div class="h-px bg-neutral-800 my-1"></div>
 
+        <!-- Pin to Favorites Action -->
+        <button
+          type="button"
+          role="menuitem"
+          onclick={() => {
+            closeFileContextMenu();
+            pinNodeToFavorites(node);
+          }}
+          class="w-full px-3 py-1.5 flex items-center justify-between text-left hover:bg-amber-500/15 hover:text-amber-400 text-amber-300 transition-colors"
+        >
+          <span class="flex items-center gap-2">
+            <span>⭐</span>
+            <span>{t('editor.pinToFavorites')}</span>
+          </span>
+        </button>
+
+        {#if node.is_dir && multiRootFolders.includes(node.path)}
+          <!-- Remove Root from Workspace -->
+          <button
+            type="button"
+            role="menuitem"
+            onclick={() => {
+              closeFileContextMenu();
+              removeFolderFromCurrentWorkspace(node.path);
+            }}
+            class="w-full px-3 py-1.5 flex items-center justify-between text-left hover:bg-rose-500/15 hover:text-rose-400 text-rose-300 transition-colors"
+          >
+            <span class="flex items-center gap-2">
+              <span>✕</span>
+              <span>{t('editor.removeFolderFromWorkspace')}</span>
+            </span>
+          </button>
+        {/if}
+
+        <div class="h-px bg-neutral-800 my-1"></div>
+
         <button
           type="button"
           role="menuitem"
@@ -3437,6 +4219,368 @@ graph TD;
               class="{fileModal.type === 'folder' ? '!bg-amber-600 hover:!bg-amber-500' : '!bg-cyan-600 hover:!bg-cyan-500'} text-white"
             >
               {t('editor.createBtn')}
+            </Button>
+          </div>
+        </form>
+      </div>
+    </div>
+  {/if}
+
+  <!-- Formation Modal (Updated with Custom Builder Button) -->
+  {#if showFormationModal}
+    <div
+      role="presentation"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-xs p-4 select-none animate-in fade-in duration-100"
+      onclick={(e) => {
+        if (e.target === e.currentTarget) showFormationModal = false;
+      }}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        class="w-full max-w-lg rounded-2xl bg-neutral-900 border border-neutral-700/80 p-5 shadow-2xl shadow-black text-neutral-200"
+      >
+        <div class="flex items-center justify-between gap-2 mb-1">
+          <div class="flex items-center gap-2 text-purple-400">
+            <span class="text-lg">🏗️</span>
+            <h2 class="text-sm font-bold text-white tracking-wide">{t('editor.formationModalTitle')}</h2>
+          </div>
+          <Button
+            type="button"
+            variant="primary"
+            size="sm"
+            onclick={() => {
+              showFormationModal = false;
+              showCreateTemplateModal = true;
+            }}
+            class="!bg-purple-600 hover:!bg-purple-500 text-white text-xs flex items-center gap-1"
+          >
+            <span>⭐</span>
+            <span>+ {t('editor.createCustomTemplate')}</span>
+          </Button>
+        </div>
+        <p class="text-xs text-neutral-400 mb-4">
+          {t('editor.formationModalDesc')} <span class="font-mono text-cyan-400">{workspacePath || 'Root Workspace'}</span>
+        </p>
+
+        <div class="space-y-3 max-h-80 overflow-y-auto pr-1">
+          {#each [...baseFormations, ...customTemplates] as fmt (fmt.id)}
+            <div class="p-3.5 rounded-xl border border-neutral-800 bg-neutral-950/70 hover:border-purple-500/50 transition-all flex flex-col gap-2">
+              <div class="flex items-start justify-between gap-2">
+                <div>
+                  <h3 class="text-xs font-bold text-white flex items-center gap-1.5">
+                    <span>📁</span>
+                    <span>{fmt.title}</span>
+                    {#if ('isCustom' in fmt && fmt.isCustom) || fmt.id.startsWith('tmpl_')}
+                      <span class="text-[9px] px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 font-bold border border-amber-500/30">CUSTOM</span>
+                    {/if}
+                  </h3>
+                  <p class="text-[11px] text-neutral-400 mt-0.5">{fmt.description}</p>
+                </div>
+                <Button
+                  type="button"
+                  variant="primary"
+                  size="sm"
+                  class="!bg-purple-600 hover:!bg-purple-500 text-white shrink-0 text-xs"
+                  onclick={() => applyFolderFormation(fmt)}
+                >
+                  {t('editor.applyFormation')}
+                </Button>
+              </div>
+
+              <!-- Badges of folders to be created -->
+              <div class="flex flex-wrap gap-1.5 pt-1 border-t border-neutral-800/80">
+                {#each fmt.folders as f}
+                  <span class="px-2 py-0.5 rounded text-[10px] font-mono bg-neutral-800/80 text-neutral-300 border border-neutral-700/50">
+                    📂 {f}
+                  </span>
+                {/each}
+              </div>
+            </div>
+          {/each}
+        </div>
+
+        <div class="flex items-center justify-end gap-2 pt-4 border-t border-neutral-800 mt-4">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onclick={() => (showFormationModal = false)}
+            class="text-neutral-400 hover:text-white"
+          >
+            {t('editor.closeModal')}
+          </Button>
+        </div>
+      </div>
+    </div>
+  {/if}
+
+  <!-- Save Workspace Modal -->
+  {#if showSaveWorkspaceModal}
+    <div
+      role="presentation"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-xs p-4 select-none animate-in fade-in duration-100"
+      onclick={(e) => {
+        if (e.target === e.currentTarget) showSaveWorkspaceModal = false;
+      }}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        class="w-full max-w-sm rounded-2xl bg-neutral-900 border border-neutral-700/80 p-5 shadow-2xl shadow-black text-neutral-200"
+      >
+        <div class="flex items-center gap-2 mb-2 text-cyan-400">
+          <span class="text-lg">💾</span>
+          <h2 class="text-sm font-bold text-white tracking-wide">{t('editor.saveWorkspace')}</h2>
+        </div>
+        <p class="text-xs text-neutral-400 mb-3">
+          {t('editor.saveWorkspaceHint', { count: multiRootFolders.length })}
+        </p>
+
+        <form
+          onsubmit={(e) => {
+            e.preventDefault();
+            saveCurrentWorkspaceAs(workspaceModalName);
+          }}
+          class="space-y-3"
+        >
+          <div>
+            <label for="ws_name" class="block text-[11px] text-neutral-400 mb-1">{t('editor.workspaceNamePrompt')}</label>
+            <Input
+              id="ws_name"
+              type="text"
+              bind:value={workspaceModalName}
+              placeholder={t('editor.exampleWorkspaceName')}
+              class="w-full font-sans text-xs"
+              autofocus
+            />
+          </div>
+
+          <div class="flex items-center justify-end gap-2 pt-2">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onclick={() => (showSaveWorkspaceModal = false)}
+              class="text-neutral-400 hover:text-white"
+            >
+              {t('editor.closeModal')}
+            </Button>
+            <Button
+              type="submit"
+              variant="primary"
+              size="sm"
+              class="!bg-cyan-600 hover:!bg-cyan-500 text-white"
+            >
+              {t('editor.saveWorkspace')}
+            </Button>
+          </div>
+        </form>
+      </div>
+    </div>
+  {/if}
+
+  <!-- Manage Workspaces Modal -->
+  {#if showWorkspaceManagerModal}
+    <div
+      role="presentation"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-xs p-4 select-none animate-in fade-in duration-100"
+      onclick={(e) => {
+        if (e.target === e.currentTarget) showWorkspaceManagerModal = false;
+      }}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        class="w-full max-w-lg rounded-2xl bg-neutral-900 border border-neutral-700/80 p-5 shadow-2xl shadow-black text-neutral-200"
+      >
+        <div class="flex items-center justify-between gap-2 mb-2">
+          <div class="flex items-center gap-2 text-cyan-400">
+            <span class="text-lg">⚙️</span>
+            <h2 class="text-sm font-bold text-white tracking-wide">{t('editor.manageWorkspaces')}</h2>
+          </div>
+          <Button
+            type="button"
+            variant="primary"
+            size="sm"
+            onclick={() => {
+              showWorkspaceManagerModal = false;
+              createNewEmptyWorkspace();
+            }}
+            class="!bg-cyan-600 hover:!bg-cyan-500 text-white text-xs"
+          >
+            + {t('editor.newWorkspace')}
+          </Button>
+        </div>
+
+        <p class="text-xs text-neutral-400 mb-4">
+          {t('editor.manageWorkspacesHint')}
+        </p>
+
+        <div class="space-y-2 max-h-72 overflow-y-auto pr-1">
+          {#if customWorkspaces.length === 0}
+            <div class="p-6 text-center text-neutral-500 italic text-xs bg-neutral-950/50 rounded-xl border border-neutral-800">
+              {t('editor.noBookmarksNotice').replace('Buka folder lalu klik ikon bookmark 🔖', 'Klik "+ Workspace Baru" untuk memulai.')}
+            </div>
+          {:else}
+            {#each customWorkspaces as ws (ws.id)}
+              <div class="p-3 rounded-xl border {activeWorkspace?.id === ws.id ? 'border-cyan-500/60 bg-cyan-950/20' : 'border-neutral-800 bg-neutral-950/60'} flex items-start justify-between gap-3">
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center gap-2">
+                    <span class="text-base">📁</span>
+                    <span class="font-bold text-xs text-white truncate">{ws.name}</span>
+                    {#if activeWorkspace?.id === ws.id}
+                      <span class="text-[9px] px-1.5 py-0.2 rounded bg-cyan-500/20 text-cyan-400 font-bold border border-cyan-500/30">AKTIF</span>
+                    {/if}
+                  </div>
+                  <div class="text-[11px] text-neutral-400 mt-1 font-mono">
+                    {ws.folders.length} {t('editor.projectFolders')}
+                  </div>
+                  <div class="flex flex-wrap gap-1 mt-1">
+                    {#each ws.folders as f}
+                      <span class="px-1.5 py-0.5 rounded text-[10px] font-mono bg-neutral-800 text-neutral-300 truncate max-w-[200px]" title={f}>
+                        {f.split('/').pop()}
+                      </span>
+                    {/each}
+                    {#if ws.folders.length === 0}
+                      <span class="text-[10px] text-neutral-500 italic">(Workspace kosong)</span>
+                    {/if}
+                  </div>
+                </div>
+
+                <div class="flex items-center gap-1.5 shrink-0">
+                  {#if activeWorkspace?.id !== ws.id}
+                    <Button
+                      type="button"
+                      variant="primary"
+                      size="sm"
+                      class="!bg-neutral-800 hover:!bg-neutral-700 text-white text-xs"
+                      onclick={() => {
+                        openCustomWorkspace(ws);
+                        showWorkspaceManagerModal = false;
+                      }}
+                    >
+                      Buka
+                    </Button>
+                  {/if}
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    class="text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 text-xs"
+                    onclick={() => deleteCustomWorkspace(ws.id)}
+                  >
+                    Hapus
+                  </Button>
+                </div>
+              </div>
+            {/each}
+          {/if}
+        </div>
+
+        <div class="flex items-center justify-end gap-2 pt-4 border-t border-neutral-800 mt-4">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onclick={() => (showWorkspaceManagerModal = false)}
+            class="text-neutral-400 hover:text-white"
+          >
+            {t('editor.closeModal')}
+          </Button>
+        </div>
+      </div>
+    </div>
+  {/if}
+
+  <!-- Create Custom Template Modal (Pro Exclusive) -->
+  {#if showCreateTemplateModal}
+    <div
+      role="presentation"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-xs p-4 select-none animate-in fade-in duration-100"
+      onclick={(e) => {
+        if (e.target === e.currentTarget) showCreateTemplateModal = false;
+      }}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        class="w-full max-w-md rounded-2xl bg-neutral-900 border border-neutral-700/80 p-5 shadow-2xl shadow-black text-neutral-200"
+      >
+        <div class="flex items-center gap-2 mb-2 text-purple-400">
+          <span class="text-lg">⭐</span>
+          <h2 class="text-sm font-bold text-white tracking-wide">{t('editor.customTemplatesPro')}</h2>
+          <span class="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 font-bold border border-amber-500/30">PRO</span>
+        </div>
+
+        {#if !pro.isPro}
+          <div class="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-300 text-xs mb-3">
+            {t('editor.proExclusiveNotice')}
+          </div>
+        {/if}
+
+        <form
+          onsubmit={(e) => {
+            e.preventDefault();
+            saveNewCustomTemplate();
+          }}
+          class="space-y-3"
+        >
+          <div>
+            <label for="tmpl_title" class="block text-[11px] text-neutral-400 mb-1">{t('editor.templateNamePrompt')}</label>
+            <Input
+              id="tmpl_title"
+              type="text"
+              bind:value={newTemplateTitle}
+              placeholder="Contoh: Divisi Media & Marketing"
+              class="w-full font-sans text-xs"
+              disabled={!pro.isPro}
+              autofocus
+            />
+          </div>
+
+          <div>
+            <label for="tmpl_desc" class="block text-[11px] text-neutral-400 mb-1">{t('editor.templateDescPrompt')}</label>
+            <Input
+              id="tmpl_desc"
+              type="text"
+              bind:value={newTemplateDesc}
+              placeholder="Contoh: Formasi folder tim konten, ads & copy"
+              class="w-full font-sans text-xs"
+              disabled={!pro.isPro}
+            />
+          </div>
+
+          <div>
+            <label for="tmpl_folders" class="block text-[11px] text-neutral-400 mb-1">{t('editor.templateFoldersPrompt')}</label>
+            <textarea
+              id="tmpl_folders"
+              bind:value={newTemplateFoldersText}
+              rows="5"
+              placeholder="01 - Riset&#10;Marketing&#10;Product&#10;Meeting & Notulensi"
+              class="w-full p-2.5 rounded-xl border border-neutral-700 bg-neutral-950 font-mono text-xs text-neutral-200 focus:outline-none focus:border-purple-500"
+              disabled={!pro.isPro}
+            ></textarea>
+          </div>
+
+          <div class="flex items-center justify-end gap-2 pt-2">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onclick={() => (showCreateTemplateModal = false)}
+              class="text-neutral-400 hover:text-white"
+            >
+              {t('editor.closeModal')}
+            </Button>
+            <Button
+              type="submit"
+              variant="primary"
+              size="sm"
+              class="!bg-purple-600 hover:!bg-purple-500 text-white disabled:opacity-40"
+              disabled={!pro.isPro}
+            >
+              Simpan Template
             </Button>
           </div>
         </form>

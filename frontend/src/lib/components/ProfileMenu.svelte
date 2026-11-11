@@ -90,13 +90,6 @@
       </div>
 
       <div class="border-t border-neutral-100 dark:border-neutral-800 py-1">
-        <button type="button" role="menuitem" onclick={() => run(onLock)} class={itemClass}>
-          <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2" stroke-width="1.8" /><path stroke-linecap="round" stroke-width="1.8" d="M8 11V7a4 4 0 018 0v4M12 15v2" /></svg>
-          {t('profileMenu.lockScreen')}
-        </button>
-      </div>
-
-      <div class="border-t border-neutral-100 dark:border-neutral-800 py-1">
         <button
           type="button"
           role="menuitem"

@@ -17,7 +17,10 @@ pub const PRODUCT_CODE: &str = "CAMARK";
 pub const ACCEPTED_KEY_PRODUCTS: &[&str] = &["MK", "AA"];
 
 const LICENSE_APP: &str = "camark";
-const HTTP_TIMEOUT: Duration = Duration::from_secs(10);
+/// Activation is something the user asked for and waits on; GCC can take several seconds.
+const ACTIVATE_TIMEOUT: Duration = Duration::from_secs(45);
+/// Background checks must not hold the app up for long.
+const CHECK_TIMEOUT: Duration = Duration::from_secs(10);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ActivationResult {
@@ -60,16 +63,35 @@ pub enum ServerVerdict {
     Unknown,
 }
 
+/// GCC's response wrapper. `error` is a plain string on some routes and `{"message": ...}`
+/// on others, so it is kept as raw JSON and read with [`GccEnvelope::error_message`].
 #[derive(Deserialize)]
 struct GccEnvelope<T> {
+    #[serde(default)]
     success: bool,
+    #[serde(default = "Option::default")]
     data: Option<T>,
-    error: Option<String>,
+    #[serde(default)]
+    error: Option<serde_json::Value>,
+}
+
+impl<T> GccEnvelope<T> {
+    fn error_message(&self) -> Option<String> {
+        match self.error.as_ref()? {
+            serde_json::Value::String(s) => Some(s.clone()),
+            serde_json::Value::Object(o) => o
+                .get("message")
+                .and_then(|m| m.as_str())
+                .map(str::to_string),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Deserialize)]
 struct ValidateData {
-    valid: bool,
+    #[serde(default)]
+    valid: Option<bool>,
 }
 
 /// A timestamp GCC may send either as a unix number or as text (RFC 3339 or digits).
@@ -119,14 +141,12 @@ struct ActivateData {
     activation_token: String,
 }
 
-#[derive(Deserialize)]
-struct VerifyData {
-    valid: bool,
-}
-
-fn agent() -> ureq::Agent {
+/// HTTP client for GCC. Error statuses are returned as normal responses, because GCC puts
+/// the reason in the body and the caller needs to read it.
+fn agent(timeout: Duration) -> ureq::Agent {
     let config = ureq::Agent::config_builder()
-        .timeout_global(Some(HTTP_TIMEOUT))
+        .timeout_global(Some(timeout))
+        .http_status_as_error(false)
         .build();
     ureq::Agent::new_with_config(config)
 }
@@ -171,27 +191,15 @@ fn checked_key(key: &str) -> Result<(String, license_local::ParsedKey), CafError
 
 /// GET /api/v1/licenses/validate/:key
 pub fn validate_license_key(gcc_url: Option<&str>, key: &str) -> Result<bool, CafError> {
-    let Ok((clean_key, _)) = checked_key(key) else {
+    if checked_key(key).is_err() {
         return Ok(false);
-    };
-    let base = resolve_gcc_url(gcc_url);
-    let url = format!("{base}/api/v1/licenses/validate/{clean_key}");
-
-    let resp = agent()
-        .get(&url)
-        .call()
-        .map_err(|e| CafError::Io(IoError::Generic(format!("GCC validate network error: {e}"))))?;
-
-    let envelope: GccEnvelope<ValidateData> = resp.into_body().read_json().map_err(|e| {
-        CafError::Io(IoError::Generic(format!(
-            "Failed to parse GCC response: {e}"
-        )))
-    })?;
-
-    if let Some(data) = envelope.data {
-        Ok(data.valid)
-    } else {
-        Ok(false)
+    }
+    match check_license_online(gcc_url, key) {
+        ServerVerdict::Valid => Ok(true),
+        ServerVerdict::Rejected => Ok(false),
+        ServerVerdict::Unknown => Err(CafError::Io(IoError::Generic(
+            "GCC validate network error: no usable answer from the license server".into(),
+        ))),
     }
 }
 
@@ -222,35 +230,36 @@ pub fn activate_license(
         "platform": std::env::consts::OS
     });
 
-    let resp = agent()
+    let resp = agent(ACTIVATE_TIMEOUT)
         .post(&url)
         .send_json(&payload)
-        .map_err(|e| match e {
-            ureq::Error::StatusCode(404) => {
-                pro_err("LICENSE_NOT_FOUND: Kunci tidak terdaftar di GCC")
-            }
-            ureq::Error::StatusCode(409) => {
-                pro_err("DEVICE_LIMIT_EXCEEDED: Jumlah device melebihi limit lisensi")
-            }
-            ureq::Error::StatusCode(403 | 410) => {
-                pro_err("LICENSE_EXPIRED_OR_INACTIVE: Lisensi kedaluwarsa atau nonaktif")
-            }
-            other => CafError::Io(IoError::Generic(format!(
-                "GCC activation network error: {other}"
-            ))),
+        .map_err(|e| {
+            CafError::Io(IoError::Generic(format!(
+                "GCC activation network error: {e}"
+            )))
         })?;
+    let status = resp.status().as_u16();
 
     let envelope: GccEnvelope<ActivateData> = resp.into_body().read_json().map_err(|e| {
         CafError::Io(IoError::Generic(format!(
-            "Failed to parse activation JSON: {e}"
+            "Failed to parse activation response (HTTP {status}): {e}"
         )))
     })?;
 
-    if !envelope.success {
-        let err_msg = envelope
-            .error
-            .unwrap_or_else(|| "Activation rejected by GCC".into());
-        return Err(pro_err(err_msg));
+    if !(200..300).contains(&status) || !envelope.success {
+        let detail = envelope
+            .error_message()
+            .unwrap_or_else(|| format!("HTTP {status}"));
+        return Err(pro_err(match status {
+            404 => format!("LICENSE_NOT_FOUND: Kunci tidak terdaftar di GCC ({detail})"),
+            409 => {
+                format!("DEVICE_LIMIT_EXCEEDED: Jumlah device melebihi limit lisensi ({detail})")
+            }
+            403 | 410 => {
+                format!("LICENSE_EXPIRED_OR_INACTIVE: Lisensi kedaluwarsa atau nonaktif ({detail})")
+            }
+            _ => format!("ACTIVATION_REJECTED: {detail}"),
+        }));
     }
 
     let data = envelope
@@ -317,38 +326,40 @@ pub fn activate_license(
     })
 }
 
-/// Asks GCC whether `key` is valid on this device (POST /api/v1/licenses/verify).
+/// Asks GCC whether `key` is a registered, usable license (GET /api/v1/licenses/validate/:key).
 ///
-/// Only a clear answer counts as [`ServerVerdict::Rejected`]: a response body saying so, or
-/// HTTP 403/404/410. Timeouts, other statuses and unreadable bodies are `Unknown`, so an
+/// `/licenses/verify` would also check the device, but it requires an authenticated account,
+/// so the public validate route is used. Only a clear answer counts as
+/// [`ServerVerdict::Rejected`]: GCC's own JSON saying the key is not valid, with HTTP 2xx,
+/// 400, 403, 404 or 410. Timeouts, other statuses and unreadable bodies are `Unknown`, so an
 /// outage on the server never takes Pro away from a paying customer.
 pub fn check_license_online(gcc_url: Option<&str>, key: &str) -> ServerVerdict {
-    let Ok(device_id) = crate::paths::device_id() else {
+    let base = resolve_gcc_url(gcc_url);
+    let clean_key = license_local::normalize_key(key);
+    let url = format!("{base}/api/v1/licenses/validate/{clean_key}");
+
+    let Ok(resp) = agent(CHECK_TIMEOUT).get(&url).call() else {
         return ServerVerdict::Unknown;
     };
-    let base = resolve_gcc_url(gcc_url);
-    let url = format!("{base}/api/v1/licenses/verify");
-    let payload = serde_json::json!({
-        "license_key": license_local::normalize_key(key),
-        "device_id": device_id
-    });
+    let status = resp.status().as_u16();
+    let Ok(envelope) = resp.into_body().read_json::<GccEnvelope<ValidateData>>() else {
+        return ServerVerdict::Unknown;
+    };
+    verdict_from(status, &envelope)
+}
 
-    match agent().post(&url).send_json(&payload) {
-        Ok(resp) => match resp.into_body().read_json::<GccEnvelope<VerifyData>>() {
-            Ok(envelope) => match envelope.data {
-                Some(data) if data.valid => ServerVerdict::Valid,
-                Some(_) => ServerVerdict::Rejected,
-                None if !envelope.success => ServerVerdict::Rejected,
-                None => ServerVerdict::Unknown,
-            },
-            Err(_) => ServerVerdict::Unknown,
-        },
-        Err(ureq::Error::StatusCode(403 | 404 | 410)) => ServerVerdict::Rejected,
-        Err(_) => ServerVerdict::Unknown,
+fn verdict_from(status: u16, envelope: &GccEnvelope<ValidateData>) -> ServerVerdict {
+    let says_invalid = envelope.data.as_ref().and_then(|d| d.valid) == Some(false);
+    match status {
+        200..300 if envelope.success && !says_invalid => ServerVerdict::Valid,
+        200..300 | 400 | 403 | 404 | 410 if says_invalid || !envelope.success => {
+            ServerVerdict::Rejected
+        }
+        _ => ServerVerdict::Unknown,
     }
 }
 
-/// POST /api/v1/licenses/verify
+/// Checks a key (the stored one when `key` is `None`) with GCC. See [`check_license_online`].
 pub fn verify_license(gcc_url: Option<&str>, key: Option<&str>) -> Result<bool, CafError> {
     let resolved_key = match key {
         Some(k) if !k.trim().is_empty() => k.trim().to_string(),
@@ -426,7 +437,7 @@ pub fn deactivate_license(gcc_url: Option<&str>, key: Option<&str>) -> Result<bo
             "device_id": device_id
         });
 
-        let _ = agent().post(&url).send_json(&payload);
+        let _ = agent(CHECK_TIMEOUT).post(&url).send_json(&payload);
     }
 
     // Clear local storage regardless of network result
@@ -522,6 +533,46 @@ mod tests {
         assert_eq!(digits.to_unix(), Some(1_800_000_000));
         let junk: Timestamp = serde_json::from_str("\"soon\"").expect("junk");
         assert_eq!(junk.to_unix(), None);
+    }
+
+    fn envelope(json: &str) -> GccEnvelope<ValidateData> {
+        serde_json::from_str(json).expect("envelope")
+    }
+
+    #[test]
+    fn verdict_reads_gcc_answers() {
+        // Shapes observed from gcc.fathforce.com.
+        let not_found = envelope(r#"{"error":{"message":"license not found"},"success":false}"#);
+        assert_eq!(
+            not_found.error_message().as_deref(),
+            Some("license not found")
+        );
+        assert_eq!(verdict_from(400, &not_found), ServerVerdict::Rejected);
+        assert_eq!(verdict_from(404, &not_found), ServerVerdict::Rejected);
+
+        assert_eq!(
+            verdict_from(200, &envelope(r#"{"success":true}"#)),
+            ServerVerdict::Valid
+        );
+        assert_eq!(
+            verdict_from(200, &envelope(r#"{"success":true,"data":{"valid":true}}"#)),
+            ServerVerdict::Valid
+        );
+        assert_eq!(
+            verdict_from(200, &envelope(r#"{"success":true,"data":{"valid":false}}"#)),
+            ServerVerdict::Rejected
+        );
+
+        // Not an answer about the key: auth wall, rate limit, server error.
+        let auth = envelope(r#"{"error":"authentication required","status":401}"#);
+        assert_eq!(
+            auth.error_message().as_deref(),
+            Some("authentication required")
+        );
+        assert_eq!(verdict_from(401, &auth), ServerVerdict::Unknown);
+        assert_eq!(verdict_from(429, &not_found), ServerVerdict::Unknown);
+        assert_eq!(verdict_from(500, &not_found), ServerVerdict::Unknown);
+        assert_eq!(verdict_from(503, &envelope("{}")), ServerVerdict::Unknown);
     }
 
     #[test]
