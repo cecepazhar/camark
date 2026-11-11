@@ -249,6 +249,11 @@ pub async fn workspace_read_file(file_path: String) -> Result<String, String> {
 }
 
 #[tauri::command]
+pub async fn workspace_read_file_base64(file_path: String) -> Result<String, String> {
+    fs_workspace::read_file_base64(file_path).await
+}
+
+#[tauri::command]
 pub async fn workspace_write_file(file_path: String, content: String) -> Result<(), String> {
     fs_workspace::write_file(file_path, content).await
 }

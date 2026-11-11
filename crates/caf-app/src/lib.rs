@@ -243,6 +243,7 @@ pub fn run_with_start(_start: std::time::Instant) {
             commands::set_performance_prefs,
             commands::workspace_list_directory,
             commands::workspace_read_file,
+            commands::workspace_read_file_base64,
             commands::workspace_write_file,
             commands::workspace_create_file,
             commands::workspace_create_directory,
