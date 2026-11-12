@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-workspace-read-file-base64"
+description = "Enables the workspace_read_file_base64 command without any pre-configured scope."
+commands.allow = ["workspace_read_file_base64"]
+
+[[permission]]
+identifier = "deny-workspace-read-file-base64"
+description = "Denies the workspace_read_file_base64 command without any pre-configured scope."
+commands.deny = ["workspace_read_file_base64"]

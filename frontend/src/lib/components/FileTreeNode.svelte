@@ -37,8 +37,7 @@
 
   let isExpanded = $derived(expandedDirs.has(node.path));
   let isSelected = $derived(
-    (!node.is_dir && currentFilePath === node.path) ||
-    (selectedNodePath === node.path)
+    !node.is_dir && (currentFilePath === node.path || selectedNodePath === node.path)
   );
 
   function handleContextMenu(e: MouseEvent) {

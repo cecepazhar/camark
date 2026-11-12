@@ -243,6 +243,153 @@ pub async fn delete_file(file_path: String) -> Result<(), String> {
     .map_err(|e| e.to_string())?
 }
 
+/// Opens a file directly with its default OS application (e.g. Evince for PDF, LibreOffice for DOCX).
+/// This is ideal for binary files that cannot be rendered inside the WebView.
+pub async fn open_with_default_app(file_path: String) -> Result<(), String> {
+    tokio::task::spawn_blocking(move || {
+        let path = Path::new(&file_path);
+        if !path.exists() {
+            return Err(format!("File not found: {file_path}"));
+        }
+        let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+
+        #[cfg(target_os = "linux")]
+        {
+            // Try a chain of launchers: xdg-open (default handler) -> kde-open -> direct app.
+            // `xdg-open` can silently fail when no default app is registered for the
+            // file's MIME type, or when the GUI app itself crashes (e.g. Qt/Wayland
+            // init errors) — so we wait briefly for each spawned child and check the
+            // exit status before falling through to the next option.
+            fn try_launch(cmd: &str, args: &[&std::ffi::OsStr]) -> Result<(), String> {
+                use std::io::Read;
+                let mut child = std::process::Command::new(cmd)
+                    .args(args)
+                    .stdout(std::process::Stdio::piped())
+                    .stderr(std::process::Stdio::piped())
+                    .spawn()
+                    .map_err(|e| format!("Failed to launch {cmd}: {e}"))?;
+                // Wait up to 5s: if the app is still running after that, it took over
+                // successfully. If it exits fast, inspect the status + stderr.
+                let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+                let mut stderr_buf: Vec<u8> = Vec::new();
+                let mut wait_result: Option<std::io::Result<std::process::ExitStatus>> = None;
+                loop {
+                    match child.try_wait() {
+                        Ok(Some(status)) => {
+                            wait_result = Some(Ok(status));
+                            break;
+                        }
+                        Ok(None) => {
+                            // Still running — check for stderr so far
+                            if let Some(mut err_pipe) = child.stderr.take() {
+                                let mut chunk = [0u8; 1024];
+                                if let Ok(n) = err_pipe.read(&mut chunk) {
+                                    if n > 0 {
+                                        stderr_buf.extend_from_slice(&chunk[..n]);
+                                    }
+                                }
+                            }
+                            if std::time::Instant::now() >= deadline {
+                                // Give up waiting — process is alive, treat as success
+                                return Ok(());
+                            }
+                            std::thread::sleep(std::time::Duration::from_millis(200));
+                        }
+                        Err(e) => {
+                            wait_result = Some(Err(e));
+                            break;
+                        }
+                    }
+                }
+                let status = match wait_result {
+                    Some(Ok(s)) => s,
+                    Some(Err(e)) => return Err(format!("try_wait failed for {cmd}: {e}")),
+                    None => unreachable!(),
+                };
+                if status.success() {
+                    return Ok(());
+                }
+                // Drain any remaining stderr
+                if let Some(mut err_pipe) = child.stderr.take() {
+                    let mut chunk = [0u8; 4096];
+                    while let Ok(n) = err_pipe.read(&mut chunk) {
+                        if n == 0 { break; }
+                        stderr_buf.extend_from_slice(&chunk[..n]);
+                    }
+                }
+                let stderr_str = String::from_utf8_lossy(&stderr_buf);
+                return Err(format!(
+                    "{cmd} exited with {status}. stderr: {}",
+                    stderr_str.trim()
+                ));
+            }
+
+            let path_str = canonical.to_string_lossy().into_owned();
+            let path_arg = std::ffi::OsStr::new(&path_str);
+
+            // 1st: xdg-open (default handler registry)
+            match try_launch("xdg-open", &[path_arg]) {
+                Ok(()) => return Ok(()),
+                Err(primary_err) => {
+                    eprintln!("[open_with_default_app] xdg-open failed: {primary_err}");
+                    // 2nd: kde-open (KDE-specific, often more reliable for Office/PDF on KDE)
+                    match try_launch("kde-open", &[path_arg]) {
+                        Ok(()) => return Ok(()),
+                        Err(e2) => {
+                            eprintln!("[open_with_default_app] kde-open failed: {e2}");
+                            // 3rd: direct fallback based on extension
+                            let ext = std::path::Path::new(&path_str)
+                                .extension()
+                                .and_then(|e| e.to_str())
+                                .unwrap_or("")
+                                .to_ascii_lowercase();
+                            let direct_app: Option<(&str, &[&std::ffi::OsStr])> = match ext.as_str() {
+                                "pdf" => Some(("okular", &[path_arg])),
+                                _ => None,
+                            };
+                            if let Some((app, args)) = direct_app {
+                                if let Ok(()) = try_launch(app, args) {
+                                    return Ok(());
+                                }
+                            }
+                            return Err(format!(
+                                "All openers failed for {path_str}.\n  xdg-open: {primary_err}\n  kde-open: {e2}"
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+
+        #[cfg(target_os = "macos")]
+        {
+            std::process::Command::new("open")
+                .arg(&canonical)
+                .spawn()
+                .map_err(|e| format!("Failed to launch open: {e}"))?;
+            return Ok(());
+        }
+
+        #[cfg(target_os = "windows")]
+        {
+            use std::os::windows::process::CommandExt;
+            use std::process::Command;
+            let _ = Command::new("explorer")
+                .arg(format!("/select,{}", canonical.display()))
+                .creation_flags(0x0800_0000) // CREATE_NO_WINDOW
+                .spawn();
+            return Ok(());
+        }
+
+        #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
+        {
+            return Err("open_with_default_app not supported on this OS".to_string());
+        }
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 pub async fn reveal_file(file_path: String) -> Result<(), String> {
     tokio::task::spawn_blocking(move || {
         let path = Path::new(&file_path);

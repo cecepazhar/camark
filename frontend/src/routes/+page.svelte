@@ -376,6 +376,8 @@ graph TD;
   let rawMarkdown = $state<string>(initialActiveTab ? '' : (getLocale() === 'id' ? DEMO_MD_ID : DEMO_MD_EN));
   let renderedHtml = $state<string>('');
   let renderedSvgHtml = $state<string>('');
+  let binaryPreviewData = $state<string>('');
+  let binaryPreviewMime = $state<string>('');
 
   // Multi-document tabs reactive state
   const tabs = $derived(getDocTabs());
@@ -558,10 +560,10 @@ graph TD;
     return lower.endsWith('.docx') || lower.endsWith('.doc') || lower.endsWith('.xlsx') || lower.endsWith('.pptx');
   }
 
-  function isSvgFile(pathOrTitle: string | null): boolean {
+  function isHtmlFile(pathOrTitle: string | null): boolean {
     if (!pathOrTitle) return false;
     const lower = pathOrTitle.toLowerCase();
-    return lower.endsWith('.svg');
+    return lower.endsWith('.html') || lower.endsWith('.htm');
   }
 
   function escapeHtml(str: string): string {
@@ -1958,24 +1960,48 @@ graph TD;
       });
     } else {
       try {
-        const content = await invoke<string>('workspace_read_file', { filePath: tab.path });
+        let content: string;
+        binaryPreviewData = '';
+        binaryPreviewMime = '';
+        if (isPdfFile(tab.path)) {
+          const b64 = await invoke<string>('workspace_read_file_base64', { filePath: tab.path });
+          binaryPreviewData = `data:application/pdf;base64,${b64}`;
+          binaryPreviewMime = 'application/pdf';
+          content = `📄 ${tab.title}`;
+        } else if (isOfficeFile(tab.path)) {
+          const b64 = await invoke<string>('workspace_read_file_base64', { filePath: tab.path });
+          binaryPreviewData = `data:application/octet-stream;base64,${b64}`;
+          binaryPreviewMime = 'application/octet-stream';
+          content = `📄 ${tab.title}`;
+        } else {
+          content = await invoke<string>('workspace_read_file', { filePath: tab.path });
+        }
         currentFilePath = tab.path;
         currentDocTitle = tab.title;
         rawMarkdown = content;
         await tick();
         if (editorView) {
-          // First: update doc without language reconfigure so gutters stay in sync
-          editorView.dispatch({
-            changes: { from: 0, to: editorView.state.doc.length, insert: content },
-          });
-          // Second: reconfigure language on separate update so fold-gutter resets
-          const langExt = await getLanguageExtension(tab.title || tab.path);
-          editorView.dispatch({
-            effects: languageCompartment.reconfigure(langExt),
-          });
-          editorView.dispatch({ effects: EditorView.scrollIntoView(0, { y: 'start' }) });
+          if (binaryPreviewMime) {
+            // Hide raw base64 in CodeMirror — show only tab title for binary docs
+            editorView.dispatch({
+              changes: { from: 0, to: editorView.state.doc.length, insert: content },
+            });
+          } else {
+            // First: update doc without language reconfigure so gutters stay in sync
+            editorView.dispatch({
+              changes: { from: 0, to: editorView.state.doc.length, insert: content },
+            });
+            // Second: reconfigure language on separate update so fold-gutter resets
+            const langExt = await getLanguageExtension(tab.title || tab.path);
+            editorView.dispatch({
+              effects: languageCompartment.reconfigure(langExt),
+            });
+            editorView.dispatch({ effects: EditorView.scrollIntoView(0, { y: 'start' }) });
+          }
         }
-        renderMarkdown(content);
+        if (!binaryPreviewMime) {
+          renderMarkdown(content);
+        }
         updateDocumentContext({
           active_doc_path: tab.path,
           active_doc_title: tab.title,
@@ -2016,6 +2042,10 @@ graph TD;
         const docs = await invoke<any[]>('vault_list_documents', { callerProfileId: 'default' });
         const doc = docs.find((d) => String(d.id) === String(targetTab.id.replace('vault://', '')));
         compareContent = doc?.content || '';
+      } else if (isPdfFile(targetTab.path) || isOfficeFile(targetTab.path)) {
+        const b64 = await invoke<string>('workspace_read_file_base64', { filePath: targetTab.path });
+        const mime = targetTab.path.toLowerCase().endsWith('.pdf') ? 'application/pdf' : 'application/octet-stream';
+        compareContent = `data:${mime};base64,${b64}`;
       } else {
         compareContent = await invoke<string>('workspace_read_file', { filePath: targetTab.path });
       }
@@ -2803,6 +2833,17 @@ graph TD;
     }
   }
 
+  async function handleOpenFileNativeApp(filePath: string) {
+    closeFileContextMenu();
+    try {
+      await invoke('workspace_open_file_app', { filePath });
+      showToast(t('editor.openedInNativeApp', { name: filePath.split('/').pop() ?? 'file' }), 'success');
+    } catch (err) {
+      console.warn('Failed to open file in native app:', err);
+      showToast(t('editor.openNativeAppFailed', { error: String(err) }), 'error');
+    }
+  }
+
   async function handleRefreshWorkspace() {
     closeFileContextMenu();
     if (isVaultMode) {
@@ -3580,29 +3621,58 @@ graph TD;
               <span class="w-2 h-2 rounded-full bg-rose-500 animate-pulse"></span>
               <span>PDF RENDERER</span>
             </span>
-            <span class="text-[10px] text-neutral-400">{currentDocTitle || currentFilePath}</span>
+            <span class="text-[10px] text-neutral-400 truncate">{currentDocTitle}</span>
           </div>
-          <iframe
-            title="PDF Preview"
-            src={`data:application/pdf;filename=${encodeURIComponent(currentDocTitle || 'document.pdf')},<object data="data:application/pdf;base64,${compareContent ? btoa(compareContent) : ''}"></object>`}
-            class="w-full flex-1 border-0 bg-white"
-          ></iframe>
+          {#if binaryPreviewData}
+            <iframe
+              title="PDF Preview"
+              src={binaryPreviewData}
+              class="w-full flex-1 border-0 bg-white"
+            ></iframe>
+          {:else}
+            <div class="flex-1 flex flex-col items-center justify-center p-8 gap-4 bg-white">
+              <span class="text-5xl">📕</span>
+              <div class="text-center space-y-1">
+                <p class="text-sm font-bold text-neutral-800 dark:text-neutral-200">{currentDocTitle}</p>
+                <p class="text-xs text-neutral-400 font-mono">PDF Document ({(currentFilePath?.split('/').pop())})</p>
+              </div>
+            </div>
+          {/if}
+          <div class="px-3 py-2 bg-neutral-100 dark:bg-[#161616] border-t border-neutral-200 dark:border-neutral-800 flex items-center gap-2 text-[11px] shrink-0">
+            <button
+              type="button"
+              class="px-3 py-1 rounded bg-rose-600 hover:bg-rose-500 text-white text-[11px] font-semibold transition-colors"
+              onclick={() => handleOpenFileNativeApp(currentFilePath!)}
+            >
+              {t('editor.openPdfInViewer')}
+            </button>
+            <button
+              type="button"
+              class="px-3 py-1 rounded bg-neutral-600 hover:bg-neutral-500 text-white text-[11px] font-semibold transition-colors"
+              onclick={() => handleRevealFile(currentFilePath!)}
+            >
+              {t('editor.revealInFileManager')}
+            </button>
+          </div>
         </div>
       {:else if isOfficeFile(currentFilePath)}
-        <div class="w-full h-full flex flex-col items-center justify-center min-h-[400px]">
-          <div class="p-6 rounded-2xl bg-neutral-100 dark:bg-neutral-900/90 border border-neutral-200 dark:border-neutral-800 shadow-xl max-w-xl w-full text-center space-y-3">
+        <div class="w-full h-full flex flex-col bg-white dark:bg-[#111111] overflow-hidden">
+          <div class="h-8 px-3 bg-neutral-100 dark:bg-[#161616] border-b border-neutral-200 dark:border-neutral-800 flex items-center justify-between text-xs text-neutral-500 font-mono select-none shrink-0">
+            <span class="flex items-center gap-1.5 text-amber-500 dark:text-amber-400 font-semibold text-[11px]">
+              <span class="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
+              <span>OFFICE DOCUMENT</span>
+            </span>
+            <span class="text-[10px] text-neutral-400 truncate">{currentDocTitle}</span>
+          </div>
+          <div class="flex-1 flex flex-col items-center justify-center p-6 gap-3 text-neutral-400 bg-white">
             <span class="text-4xl">📄</span>
-            <h3 class="text-sm font-bold text-white dark:text-neutral-200">Office Document</h3>
-            <p class="text-xs text-neutral-400 font-mono">{currentDocTitle}</p>
-            <p class="text-[11px] text-neutral-500 leading-relaxed">
-              Pratinjau dokumen Office ({currentDocTitle?.split('.').pop()?.toUpperCase()}) tersedia sebagai teks mentah di panel editor kiri.
-            </p>
+            <p class="text-xs font-mono">{currentDocTitle?.split('.').pop()?.toUpperCase()} Document</p>
             <button
               type="button"
               class="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold transition-colors"
-              onclick={() => handleRevealFile(currentFilePath)}
+              onclick={() => handleOpenFileNativeApp(currentFilePath!)}
             >
-              Buka di Aplikasi Native
+              {t('editor.openOfficeInApp')}
             </button>
           </div>
         </div>
@@ -3626,8 +3696,14 @@ graph TD;
               </svg>
             </button>
           </div>
-          <div class="flex-1 overflow-y-auto p-4 font-mono text-xs text-neutral-700 dark:text-neutral-300 whitespace-pre-wrap select-text">
-            {compareContent}
+          <div class="flex-1 overflow-hidden flex flex-col bg-white">
+            {#if compareContent.startsWith('data:')}
+              <iframe title="Split Compare Binary Preview" src={compareContent} class="w-full flex-1 border-0 bg-white"></iframe>
+            {:else}
+              <div class="w-full h-full overflow-y-auto p-4 font-mono text-xs text-neutral-700 dark:text-neutral-300 whitespace-pre-wrap select-text">
+                {compareContent}
+              </div>
+            {/if}
           </div>
         </div>
       {/if}

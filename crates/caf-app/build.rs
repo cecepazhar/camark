@@ -48,6 +48,7 @@ const COMMANDS: &[&str] = &[
     // CAMark Filesystem Workspace
     "workspace_list_directory",
     "workspace_read_file",
+    "workspace_read_file_base64",
     "workspace_write_file",
     "workspace_create_file",
     "workspace_create_directory",
@@ -55,6 +56,7 @@ const COMMANDS: &[&str] = &[
     "workspace_delete_file",
     "workspace_reveal_file",
     "workspace_copy_file",
+    "workspace_open_file_app",
     "get_initial_file_path",
     // CAMark Encrypted Vault Documents
     "vault_list_documents",

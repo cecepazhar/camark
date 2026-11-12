@@ -2289,10 +2289,22 @@
           "markdownDescription": "Enables the workspace_list_directory command without any pre-configured scope."
         },
         {
+          "description": "Enables the workspace_open_file_app command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-workspace-open-file-app",
+          "markdownDescription": "Enables the workspace_open_file_app command without any pre-configured scope."
+        },
+        {
           "description": "Enables the workspace_read_file command without any pre-configured scope.",
           "type": "string",
           "const": "allow-workspace-read-file",
           "markdownDescription": "Enables the workspace_read_file command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the workspace_read_file_base64 command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-workspace-read-file-base64",
+          "markdownDescription": "Enables the workspace_read_file_base64 command without any pre-configured scope."
         },
         {
           "description": "Enables the workspace_rename_file command without any pre-configured scope.",
@@ -2601,10 +2613,22 @@
           "markdownDescription": "Denies the workspace_list_directory command without any pre-configured scope."
         },
         {
+          "description": "Denies the workspace_open_file_app command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-workspace-open-file-app",
+          "markdownDescription": "Denies the workspace_open_file_app command without any pre-configured scope."
+        },
+        {
           "description": "Denies the workspace_read_file command without any pre-configured scope.",
           "type": "string",
           "const": "deny-workspace-read-file",
           "markdownDescription": "Denies the workspace_read_file command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the workspace_read_file_base64 command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-workspace-read-file-base64",
+          "markdownDescription": "Denies the workspace_read_file_base64 command without any pre-configured scope."
         },
         {
           "description": "Denies the workspace_rename_file command without any pre-configured scope.",

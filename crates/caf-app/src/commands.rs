@@ -289,6 +289,11 @@ pub async fn workspace_copy_file(src_path: String, dest_path: String) -> Result<
 }
 
 #[tauri::command]
+pub async fn workspace_open_file_app(file_path: String) -> Result<(), String> {
+    fs_workspace::open_with_default_app(file_path).await
+}
+
+#[tauri::command]
 pub fn get_initial_file_path() -> Option<String> {
     fs_workspace::get_initial_file_path()
 }

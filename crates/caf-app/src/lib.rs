@@ -251,6 +251,7 @@ pub fn run_with_start(_start: std::time::Instant) {
             commands::workspace_delete_file,
             commands::workspace_reveal_file,
             commands::workspace_copy_file,
+            commands::workspace_open_file_app,
             commands::get_initial_file_path,
             commands::vault_list_documents,
             commands::vault_save_document,
