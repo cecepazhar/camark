@@ -133,14 +133,116 @@
   let workspacePath = $state<string>('.');
   let fileTree = $state<FileNode[]>([]);
   let expandedDirs = $state<Set<string>>(new Set());
+  let folderNavHistory = $state<string[]>([]); // breadcrumb trail of visited folder paths
   let showFileTree = $state<boolean>(
     typeof localStorage !== 'undefined'
       ? localStorage.getItem('camark_show_file_tree') !== 'false'
       : true
   );
+  // Flatten fileTree into a Set of all file paths (non-dir) for auto-linking inline code
+  const knownFilesSet = $derived.by(() => {
+    const set = new Set<string>();
+    function walk(nodes: FileNode[]) {
+      for (const n of nodes) {
+        if (!n.is_dir) set.add(n.path);
+        if (n.children) walk(n.children);
+      }
+    }
+    walk(fileTree);
+    return set;
+  });
+
   let currentFilePath = $state<string | null>(null);
   let selectedFileNode = $state<FileNode | null>(null);
   let fileClipboard = $state<{ mode: 'copy' | 'cut'; node: FileNode } | null>(null);
+
+  // File-tree sort control (applied to the top-level tree on each change)
+  type TreeSortMode = 'name_asc' | 'name_desc' | 'date_desc' | 'date_asc' | 'size_desc' | 'size_asc';
+  let treeSortMode = $state<TreeSortMode>(() => {
+    try {
+      return (localStorage.getItem('camark_tree_sort') as TreeSortMode) || 'name_asc';
+    } catch {
+      return 'name_asc';
+    }
+  }) as TreeSortMode;
+  let showSortMenu = $state<boolean>(false);
+  const sortModeLabels: Record<TreeSortMode, string> = {
+    name_asc: 'Nama A→Z (Natural)',
+    name_desc: 'Nama Z→A (Natural)',
+    date_desc: 'Terbaru (Modif)',
+    date_asc: 'Terlama (Modif)',
+    size_desc: 'Terbesar (Ukuran)',
+    size_asc: 'Terkecil (Ukuran)',
+  };
+  function setTreeSortMode(m: TreeSortMode) {
+    treeSortMode = m;
+    showSortMenu = false;
+    try {
+      localStorage.setItem('camark_tree_sort', m);
+    } catch { /* noop */ }
+    applyTreeSort(fileTree);
+  }
+  function naturalCmp(a: string, b: string): number {
+    // Numeric-aware comparison: split into digit / non-digit tokens so "2" < "10".
+    function key(s: string): (number | string)[] {
+      const parts: (number | string)[] = [];
+      let m = /\d+|\D/g;
+      let t: RegExpExecArray | null;
+      while ((t = m.exec(s))) parts.push(/^\d+$/.test(t[0]) ? parseInt(t[0], 10) : t[0].toLowerCase());
+      return parts;
+    }
+    const ka = key(a);
+    const kb = key(b);
+    const len = Math.max(ka.length, kb.length);
+    for (let i = 0; i < len; i++) {
+      const x = ka[i];
+      const y = kb[i];
+      if (x === undefined) return 1;
+      if (y === undefined) return -1;
+      if (typeof x === 'number' && typeof y === 'number') {
+        if (x !== y) return x - y;
+      } else if (typeof x === 'string' && typeof y === 'string') {
+        if (x !== y) return x < y ? -1 : 1;
+      } else {
+        // number vs string: numbers sort before letters in natural order
+        return typeof x === 'number' ? -1 : 1;
+      }
+    }
+    return ka.length === kb.length ? 0 : ka.length - kb.length;
+  }
+  function sortNodeArray(nodes: FileNode[]): FileNode[] {
+    const mode = treeSortMode;
+    const sorted = [...nodes].sort((a, b) => {
+      // Dirs always first
+      if (a.is_dir !== b.is_dir) return a.is_dir ? -1 : 1;
+      switch (mode) {
+        case 'name_asc':
+          return naturalCmp(a.name, b.name);
+        case 'name_desc':
+          return naturalCmp(b.name, a.name);
+        case 'date_desc':
+          return (b.modified_at ?? 0) - (a.modified_at ?? 0);
+        case 'date_asc':
+          return (a.modified_at ?? 0) - (b.modified_at ?? 0);
+        case 'size_desc':
+          return (b.size_bytes ?? 0) - (a.size_bytes ?? 0);
+        case 'size_asc':
+          return (a.size_bytes ?? 0) - (b.size_bytes ?? 0);
+        default:
+          return naturalCmp(a.name, b.name);
+      }
+    });
+    // Recurse into dirs' children
+    for (const n of sorted) {
+      if (n.is_dir && n.children && n.children.length > 0) {
+        n.children = sortNodeArray(n.children);
+      }
+    }
+    return sorted;
+  }
+  function applyTreeSort(nodes: FileNode[]) {
+    fileTree = sortNodeArray(nodes);
+  }
 
   interface FolderBookmark {
     id: string;
@@ -307,7 +409,10 @@
   let isCompareMode = $state<boolean>(false);
   let compareTabId = $state<string | null>(null);
   let compareContent = $state<string>('');
+  let compareHtml = $state<string>('');
   let compareTitle = $state<string>('');
+  // Split preview visible when compare mode is on and we're not in editor-only modes
+  const showSplitPreview = $derived(isCompareMode && viewMode !== 'editor' && viewMode !== 'live' && !isZenMode);
   let vaultConfirmPassword = $state<string>('');
   let isVaultSetup = $state<boolean>(false);
   let vaultPasswordError = $state<string>('');
@@ -647,8 +752,8 @@ graph TD;
       const node = findNodeByPath(fileTree, path);
       if (node && (!node.children || node.children.length === 0)) {
         try {
-          const freshChildren = await invoke<FileNode[]>('workspace_list_directory', { dirPath: path });
-          node.children = freshChildren;
+          const freshChildren = await invoke<FileNode[]>("workspace_list_directory", { dirPath: path });
+          node.children = sortNodeArray(freshChildren);
           fileTree = [...fileTree]; // trigger reactivity
         } catch (e) {
           console.warn('Failed to lazy load dir:', path, e);
@@ -1432,7 +1537,11 @@ graph TD;
       // CommonMark soft breaks by default; opt back into <br> with localStorage camark_soft_breaks=true.
       const softBreaks =
         typeof localStorage !== 'undefined' && localStorage.getItem('camark_soft_breaks') === 'true';
-      const { html: rawHtml } = await renderMarkdownToHtml(content, { breaks: softBreaks });
+      const { html: rawHtml } = await renderMarkdownToHtml(content, {
+        breaks: softBreaks,
+        knownFiles: knownFilesSet,
+        currentFilePath: currentFilePath,
+      });
       renderedHtml = DOMPurify.sanitize(rawHtml, {
         ADD_TAGS: ['button', 'span', 'div', 'svg', 'path'],
         ADD_ATTR: [
@@ -1510,17 +1619,79 @@ graph TD;
     }
   }
 
-  async function loadDirectory(path: string) {
+  // Render comparison document B into markdown HTML (mirrors renderMarkdown pipeline,
+  // but for the split/compare pane).
+  async function renderCompareHtml(content: string) {
+    if (!content) {
+      compareHtml = '';
+      return;
+    }
+    try {
+      const { html: rawHtml } = await renderMarkdownToHtml(content, {
+        breaks: false,
+        knownFiles: knownFilesSet,
+        currentFilePath: currentFilePath,
+      });
+      compareHtml = DOMPurify.sanitize(rawHtml, {
+        ADD_TAGS: ['button', 'span', 'div', 'svg', 'path'],
+        ADD_ATTR: ['data-lang', 'data-code', 'type', 'd', 'stroke', 'fill', 'viewBox', 'stroke-width', 'stroke-linecap', 'stroke-linejoin'],
+      });
+    } catch (e) {
+      console.error('Failed to render comparison document:', e);
+      compareHtml = `<pre>${escapeHtml(content)}</pre>`;
+    }
+  }
+
+  async function loadDirectory(path: string, _pushToHistory: boolean = true) {
     workspacePath = path;
     if (typeof localStorage !== 'undefined' && path) {
       localStorage.setItem('camark_last_workspace_path', path);
     }
+    if (_pushToHistory && path !== folderNavHistory[folderNavHistory.length - 1]) {
+      // truncate forward history, push current
+      folderNavHistory = [...folderNavHistory, path];
+      if (folderNavHistory.length > 50) folderNavHistory = folderNavHistory.slice(-50);
+      localStorage.setItem('camark_folder_nav_history', JSON.stringify(folderNavHistory));
+    }
     try {
       fileTree = await invoke<FileNode[]>('workspace_list_directory', { dirPath: path });
+      applyTreeSort(fileTree);
     } catch (e) {
       console.warn('Cannot list directory:', e);
     }
   }
+
+  async function navigateToFolder(path: string) {
+    if (!path || path === workspacePath) return;
+    await loadDirectory(path, true);
+  }
+
+  function navigateBack() {
+    if (folderNavHistory.length <= 1) return;
+    folderNavHistory = folderNavHistory.slice(0, -1);
+    const prev = folderNavHistory[folderNavHistory.length - 1];
+    loadDirectory(prev, false);
+  }
+
+  function navigateForward() {
+    // forward history not tracked (single-stack); no-op reserved
+  }
+
+  function goUpFolder() {
+    if (!workspacePath || workspacePath === '.' || workspacePath === '/') return;
+    const clean = workspacePath.replace(/\/+$/, '');
+    const parent = clean.includes('/') ? clean.substring(0, clean.lastIndexOf('/')) : '.';
+    loadDirectory(parent, true);
+  }
+
+  // Breadcrumb segments from current workspacePath
+  const folderBreadcrumb = $derived<string[]>(
+    (workspacePath && workspacePath !== '.')
+      ? workspacePath.replace(/\/+$/, '').split('/').filter(Boolean)
+      : []
+  );
+  const canGoUp = $derived(!!workspacePath && workspacePath !== '.' && workspacePath !== '/');
+  const canGoBack = $derived(folderNavHistory.length > 1);
 
   function loadWorkspacesAndTemplates(): boolean {
     if (typeof localStorage === 'undefined') return false;
@@ -1635,6 +1806,7 @@ graph TD;
     }
     multiRootTrees = trees;
     fileTree = trees;
+    applyTreeSort(fileTree);
   }
 
   function persistActiveWorkspace() {
@@ -2031,28 +2203,31 @@ graph TD;
     }
     const targetTab = tabs.find((t) => t.id === targetTabId);
     if (!targetTab || targetTab.id === activeTabId) {
-      showToast('Pilih dokumen kedua yang berbeda untuk dibandingkan di Split View.', 'info');
+      showToast(t('editor.chooseSecondDoc'), 'info');
       return;
     }
     isCompareMode = true;
     compareTabId = targetTab.id;
     compareTitle = targetTab.title;
+    compareHtml = '';
     try {
       if (targetTab.isVault) {
         const docs = await invoke<any[]>('vault_list_documents', { callerProfileId: 'default' });
         const doc = docs.find((d) => String(d.id) === String(targetTab.id.replace('vault://', '')));
         compareContent = doc?.content || '';
+        await renderCompareHtml(compareContent);
       } else if (isPdfFile(targetTab.path) || isOfficeFile(targetTab.path)) {
         const b64 = await invoke<string>('workspace_read_file_base64', { filePath: targetTab.path });
         const mime = targetTab.path.toLowerCase().endsWith('.pdf') ? 'application/pdf' : 'application/octet-stream';
         compareContent = `data:${mime};base64,${b64}`;
       } else {
         compareContent = await invoke<string>('workspace_read_file', { filePath: targetTab.path });
+        await renderCompareHtml(compareContent);
       }
-      setViewMode('split');
+      setViewMode('preview');
     } catch (e) {
       console.warn('Failed to load comparison document:', e);
-      showToast(`Gagal memuat dokumen perbandingan: ${e}`, 'error');
+      showToast(t('editor.compareLoadFailed', { error: String(e) }), 'error');
     }
   }
 
@@ -2957,9 +3132,18 @@ graph TD;
       e.preventDefault();
       const name = wiki.getAttribute('data-wikilink') ?? '';
       const heading = wiki.getAttribute('data-heading') ?? '';
-      const note = findNoteByName(name);
-      if (note) await openPathAtLine(note.path, 0, heading);
-      else showToast(`Catatan "${name}" tidak ditemukan di workspace`, 'error');
+      // If data-wikilink is an absolute/relative file path (auto-link case),
+      // resolve it directly; otherwise fall back to basename search.
+      const looksLikePath = name.includes('/') || name.endsWith('.md') || name.endsWith('.pdf') || name.endsWith('.docx');
+      if (looksLikePath) {
+        const resolved = knownFilesSet.has(name) ? name : findNoteByName(name)?.path;
+        if (resolved) await openPathAtLine(resolved, 0, heading);
+        else showToast(`${t('editor.noteNotFound', { name })}`, 'error');
+      } else {
+        const note = findNoteByName(name);
+        if (note) await openPathAtLine(note.path, 0, heading);
+        else showToast(`${t('editor.noteNotFound', { name })}`, 'error');
+      }
       return;
     }
 
@@ -2998,12 +3182,32 @@ graph TD;
         } else if (href.endsWith('.md') || href.includes('.md#') || !href.includes('://')) {
           let targetPath = href.split('#')[0];
           if (currentFilePath && !currentFilePath.startsWith('vault://')) {
-            const currentDir = currentFilePath.includes('/') ? currentFilePath.substring(0, currentFilePath.lastIndexOf('/')) : '.';
+            // Resolve relative links against the file's own directory, NOT workspacePath.
+            // currentFilePath can be relative (e.g. "docs/00-README.md") or absolute.
+            const currentDir = currentFilePath.includes('/')
+              ? currentFilePath.substring(0, currentFilePath.lastIndexOf('/'))
+              : '.';
             if (targetPath.startsWith('./')) {
               targetPath = `${currentDir}/${targetPath.slice(2)}`;
             } else if (!targetPath.startsWith('/')) {
-              targetPath = `${currentDir}/${targetPath}`;
+              // Normalize leading "../" if the file is at root
+              if (currentDir === '.') {
+                targetPath = targetPath;
+              } else {
+                targetPath = `${currentDir}/${targetPath}`;
+              }
             }
+            // Normalize the path (remove ".." segments, deduplicate slashes)
+            const parts = targetPath.split('/');
+            const normalized: string[] = [];
+            for (const part of parts) {
+              if (part === '..') {
+                normalized.pop();
+              } else if (part !== '.' && part !== '') {
+                normalized.push(part);
+              }
+            }
+            targetPath = normalized.join('/');
           }
           const parts = targetPath.split('/');
           const name = parts[parts.length - 1] || 'document.md';
@@ -3170,6 +3374,37 @@ graph TD;
           {isVaultMode ? t('editor.vaultNotes') : t('editor.filesAndFolders')}
         </span>
         <div class="flex items-center gap-1">
+          <!-- Sort Menu Button -->
+          <div class="relative">
+            <button
+              type="button"
+              onclick={() => (showSortMenu = !showSortMenu)}
+              class="p-1 rounded-md hover:bg-neutral-200 dark:hover:bg-neutral-800 text-neutral-500 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-white transition-colors"
+              title="Urutkan file & folder"
+              aria-label="Urutkan file & folder"
+            >
+              <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4h13M3 8h9m-9 4h6m4 4h4m0 4h2m-9-9l3 3 3-3" />
+              </svg>
+            </button>
+            {#if showSortMenu}
+              <div
+                class="absolute right-0 top-6 z-50 bg-white dark:bg-[#1a1a1f] border border-neutral-200 dark:border-neutral-700 rounded-lg shadow-xl py-1 min-w-[180px] text-[11px] font-mono"
+                role="menu"
+              >
+                {#each Object.entries(sortModeLabels) as [m, label] (m)}
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onclick={() => setTreeSortMode(m as TreeSortMode)}
+                    class="w-full text-left px-3 py-1.5 hover:bg-cyan-500/10 hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors {treeSortMode === m ? 'text-cyan-600 dark:text-cyan-400 font-semibold' : 'text-neutral-600 dark:text-neutral-300'}"
+                  >
+                    {treeSortMode === m ? '✓ ' : ''}{label}
+                  </button>
+                {/each}
+              </div>
+            {/if}
+          </div>
           <!-- Refresh Button -->
           <button
             type="button"
@@ -3268,11 +3503,64 @@ graph TD;
               title="{t('editor.manageWorkspaces')}"
             >
               <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543-.94-3.31.826-2.37 2.37a1.724 1.724 0 00-1.065 2.572c-1.756.426-1.756 2.924 0 3.35a1.724 1.724 0 002.572 1.065z" />
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
               </svg>
             </button>
           </div>
+        </div>
+
+        <!-- Folder Navigation Bar: back / up / breadcrumb -->
+        {#if !isVaultMode && canGoBack || canGoUp || folderBreadcrumb.length > 0}
+          <div class="px-2 py-1.5 border-b border-neutral-200 dark:border-neutral-800/80 bg-neutral-50 dark:bg-neutral-950/40 flex items-center gap-1 text-[10px] font-mono no-print shrink-0">
+            <!-- Back button -->
+            <button
+              type="button"
+              onclick={navigateBack}
+              disabled={!canGoBack}
+              class="p-1 rounded hover:bg-neutral-200 dark:hover:bg-neutral-800 disabled:opacity-30 disabled:cursor-not-allowed text-neutral-600 dark:text-neutral-300 transition-colors"
+              title="Kembali ke folder sebelumnya (Back)"
+              aria-label="Back"
+            >
+              <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
+            <!-- Up button -->
+            <button
+              type="button"
+              onclick={goUpFolder}
+              disabled={!canGoUp}
+              class="p-1 rounded hover:bg-neutral-200 dark:hover:bg-neutral-800 disabled:opacity-30 disabled:cursor-not-allowed text-neutral-600 dark:text-neutral-300 transition-colors"
+              title="Naik satu tingkat folder (Up)"
+              aria-label="Up"
+            >
+              <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18" />
+              </svg>
+            </button>
+            <!-- Breadcrumb -->
+            <div class="flex items-center gap-0.5 min-w-0 flex-1 overflow-x-auto scrollbar-none text-neutral-600 dark:text-neutral-300" title="Klik segmen untuk lompat ke folder">
+              <button
+                type="button"
+                onclick={() => loadDirectory('.', true)}
+                class="px-1 rounded hover:bg-cyan-500/10 hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors shrink-0"
+              >
+                🏠
+              </button>
+              {#each folderBreadcrumb as seg, i (seg)}
+                <span class="text-neutral-400 dark:text-neutral-500 shrink-0">/</span>
+                <button
+                  type="button"
+                  onclick={() => loadDirectory(folderBreadcrumb.slice(0, i + 1).join('/'), true)}
+                  class="px-1 rounded hover:bg-cyan-500/10 hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors truncate max-w-[80px] {i === folderBreadcrumb.length - 1 ? 'font-semibold text-cyan-600 dark:text-cyan-400' : ''}"
+                >
+                  {seg}
+                </button>
+              {/each}
+            </div>
+          </div>
+        {/if}
 
           <!-- Workspace Switcher & Presets Dropdown Menu -->
           {#if showBookmarksDropdown}
@@ -3386,7 +3674,6 @@ graph TD;
               </div>
             </div>
           {/if}
-        </div>
       {/if}
 
       <!-- Scrollable File / Vault Tree -->
@@ -3534,16 +3821,16 @@ graph TD;
           type="button"
           onclick={() => toggleSplitCompare()}
           class="flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-mono text-neutral-500 dark:text-neutral-400 hover:text-cyan-600 dark:hover:text-cyan-400 hover:bg-cyan-500/10 transition-colors cursor-pointer"
-          title="Bandingkan dengan tab dokumen lain di samping (Split View Compare)"
+          title={t('editor.splitCompareHint')}
         >
           <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17V7m0 10h11m-11-10h11M4 5h16a1 1 0 011 1v12a1 1 0 01-1 1H4a1 1 0 01-1-1V6a1 1 0 011-1z" />
           </svg>
-          <span>{isCompareMode ? 'Tutup Perbandingan Split' : 'Split & Bandingkan 2 Dokumen'}</span>
+          <span>{isCompareMode ? t('editor.closeSplit') : t('editor.splitCompare')}</span>
         </button>
 
         {#if isCompareMode}
-          <span class="text-neutral-400 truncate max-w-[200px]">vs. {compareTitle}</span>
+          <span class="text-neutral-400 truncate max-w-[200px]">{t('editor.comparingWith')} {compareTitle}</span>
         {/if}
       </div>
 
@@ -3573,8 +3860,32 @@ graph TD;
       bind:this={previewElement}
       onscroll={viewMode === 'split' ? syncScrollPreviewToEditor : undefined}
       onclick={handlePreviewClick}
-      class="preview-scroll-accel flex-1 overflow-y-auto bg-white dark:bg-[#0c1017] {isHtmlFile(currentFilePath) ? '!p-0 overflow-hidden' : isSvgFile(currentFilePath) ? 'p-4 sm:p-6' : 'p-8 sm:p-10'} markdown-preview max-w-none select-text overscroll-contain will-change-[scroll-position] bg-[linear-gradient(to_right,#00000006_1px,transparent_1px),linear-gradient(to_bottom,#00000006_1px,transparent_1px)] dark:bg-[linear-gradient(to_right,#ffffff05_1px,transparent_1px),linear-gradient(to_bottom,#ffffff05_1px,transparent_1px)] bg-[size:56px_56px] {viewMode === 'editor' || viewMode === 'live' || isZenMode ? 'hidden' : 'block'}"
+      class="preview-scroll-accel flex-1 bg-white dark:bg-[#0c1017] {isHtmlFile(currentFilePath) ? '!p-0 overflow-hidden' : isSvgFile(currentFilePath) ? 'p-4 sm:p-6 overflow-y-auto' : (showSplitPreview ? 'p-0 overflow-hidden' : 'p-8 sm:p-10 overflow-y-auto')} markdown-preview max-w-none select-text overscroll-contain will-change-[scroll-position] bg-[linear-gradient(to_right,#00000006_1px,transparent_1px),linear-gradient(to_bottom,#00000006_1px,transparent_1px)] dark:bg-[linear-gradient(to_right,#ffffff05_1px,transparent_1px),linear-gradient(to_bottom,#ffffff05_1px,transparent_1px)] bg-[size:56px_56px] {viewMode === 'editor' || viewMode === 'live' || isZenMode ? 'hidden' : 'block'} relative"
     >
+      <!-- Split Compare Toggle (visible in Preview/Split mode) -->
+      {#if viewMode === 'preview' || viewMode === 'split'}
+        <div class="absolute top-2 left-2 z-20 flex items-center gap-1">
+          <button
+            type="button"
+            onclick={(e) => { e.stopPropagation(); toggleSplitCompare(); }}
+            class="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-colors shadow-md cursor-pointer
+              {isCompareMode
+                ? 'bg-cyan-600 hover:bg-cyan-500 text-white'
+                : 'bg-neutral-800/90 hover:bg-neutral-700 text-neutral-200 border border-neutral-600'}"
+            title={t('editor.splitCompareHint')}
+          >
+            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17V7m0 10h11m-11-10h11M4 5h16a1 1 0 011 1v12a1 1 0 01-1 1H4a1 1 0 01-1-1V6a1 1 0 011-1z" />
+            </svg>
+            <span>{isCompareMode ? t('editor.closeSplit') : t('editor.splitCompare')}</span>
+          </button>
+          {#if isCompareMode}
+            <span class="px-2 py-1 rounded-lg text-[10px] font-mono bg-neutral-800/90 text-neutral-400 shadow-md truncate max-w-[160px]">
+              {t('editor.comparingWith')} {compareTitle}
+            </span>
+          {/if}
+        </div>
+      {/if}
       {#if isHtmlFile(currentFilePath)}
         <div class="w-full h-full flex flex-col bg-white dark:bg-[#111111] overflow-hidden">
           <div class="h-8 px-3 bg-neutral-100 dark:bg-[#161616] border-b border-neutral-200 dark:border-neutral-800 flex items-center justify-between text-xs text-neutral-500 font-mono select-none shrink-0 no-print">
@@ -3677,11 +3988,42 @@ graph TD;
           </div>
         </div>
       {:else}
-        {@html renderedHtml}
+        {#if showSplitPreview}
+          <!-- Split side-by-side: Document A (left) + Document B (right) -->
+          <div class="flex w-full h-full overflow-hidden">
+            <div class="w-1/2 min-w-0 overflow-y-auto p-8 sm:p-10">
+              {@html renderedHtml}
+            </div>
+            <div class="w-1/2 min-w-0 border-l border-neutral-200 dark:border-neutral-800 overflow-y-auto">
+              <div class="h-8 px-3 bg-neutral-100 dark:bg-[#161616] border-b border-neutral-200 dark:border-neutral-800 flex items-center justify-between text-xs font-mono text-neutral-500 select-none sticky top-0 z-10">
+                <span class="truncate">📄 {compareTitle}</span>
+                <button
+                  type="button"
+                  onclick={(e) => { e.stopPropagation(); toggleSplitCompare(); }}
+                  class="text-neutral-400 hover:text-rose-500 transition-colors shrink-0"
+                  title={t('editor.closeComparison')}
+                >
+                  <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              <div class="p-4 markdown-preview">
+                {#if compareContent.startsWith('data:')}
+                  <iframe title="Compare Binary Preview" src={compareContent} class="w-full min-h-[400px] border-0 bg-white"></iframe>
+                {:else}
+                  {@html compareHtml}
+                {/if}
+              </div>
+            </div>
+          </div>
+        {:else}
+          {@html renderedHtml}
+        {/if}
       {/if}
 
-      <!-- Split Comparison Pane (Second document side-by-side) -->
-      {#if isCompareMode && compareTabId}
+      <!-- Split Comparison Pane (fallback for editor mode, non-preview) -->
+      {#if isCompareMode && compareTabId && !showSplitPreview}
         <div class="border-l border-neutral-200 dark:border-neutral-800 flex-1 min-w-[320px] flex flex-col bg-neutral-50 dark:bg-[#0f141c]">
           <div class="h-8 px-3 bg-neutral-100 dark:bg-[#161616] border-b border-neutral-200 dark:border-neutral-800 flex items-center justify-between text-xs font-mono text-neutral-500 shrink-0 select-none">
             <span class="truncate">📄 Perbandingan (Compare): {compareTitle}</span>
@@ -3707,22 +4049,6 @@ graph TD;
           </div>
         </div>
       {/if}
-
-    {#if viewMode === 'preview'}
-      <div class="absolute top-4 right-6 z-20 no-print">
-        <button
-          type="button"
-          onclick={() => toggleOutline()}
-          class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-neutral-900/80 hover:bg-neutral-800 text-neutral-200 border border-neutral-700/80 shadow-lg backdrop-blur text-xs font-medium transition-all cursor-pointer"
-          title="Buka Struktur Dokumen (Outline)"
-        >
-          <svg class="w-3.5 h-3.5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h10M4 18h14" />
-          </svg>
-          <span>Struktur Dokumen</span>
-        </button>
-      </div>
-    {/if}
 
     <!-- Live Document Outline Drawer -->
     <KnowledgePanel

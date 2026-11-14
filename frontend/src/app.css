@@ -194,6 +194,40 @@ html.dark {
   color: #67e8f9;
 }
 
+/* Auto-linked inline code that names a known workspace file */
+.markdown-preview a.wikilink.file-autolink {
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+  border-bottom: 1px dashed rgba(34, 211, 238, 0.4);
+}
+.markdown-preview a.wikilink.file-autolink code {
+  color: #0891b2;
+  background: rgba(8, 145, 178, 0.10);
+  border: 1px solid rgba(8, 145, 178, 0.25);
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-size: 0.85em;
+  transition: all 0.15s ease;
+}
+:global(.dark) .markdown-preview a.wikilink.file-autolink code,
+.dark .markdown-preview a.wikilink.file-autolink code {
+  color: #22d3ee;
+  background: rgba(34, 211, 238, 0.10);
+  border-color: rgba(34, 211, 238, 0.30);
+}
+.markdown-preview a.wikilink.file-autolink:hover code {
+  color: #0e7490;
+  background: rgba(8, 145, 178, 0.20);
+  border-color: rgba(8, 145, 178, 0.50);
+}
+:global(.dark) .markdown-preview a.wikilink.file-autolink:hover code,
+.dark .markdown-preview a.wikilink.file-autolink:hover code {
+  color: #67e8f9;
+  background: rgba(34, 211, 238, 0.20);
+  border-color: rgba(34, 211, 238, 0.50);
+}
+
 .markdown-preview hr {
   border: 0;
   border-top: 1px solid rgba(0, 0, 0, 0.08);

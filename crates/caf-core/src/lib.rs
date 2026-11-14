@@ -51,7 +51,7 @@ pub mod visibility;
 
 pub use error::CafError;
 
-pub const CORE_VERSION: &str = "1.0.37";
+pub const CORE_VERSION: &str = "1.0.43";
 
 /// Test-only helpers shared across modules.
 #[cfg(test)]

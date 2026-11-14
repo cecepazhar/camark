@@ -272,6 +272,87 @@ export function installMarkdownExtensions(): void {
 export interface RenderOptions {
   /** CommonMark soft line breaks become <br> when true. Default false. */
   breaks?: boolean;
+  /**
+   * Set of absolute file paths available in the current workspace. When provided,
+   * any `<code>block</code>` (inline) whose text matches a known file's basename
+   * OR relative path is auto-converted into a clickable `<a class="wikilink">` so
+   * the user can jump to that document directly. Code that doesn't match a
+   * known file stays as a plain code span.
+   */
+  knownFiles?: Set<string>;
+  /** The currently open file path — used to resolve relative filenames against its directory. */
+  currentFilePath?: string | null;
+}
+
+/**
+ * Post-process: convert inline `<code>` that names a known workspace file into a clickable
+ * wikilink. Matches both bare basenames (`07-deploy.md`) and relative paths (`docs/07.md`).
+ * Only inline `<code>` (not fenced `pre><code>`) is touched.
+ */
+function autoLinkCode(html: string, knownFiles: Set<string>, currentFilePath: string | null): string {
+  if (!knownFiles || knownFiles.size === 0) return html;
+
+  // Build basename → full path lookup (last wins). Covers the most common case:
+  // `07-deploy.md` in a table cell. The `fileTree` paths are absolute (workspace root
+  // + subfolder), so we key by basename only.
+  const byBasename = new Map<string, string>();
+  for (const p of knownFiles) {
+    const base = p.split('/').pop() ?? p;
+    byBasename.set(base, p);
+  }
+
+  // Split by <pre>...</pre> to avoid touching fenced code blocks.
+  const preParts = html.split(/(<pre>[\s\S]*?<\/pre>)/g);
+  let result = '';
+  for (const part of preParts) {
+    if (part.startsWith('<pre>')) {
+      result += part;
+      continue;
+    }
+    // Replace inline <code>text</code> where text matches a known file
+    const replaced = part.replace(/<code>([^<]+)<\/code>/g, (match, codeText: string) => {
+      const trimmed = codeText.trim();
+      if (!trimmed) return match;
+
+      let target: string | undefined;
+
+      // 1. Direct match against knownFiles (handles absolute paths like /home/...)
+      if (knownFiles.has(trimmed)) {
+        target = trimmed;
+      }
+      // 2. Basename match (most common: `07-deploy.md`)
+      if (!target) target = byBasename.get(trimmed);
+      // 3. Resolve relative to current file's directory (handles `./01-req.md`, `subdir/file.md`)
+      if (!target && currentFilePath && !currentFilePath.startsWith('vault://')) {
+        const dir = currentFilePath.includes('/')
+          ? currentFilePath.substring(0, currentFilePath.lastIndexOf('/'))
+          : '';
+        // Try with and without leading ./
+        const relClean = trimmed.startsWith('./') ? trimmed.slice(2) : trimmed;
+        const candidates = [
+          dir ? `${dir}/${relClean}` : relClean,
+          relClean,
+        ];
+        for (const c of candidates) {
+          if (knownFiles.has(c)) { target = c; break; }
+        }
+        // Also try basename fallback if relative path not found
+        if (!target) target = byBasename.get(relClean);
+      }
+      // 4. Last resort: basename of the trimmed text
+      if (!target) {
+        const lastSlash = trimmed.lastIndexOf('/');
+        const base = lastSlash >= 0 ? trimmed.substring(lastSlash + 1) : trimmed;
+        target = byBasename.get(base);
+      }
+
+      if (!target) return match; // Not a known file → keep as plain code
+      const label = trimmed;
+      return `<a href="#" class="wikilink file-autolink" data-wikilink="${escapeHtml(target)}" title="Open ${escapeHtml(target)}"><code>${escapeHtml(label)}</code></a>`;
+    });
+    result += replaced;
+  }
+  return result;
 }
 
 /** Full pipeline: frontmatter → footnotes → marked. Returns UNSANITIZED html. */
@@ -296,6 +377,10 @@ export async function renderMarkdownToHtml(
   }
   if (yaml !== null) {
     html = `<details class="frontmatter-block"><summary>Properties</summary><pre>${escapeHtml(yaml)}</pre></details>${html}`;
+  }
+  // Auto-link inline code that names known workspace files
+  if (opts.knownFiles && opts.knownFiles.size > 0) {
+    html = autoLinkCode(html, opts.knownFiles, opts.currentFilePath ?? null);
   }
   return { html, yaml };
 }

@@ -519,6 +519,78 @@ const IGNORED_DIRS: &[&str] = &[
     "__pycache__",
 ];
 
+/// Natural-sort key: split a name into alternating (is_number, token) chunks so that
+/// "2" sorts before "10" (human/numeric ordering) instead of the lexicographic
+/// "10" < "2" string comparison.
+fn natural_key(name: &str) -> Vec<(bool, Vec<u8>)> {
+    let mut out: Vec<(bool, Vec<u8>)> = Vec::new();
+    let mut chars = name.chars().peekable();
+    while chars.peek().is_some() {
+        if chars.peek().unwrap().is_ascii_digit() {
+            let mut digits = String::new();
+            while let Some(&c) = chars.peek() {
+                if c.is_ascii_digit() {
+                    digits.push(c);
+                    chars.next();
+                } else {
+                    break;
+                }
+            }
+            // Strip leading zeros so 002 == 2 numerically; use raw bytes as key.
+            let trimmed = digits.trim_start_matches('0');
+            out.push((true, trimmed.as_bytes().to_vec()));
+        } else {
+            let mut token = String::new();
+            token.push(chars.next().unwrap());
+            while let Some(&c) = chars.peek() {
+                if !c.is_ascii_digit() {
+                    token.push(c);
+                    chars.next();
+                } else {
+                    break;
+                }
+            }
+            out.push((false, token.to_lowercase().into_bytes()));
+        }
+    }
+    out
+}
+
+fn natural_cmp(a: &str, b: &str) -> std::cmp::Ordering {
+    let ka = natural_key(a);
+    let kb = natural_key(b);
+    for (i, (x, y)) in ka.iter().zip(kb.iter()).enumerate() {
+        match (x.0, y.0) {
+            (true, true) => {
+                let xa: u64 =
+                    x.1.iter()
+                        .map(|b| u64::from(*b))
+                        .fold(0, |acc, d| acc * 10 + d);
+                let ya: u64 =
+                    y.1.iter()
+                        .map(|b| u64::from(*b))
+                        .fold(0, |acc, d| acc * 10 + d);
+                if xa != ya {
+                    return xa.cmp(&ya);
+                }
+            }
+            (false, false) => {
+                if x.1 != y.1 {
+                    return x.1.cmp(&y.1);
+                }
+            }
+            _ => {
+                // One side has a number, the other a non-number token at this position
+                return x.1.cmp(&y.1);
+            }
+        }
+        if i + 1 == ka.len() && i + 1 == kb.len() {
+            break;
+        }
+    }
+    ka.len().cmp(&kb.len())
+}
+
 fn read_dir_recursive(path: &Path, depth: u8) -> Result<Vec<FileNode>, String> {
     if depth == 0 {
         return Ok(vec![]);
@@ -568,7 +640,7 @@ fn read_dir_recursive(path: &Path, depth: u8) -> Result<Vec<FileNode>, String> {
 
     entries.sort_by(|a, b| {
         if a.is_dir == b.is_dir {
-            a.name.to_lowercase().cmp(&b.name.to_lowercase())
+            natural_cmp(&a.name, &b.name)
         } else if a.is_dir {
             std::cmp::Ordering::Less
         } else {
