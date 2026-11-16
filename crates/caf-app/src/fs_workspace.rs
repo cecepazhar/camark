@@ -186,13 +186,71 @@ pub async fn read_file_base64(file_path: String) -> Result<String, String> {
     .map_err(|e| e.to_string())?
 }
 
+/// Atomically writes `content` to `target_path` (R-01).
+///
+/// 1. If `target_path` is a symlink, writes through to the canonical target without replacing the link.
+/// 2. Creates a temporary file in the same parent directory as the target.
+/// 3. Preserves existing file permissions on Unix if the target exists.
+/// 4. Flushes and syncs (`fsync`) data to disk.
+/// 5. Atomically replaces the target file via `tempfile::NamedTempFile::persist`.
+/// 6. Cleans up temporary file automatically if any error occurs.
+pub fn write_file_atomic<P: AsRef<Path>, C: AsRef<[u8]>>(
+    target_path: P,
+    content: C,
+) -> std::io::Result<()> {
+    let raw_path = target_path.as_ref();
+
+    // 1. If target is a symlink, write through to link destination (R-01)
+    let target = if fs::symlink_metadata(raw_path)
+        .map(|m| m.is_symlink())
+        .unwrap_or(false)
+    {
+        fs::canonicalize(raw_path)?
+    } else {
+        raw_path.to_path_buf()
+    };
+
+    let parent = target.parent().unwrap_or_else(|| Path::new("."));
+    if !parent.as_os_str().is_empty() && !parent.exists() {
+        fs::create_dir_all(parent)?;
+    }
+
+    // 2. Preserve existing permissions on Unix if target exists
+    #[cfg(unix)]
+    let existing_perms = fs::metadata(&target).ok().map(|m| m.permissions());
+
+    // 3. Create temp file in the same directory
+    let mut temp_file = tempfile::Builder::new()
+        .prefix(".camark_tmp_")
+        .tempfile_in(parent)?;
+
+    #[cfg(unix)]
+    if let Some(ref perms) = existing_perms {
+        let _ = fs::set_permissions(temp_file.path(), perms.clone());
+    }
+
+    // 4. Write data and fsync
+    use std::io::Write;
+    temp_file.write_all(content.as_ref())?;
+    temp_file.as_file().sync_all()?;
+
+    // 5. Atomic persist / rename over target
+    temp_file.persist(&target).map_err(|e| e.error)?;
+
+    // Sync directory on Unix to guarantee directory entry persistence
+    #[cfg(unix)]
+    if let Ok(dir_file) = fs::File::open(parent) {
+        let _ = dir_file.sync_all();
+    }
+
+    Ok(())
+}
+
 pub async fn write_file(file_path: String, content: String) -> Result<(), String> {
     tokio::task::spawn_blocking(move || {
         let path = Path::new(&file_path);
-        if let Some(parent) = path.parent() {
-            let _ = fs::create_dir_all(parent);
-        }
-        fs::write(path, content).map_err(|e| format!("Failed to write file: {e}"))
+        write_file_atomic(path, content.as_bytes())
+            .map_err(|e| format!("Failed to write file: {e}"))
     })
     .await
     .map_err(|e| e.to_string())?
@@ -201,13 +259,10 @@ pub async fn write_file(file_path: String, content: String) -> Result<(), String
 pub async fn create_file(file_path: String) -> Result<(), String> {
     tokio::task::spawn_blocking(move || {
         let path = Path::new(&file_path);
-        if let Some(parent) = path.parent() {
-            let _ = fs::create_dir_all(parent);
-        }
         if path.exists() {
             return Err("File already exists".to_string());
         }
-        fs::write(path, "").map_err(|e| format!("Failed to create file: {e}"))
+        write_file_atomic(path, b"").map_err(|e| format!("Failed to create file: {e}"))
     })
     .await
     .map_err(|e| e.to_string())?
@@ -272,11 +327,11 @@ pub async fn open_with_default_app(file_path: String) -> Result<(), String> {
                 // successfully. If it exits fast, inspect the status + stderr.
                 let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
                 let mut stderr_buf: Vec<u8> = Vec::new();
-                let mut wait_result: Option<std::io::Result<std::process::ExitStatus>> = None;
+                let wait_result;
                 loop {
                     match child.try_wait() {
                         Ok(Some(status)) => {
-                            wait_result = Some(Ok(status));
+                            wait_result = Ok(status);
                             break;
                         }
                         Ok(None) => {
@@ -296,15 +351,14 @@ pub async fn open_with_default_app(file_path: String) -> Result<(), String> {
                             std::thread::sleep(std::time::Duration::from_millis(200));
                         }
                         Err(e) => {
-                            wait_result = Some(Err(e));
+                            wait_result = Err(e);
                             break;
                         }
                     }
                 }
                 let status = match wait_result {
-                    Some(Ok(s)) => s,
-                    Some(Err(e)) => return Err(format!("try_wait failed for {cmd}: {e}")),
-                    None => unreachable!(),
+                    Ok(s) => s,
+                    Err(e) => return Err(format!("try_wait failed for {cmd}: {e}")),
                 };
                 if status.success() {
                     return Ok(());
@@ -734,6 +788,117 @@ mod tests {
         assert_eq!(
             fs::read_to_string(dest_dir.join("sub.md")).expect("read"),
             "nested"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_atomic_save_normal_and_keeps_permissions() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let target = temp.path().join("atomic_doc.md");
+
+        write_file(target.to_string_lossy().to_string(), "v1".to_string())
+            .await
+            .expect("initial write");
+        assert_eq!(fs::read_to_string(&target).expect("read"), "v1");
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let custom_perms = std::fs::Permissions::from_mode(0o640);
+            fs::set_permissions(&target, custom_perms).expect("set perms");
+        }
+
+        write_file(
+            target.to_string_lossy().to_string(),
+            "v2 updated".to_string(),
+        )
+        .await
+        .expect("overwrite");
+        assert_eq!(fs::read_to_string(&target).expect("read"), "v2 updated");
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let final_perms = fs::metadata(&target)
+                .expect("metadata")
+                .permissions()
+                .mode()
+                & 0o777;
+            assert_eq!(
+                final_perms, 0o640,
+                "permissions must be preserved across atomic saves"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn test_atomic_save_symlink_writes_through() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let real_file = temp.path().join("real_target.md");
+        fs::write(&real_file, "original target content").expect("write real");
+
+        let link_file = temp.path().join("symlink_to_real.md");
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(&real_file, &link_file).expect("create symlink");
+
+        #[cfg(unix)]
+        {
+            assert!(
+                fs::symlink_metadata(&link_file)
+                    .expect("symlink meta")
+                    .is_symlink()
+            );
+
+            write_file(
+                link_file.to_string_lossy().to_string(),
+                "written through link".to_string(),
+            )
+            .await
+            .expect("write through symlink");
+
+            // Symlink must remain a symlink, NOT replaced by regular file
+            assert!(
+                fs::symlink_metadata(&link_file)
+                    .expect("symlink meta")
+                    .is_symlink()
+            );
+            assert_eq!(
+                fs::read_to_string(&real_file).expect("read real"),
+                "written through link"
+            );
+            assert_eq!(
+                fs::read_to_string(&link_file).expect("read link"),
+                "written through link"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn test_atomic_save_failure_keeps_original_and_cleans_temp() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let target = temp.path().join("important.md");
+        fs::write(&target, "pristine content").expect("write original");
+
+        // Attempting to write atomic to a directory path instead of file path will fail
+        let invalid_target = temp.path().join("important.md").join("sub_invalid.md");
+        let res = write_file_atomic(&invalid_target, b"fail content");
+        assert!(res.is_err());
+
+        // Assert original file content is pristine
+        assert_eq!(
+            fs::read_to_string(&target).expect("read"),
+            "pristine content"
+        );
+
+        // Assert no temp files left behind
+        let temp_files: Vec<_> = fs::read_dir(temp.path())
+            .expect("read dir")
+            .filter_map(|e| e.ok())
+            .filter(|e| e.file_name().to_string_lossy().starts_with(".camark_tmp_"))
+            .collect();
+        assert!(
+            temp_files.is_empty(),
+            "no temp files should remain after failure: {temp_files:?}"
         );
     }
 }

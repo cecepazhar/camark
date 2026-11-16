@@ -101,6 +101,8 @@
     noteKey,
     parseNote,
     slugify,
+    graphData,
+    forceLayout,
     type NoteIndex,
     type Backlink,
   } from '$lib/utils/knowledge';
@@ -127,6 +129,7 @@
   } from '$lib/utils/markdownTools';
   import { getPro } from '$lib/stores/pro.svelte';
   import { openAiChat } from '$lib/stores/aiChat.svelte';
+  import { getSidebarPanelStore, type SidebarPanel } from '$lib/stores/sidebarPanel.svelte';
   import { goto } from '$app/navigation';
 
   // State
@@ -403,6 +406,36 @@
   let isVaultMode = $state<boolean>(false);
   let isVaultUnlocked = $state<boolean>(false);
   let vaultModalOpen = $state<boolean>(false);
+
+  // ---- Unified sidebar panel state (driven by the icon rail in +layout.svelte) ----
+  const sidebarPanelStore = getSidebarPanelStore();
+  const sidebarPanel = $derived<SidebarPanel>(sidebarPanelStore.activePanel);
+  const panelIsFiles = $derived(sidebarPanel === 'files');
+  const panelIsVault = $derived(sidebarPanel === 'vault');
+  const panelIsSearch = $derived(sidebarPanel === 'search');
+  const panelIsBookmarks = $derived(sidebarPanel === 'bookmarks');
+  const panelIsKnowledge = $derived(sidebarPanel === 'knowledge');
+
+  // Global search state
+  let searchQuery = $state<string>('');
+  let searchResults = $state<Array<{ path: string; line: number; snippet: string; title: string }>>([]);
+  let isSearching = $state<boolean>(false);
+  let searchDebounce: ReturnType<typeof setTimeout> | null = null;
+
+  // Knowledge map state
+  let knowledgeCenterDoc = $state<string | null>(null);
+
+  // Sync vault mode with the active sidebar panel (icon rail drives it).
+  $effect(() => {
+    if (panelIsVault && !isVaultMode) {
+      enterVaultMode();
+    } else if (panelIsFiles && isVaultMode) {
+      leaveVaultMode();
+    }
+    if (panelIsKnowledge && !knowledgeCenterDoc && currentFilePath) {
+      knowledgeCenterDoc = currentFilePath;
+    }
+  });
   let vaultPassword = $state<string>('');
 
   // Split Comparison Pane State
@@ -1311,6 +1344,25 @@ graph TD;
       }
       if (target > 0 || heading) jumpToLine(target);
     }, 120);
+  }
+
+  // Open a note referenced by its (possibly relative) link target name
+  function openNoteByRelName(target: string) {
+    const note = knowledgeIndex?.notes.get(noteKey(target));
+    if (note) {
+      openPathAtLine(note.path, 0, '');
+    } else {
+      // Fall back to basename search across the workspace
+      const found = findNoteByName(target);
+      if (found) openPathAtLine(found.path, 0, '');
+      else showToast(t('editor.noteNotFound', { name: target }), 'error');
+    }
+  }
+
+  // Open a note by its absolute/known path
+  function openNoteByPath(path: string) {
+    if (!path) return;
+    openPathAtLine(path, 0, '');
   }
 
   async function writeNoteContent(path: string, content: string) {
@@ -2382,6 +2434,93 @@ graph TD;
     }
   }
 
+  // Open a file from the native OS file picker (for arbitrary paths outside the workspace)
+  async function openFileFromDialog() {
+    try {
+      const selected = await open({
+        multiple: false,
+        directory: false,
+        filters: [
+          { name: 'Documents', extensions: ['md', 'markdown', 'txt', 'pdf', 'docx', 'xlsx', 'json', 'yaml', 'yml', 'toml', 'html', 'css', 'js', 'ts'] },
+          { name: 'All files', extensions: ['*'] },
+        ],
+      });
+      if (selected) {
+        const path = String(selected);
+        const parts = path.split('/');
+        const name = parts[parts.length - 1] || path;
+        await openFile({ name, path, is_dir: false });
+      }
+    } catch (e) {
+      console.warn('Open file dialog failed:', e);
+    }
+  }
+
+  // Global search across all markdown files in the workspace
+  async function runGlobalSearch() {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) {
+      searchResults = [];
+      return;
+    }
+    isSearching = true;
+    try {
+      const files = collectNotes(fileTree).filter((n) => !n.is_dir);
+      const results: Array<{ path: string; line: number; snippet: string; title: string }> = [];
+      const limit = 200;
+      for (const file of files) {
+        if (results.length >= limit) break;
+        try {
+          const content = await invoke<string>('workspace_read_file', { filePath: file.path });
+          const lines = content.split('\n');
+          for (let i = 0; i < lines.length; i++) {
+            if (results.length >= limit) break;
+            if (lines[i].toLowerCase().includes(q)) {
+              results.push({
+                path: file.path,
+                line: i + 1,
+                snippet: lines[i].trim().slice(0, 160),
+                title: file.name,
+              });
+            }
+          }
+        } catch {
+          /* skip unreadable */
+        }
+      }
+      searchResults = results;
+    } finally {
+      isSearching = false;
+    }
+  }
+
+  function scheduleSearch() {
+    if (searchDebounce) clearTimeout(searchDebounce);
+    searchDebounce = setTimeout(runGlobalSearch, 300);
+  }
+
+  async function openSearchResult(r: { path: string; line: number }) {
+    const parts = r.path.split('/');
+    const name = parts[parts.length - 1] || r.path;
+    const node: FileNode = { name, path: r.path, is_dir: false };
+    await openFile(node);
+    await openPathAtLine(r.path, r.line, '');
+    searchResults = [];
+  }
+
+  // Knowledge map: for a given center doc, find its outgoing links + incoming backlinks
+  function buildKnowledgeLinks(centerPath: string) {
+    const centerKey = noteKey(centerPath);
+    const centerNote = knowledgeIndex?.notes.get(centerKey);
+    const outgoing: string[] = centerNote
+      ? [...new Set(centerNote.links.map((l) => l.target))]
+      : [];
+    const incoming = knowledgeIndex
+      ? getBacklinks(knowledgeIndex, centerPath).map((b) => b.sourcePath || b.sourceName)
+      : [];
+    return { outgoing, incoming };
+  }
+
   async function enterVaultMode() {
     isVaultMode = true;
     try {
@@ -3352,20 +3491,27 @@ graph TD;
       oncontextmenu={(e) => e.preventDefault()}
       class="{showFileTree ? 'w-60 sm:w-64' : 'hidden'} border-r border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-[#111111] flex flex-col shrink-0 select-none file-tree-sidebar no-print"
     >
-      <!-- Mode Switcher Tabs: Files vs Encrypted Vault -->
-      <div class="grid grid-cols-2 p-1.5 border-b border-neutral-200 dark:border-neutral-800/80 gap-1 bg-neutral-100/80 dark:bg-neutral-950/60">
-        <button
-          onclick={leaveVaultMode}
-          class="py-1 px-2 rounded-md text-[11px] font-semibold transition-all {(!isVaultMode) ? 'bg-white dark:bg-neutral-800 text-cyan-600 dark:text-cyan-400 shadow-2xs' : 'text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'}"
-        >
-          📁 {t('editor.filesTab')}
-        </button>
-        <button
-          onclick={enterVaultMode}
-          class="py-1 px-2 rounded-md text-[11px] font-semibold transition-all {isVaultMode ? 'bg-white dark:bg-neutral-800 text-amber-600 dark:text-amber-400 shadow-2xs' : 'text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'}"
-        >
-          🔒 {t('editor.vaultTab')}
-        </button>
+      <!-- Panel header: active panel title + Open File button (driven by icon rail, not sub-tabs) -->
+      <div class="px-3 py-2 border-b border-neutral-200 dark:border-neutral-800/80 flex items-center justify-between bg-neutral-100/80 dark:bg-neutral-950/60">
+        <span class="text-[10px] font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
+          {panelIsVault ? t('nav.vault') : panelIsSearch ? t('nav.search') : panelIsBookmarks ? t('nav.bookmarks') : panelIsKnowledge ? t('nav.knowledge') : t('nav.editor')}
+        </span>
+        <div class="flex items-center gap-1">
+          {#if panelIsFiles}
+            <!-- Open File from arbitrary path (native OS picker) -->
+            <button
+              type="button"
+              onclick={openFileFromDialog}
+              class="p-1 rounded-md hover:bg-neutral-200 dark:hover:bg-neutral-800 text-neutral-500 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-white transition-colors"
+              title={t('editor.openFile')}
+              aria-label={t('editor.openFile')}
+            >
+              <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M4 8V6a2 2 0 012-2h3l2 2h4a2 2 0 012 2v2M4 12h16" />
+              </svg>
+            </button>
+          {/if}
+        </div>
       </div>
 
       <!-- Action Sub-header: Title & Top Action Toolbar (New File, New Folder, Refresh) -->
@@ -3682,6 +3828,147 @@ graph TD;
         oncontextmenu={openSidebarBackgroundContextMenu}
         role="presentation"
       >
+        <!-- ===== Search Panel ===== -->
+        {#if panelIsSearch}
+          <div class="p-1 space-y-2">
+            <input
+              type="text"
+              bind:value={searchQuery}
+              oninput={scheduleSearch}
+              placeholder={t('editor.searchPlaceholder')}
+              class="w-full px-2.5 py-1.5 rounded-lg bg-neutral-200/70 dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 text-[11px] font-mono text-neutral-800 dark:text-neutral-200 placeholder-neutral-400 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+            />
+            <div class="space-y-0.5 min-h-0 flex-1">
+              {#if isSearching}
+                <div class="px-2 py-3 text-center text-[10px] text-neutral-400">…</div>
+              {:else if searchResults.length === 0}
+                <div class="px-2 py-3 text-center text-[10px] text-neutral-400">
+                  {searchQuery ? t('editor.searchNoMatch') : t('editor.searchAllDocs')}
+                </div>
+              {:else}
+                <div class="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400 flex justify-between">
+                  <span>{t('editor.searchMatches', { count: searchResults.length })}</span>
+                </div>
+                {#each searchResults.slice(0, 60) as r (r.path + ':' + r.line)}
+                  <button
+                    type="button"
+                    onclick={() => openSearchResult(r)}
+                    class="w-full text-left px-2 py-1.5 rounded-lg hover:bg-cyan-500/10 hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors group"
+                  >
+                    <div class="flex items-center gap-1 text-[10px] font-semibold text-neutral-500 dark:text-neutral-400 group-hover:text-cyan-600 dark:group-hover:text-cyan-400">
+                      <span class="truncate">{r.title}</span>
+                      <span class="ml-auto text-neutral-400 font-mono shrink-0">:L{r.line}</span>
+                    </div>
+                    <div class="truncate text-[11px] text-neutral-600 dark:text-neutral-300 mt-0.5">{r.snippet}</div>
+                  </button>
+                {/each}
+              {/if}
+            </div>
+          </div>
+        {/if}
+
+        <!-- ===== Bookmarks Panel ===== -->
+        {#if panelIsBookmarks}
+          <div class="space-y-0.5">
+            <div class="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-amber-500">⭐ {t('editor.folderBookmarks')}</div>
+            {#if folderBookmarks.length === 0}
+              <div class="px-2 py-3 text-center text-[10px] text-neutral-400">
+                {t('editor.noBookmarks')}
+              </div>
+            {:else}
+              {#each folderBookmarks as b (b.path)}
+                <div class="flex items-center gap-1.5 px-2 py-1.5 rounded-lg hover:bg-amber-500/10 transition-colors group">
+                  <button
+                    type="button"
+                    onclick={() => loadDirectory(b.path)}
+                    class="flex items-center gap-1.5 truncate text-left flex-1 text-[11px] text-neutral-700 dark:text-neutral-300 hover:text-amber-600 dark:hover:text-amber-400"
+                  >
+                    <span class="shrink-0">📌</span>
+                    <span class="truncate">{b.name}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onclick={() => removeBookmark(b.id)}
+                    class="opacity-0 group-hover:opacity-100 p-0.5 text-neutral-400 hover:text-red-500 transition-all shrink-0"
+                    title="Remove"
+                  >
+                    ✕
+                  </button>
+                </div>
+              {/each}
+            {/if}
+            <button
+              type="button"
+              onclick={addFolderToCurrentWorkspace}
+              class="w-full mt-1 px-2 py-1.5 rounded-lg text-[11px] font-medium text-cyan-600 dark:text-cyan-400 hover:bg-cyan-500/10 transition-colors text-left"
+            >
+              + {t('editor.addFolderToWorkspace')}
+            </button>
+          </div>
+        {/if}
+
+        <!-- ===== Knowledge Map Panel ===== -->
+        {#if panelIsKnowledge}
+          <div class="space-y-2 p-1">
+            <div class="text-[10px] font-semibold uppercase tracking-wide text-purple-500 dark:text-purple-400">{t('nav.knowledge')}</div>
+            {#if knowledgeIndex}
+              {@const g = graphData(knowledgeIndex)}
+              <div class="text-[11px] text-neutral-500 dark:text-neutral-400 px-1">
+                {g.nodes.length} docs · {g.edges.length} links
+              </div>
+              <!-- Centered on the active doc: show its outgoing + incoming links -->
+              {#if currentFilePath && !currentFilePath.startsWith('vault://')}
+                {@const links = buildKnowledgeLinks(currentFilePath)}
+                <div class="rounded-lg border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-[#161616] p-2 space-y-2">
+                  <div class="flex items-center gap-1.5 text-[11px] font-semibold text-neutral-700 dark:text-neutral-200">
+                    <span class="text-purple-500">◉</span>
+                    <span class="truncate">{currentNoteName}</span>
+                  </div>
+                  <div>
+                    <div class="text-[10px] font-semibold uppercase tracking-wide text-cyan-500 px-1 mb-0.5">Outgoing ({links.outgoing.length})</div>
+                    {#each links.outgoing as target (target)}
+                      <button
+                        type="button"
+                        onclick={() => openNoteByRelName(target)}
+                        class="w-full text-left px-2 py-1 rounded-md text-[11px] text-neutral-600 dark:text-neutral-300 hover:bg-cyan-500/10 hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors truncate"
+                      >
+                        → {target}
+                      </button>
+                    {:else}
+                      <div class="px-2 py-1 text-[10px] text-neutral-400">No outgoing links</div>
+                    {/each}
+                  </div>
+                  <div>
+                    <div class="text-[10px] font-semibold uppercase tracking-wide text-amber-500 px-1 mb-0.5">Backlinks ({links.incoming.length})</div>
+                    {#each links.incoming as src (src)}
+                      <button
+                        type="button"
+                        onclick={() => openNoteByRelName(src)}
+                        class="w-full text-left px-2 py-1 rounded-md text-[11px] text-neutral-600 dark:text-neutral-300 hover:bg-amber-500/10 hover:text-amber-600 dark:hover:text-amber-400 transition-colors truncate"
+                      >
+                        ← {src}
+                      </button>
+                    {:else}
+                      <div class="px-2 py-1 text-[10px] text-neutral-400">No backlinks</div>
+                    {/each}
+                  </div>
+                </div>
+              {/if}
+              <div class="rounded-lg border border-neutral-200 dark:border-neutral-800 overflow-hidden">
+                <GraphView
+                  open={true}
+                  index={knowledgeIndex}
+                  currentKey={currentNoteKey || ''}
+                  onOpen={(path: string) => openNoteByPath(path)}
+                  onClose={() => {}}
+                />
+              </div>
+            {:else}
+              <div class="px-2 py-4 text-center text-[10px] text-neutral-400">No documents indexed yet.</div>
+            {/if}
+          </div>
+        {/if}
+
         {#if isVaultMode}
           {#each vaultDocs as doc (doc.id)}
             <button

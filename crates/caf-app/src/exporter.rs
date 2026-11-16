@@ -1,7 +1,6 @@
 //! Native Markdown Multi-Format Exporter for CAMark (P5).
 
 use serde::{Deserialize, Serialize};
-use std::fs;
 use std::path::Path;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -115,10 +114,8 @@ fn export_html_sync(
     );
 
     let path = Path::new(target_path);
-    if let Some(p) = path.parent() {
-        let _ = fs::create_dir_all(p);
-    }
-    fs::write(path, full_html).map_err(|e| format!("Failed to export: {e}"))?;
+    crate::fs_workspace::write_file_atomic(path, full_html.as_bytes())
+        .map_err(|e| format!("Failed to export: {e}"))?;
 
     Ok(ExportResult {
         success: true,
