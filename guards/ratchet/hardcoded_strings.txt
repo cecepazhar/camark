@@ -65,33 +65,33 @@ frontend/src/routes/+layout.svelte:570: title="Perluas sidebar"
 frontend/src/routes/+layout.svelte:571: aria-label="Expand sidebar"
 frontend/src/routes/+layout.svelte:585: title="Kecilkan sidebar"
 frontend/src/routes/+layout.svelte:586: aria-label="Collapse sidebar"
-frontend/src/routes/+page.svelte:3615: aria-label="Toggle Files Explorer Rail"
-frontend/src/routes/+page.svelte:3630: title="Scroll tabs left"
-frontend/src/routes/+page.svelte:3631: aria-label="Scroll tabs left"
-frontend/src/routes/+page.svelte:3723: title="Scroll tabs right"
-frontend/src/routes/+page.svelte:3724: aria-label="Scroll tabs right"
-frontend/src/routes/+page.svelte:3787: title="Urutkan file & folder"
-frontend/src/routes/+page.svelte:3788: aria-label="Urutkan file & folder"
-frontend/src/routes/+page.svelte:3864: title="Ganti atau kelola workspace"
-frontend/src/routes/+page.svelte:3926: title="Kembali ke folder sebelumnya (Back)"
-frontend/src/routes/+page.svelte:3927: aria-label="Back"
-frontend/src/routes/+page.svelte:3939: title="Naik satu tingkat folder (Up)"
-frontend/src/routes/+page.svelte:3940: aria-label="Up"
-frontend/src/routes/+page.svelte:3947: <div class="flex items-center gap-0.5 min-w-0 flex-1 overflow-x-auto scrollbar-none text-neutral-600 dark:text-neutral-300" title="Klik segmen untuk lompat ke folder">
-frontend/src/routes/+page.svelte:4151: title="Remove"
-frontend/src/routes/+page.svelte:4444: title="Live Web Preview"
-frontend/src/routes/+page.svelte:4484: title="PDF Preview"
-frontend/src/routes/+page.svelte:4558: <iframe title="Compare Binary Preview" src={compareContent} class="w-full min-h-[400px] border-0 bg-white"></iframe>
-frontend/src/routes/+page.svelte:4579: title="Tutup Perbandingan"
-frontend/src/routes/+page.svelte:4588: <iframe title="Split Compare Binary Preview" src={compareContent} class="w-full flex-1 border-0 bg-white"></iframe>
-frontend/src/routes/+page.svelte:4660: <button type="button" class="hover:text-cyan-400" title="Backlinks, mentions & tags (Ctrl+Alt+L)" onclick={() => (showKnowledge = !showKnowledge)}>🔗 {currentBacklinks.length}</button>
-frontend/src/routes/+page.svelte:4661: <button type="button" class="hover:text-cyan-400 hidden sm:inline" title="Graph view (Ctrl+Alt+G)" onclick={() => (showGraph = true)}>Graph</button>
-frontend/src/routes/+page.svelte:4662: <button type="button" class="hover:text-cyan-400 hidden sm:inline" title="Quick switcher (Ctrl+O)" onclick={() => (showSwitcher = true)}>Ctrl+O</button>
-frontend/src/routes/+page.svelte:4670: title="Toggle Outline / Heading Navigator"
-frontend/src/routes/+page.svelte:4681: <span class="flex items-center gap-1.5" title="Local-First Storage Engine">
-frontend/src/routes/+page.svelte:5482: placeholder="Contoh: Divisi Media & Marketing"
-frontend/src/routes/+page.svelte:5495: placeholder="Contoh: Formasi folder tim konten, ads & copy"
-frontend/src/routes/+page.svelte:5507: placeholder="01 - Riset&#10;Marketing&#10;Product&#10;Meeting & Notulensi"
+frontend/src/routes/+page.svelte:3622: aria-label="Toggle Files Explorer Rail"
+frontend/src/routes/+page.svelte:3637: title="Scroll tabs left"
+frontend/src/routes/+page.svelte:3638: aria-label="Scroll tabs left"
+frontend/src/routes/+page.svelte:3730: title="Scroll tabs right"
+frontend/src/routes/+page.svelte:3731: aria-label="Scroll tabs right"
+frontend/src/routes/+page.svelte:3794: title="Urutkan file & folder"
+frontend/src/routes/+page.svelte:3795: aria-label="Urutkan file & folder"
+frontend/src/routes/+page.svelte:3871: title="Ganti atau kelola workspace"
+frontend/src/routes/+page.svelte:3933: title="Kembali ke folder sebelumnya (Back)"
+frontend/src/routes/+page.svelte:3934: aria-label="Back"
+frontend/src/routes/+page.svelte:3946: title="Naik satu tingkat folder (Up)"
+frontend/src/routes/+page.svelte:3947: aria-label="Up"
+frontend/src/routes/+page.svelte:3954: <div class="flex items-center gap-0.5 min-w-0 flex-1 overflow-x-auto scrollbar-none text-neutral-600 dark:text-neutral-300" title="Klik segmen untuk lompat ke folder">
+frontend/src/routes/+page.svelte:4158: title="Remove"
+frontend/src/routes/+page.svelte:4451: title="Live Web Preview"
+frontend/src/routes/+page.svelte:4491: title="PDF Preview"
+frontend/src/routes/+page.svelte:4565: <iframe title="Compare Binary Preview" src={compareContent} class="w-full min-h-[400px] border-0 bg-white"></iframe>
+frontend/src/routes/+page.svelte:4586: title="Tutup Perbandingan"
+frontend/src/routes/+page.svelte:4595: <iframe title="Split Compare Binary Preview" src={compareContent} class="w-full flex-1 border-0 bg-white"></iframe>
+frontend/src/routes/+page.svelte:4667: <button type="button" class="hover:text-cyan-400" title="Backlinks, mentions & tags (Ctrl+Alt+L)" onclick={() => (showKnowledge = !showKnowledge)}>🔗 {currentBacklinks.length}</button>
+frontend/src/routes/+page.svelte:4668: <button type="button" class="hover:text-cyan-400 hidden sm:inline" title="Graph view (Ctrl+Alt+G)" onclick={() => (showGraph = true)}>Graph</button>
+frontend/src/routes/+page.svelte:4669: <button type="button" class="hover:text-cyan-400 hidden sm:inline" title="Quick switcher (Ctrl+O)" onclick={() => (showSwitcher = true)}>Ctrl+O</button>
+frontend/src/routes/+page.svelte:4677: title="Toggle Outline / Heading Navigator"
+frontend/src/routes/+page.svelte:4688: <span class="flex items-center gap-1.5" title="Local-First Storage Engine">
+frontend/src/routes/+page.svelte:5489: placeholder="Contoh: Divisi Media & Marketing"
+frontend/src/routes/+page.svelte:5502: placeholder="Contoh: Formasi folder tim konten, ads & copy"
+frontend/src/routes/+page.svelte:5514: placeholder="01 - Riset&#10;Marketing&#10;Product&#10;Meeting & Notulensi"
 frontend/src/routes/settings/+page.svelte:353: placeholder="CAMark User"
 frontend/src/routes/settings/+page.svelte:470: placeholder="e.g. CAMK12-9Q0DM1-2"
 frontend/src/routes/settings/+page.svelte:552: placeholder="••••••••••••"

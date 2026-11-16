@@ -279,7 +279,7 @@ export interface RenderOptions {
    * the user can jump to that document directly. Code that doesn't match a
    * known file stays as a plain code span.
    */
-  knownFiles?: Set<string>;
+  knownFiles?: Set<string> | string[];
   /** The currently open file path — used to resolve relative filenames against its directory. */
   currentFilePath?: string | null;
 }
@@ -289,14 +289,16 @@ export interface RenderOptions {
  * wikilink. Matches both bare basenames (`07-deploy.md`) and relative paths (`docs/07.md`).
  * Only inline `<code>` (not fenced `pre><code>`) is touched.
  */
-function autoLinkCode(html: string, knownFiles: Set<string>, currentFilePath: string | null): string {
-  if (!knownFiles || knownFiles.size === 0) return html;
+function autoLinkCode(html: string, knownFiles: Set<string> | string[], currentFilePath: string | null): string {
+  if (!knownFiles) return html;
+  const knownSet = knownFiles instanceof Set ? knownFiles : new Set(knownFiles);
+  if (knownSet.size === 0) return html;
 
   // Build basename → full path lookup (last wins). Covers the most common case:
   // `07-deploy.md` in a table cell. The `fileTree` paths are absolute (workspace root
   // + subfolder), so we key by basename only.
   const byBasename = new Map<string, string>();
-  for (const p of knownFiles) {
+  for (const p of knownSet) {
     const base = p.split('/').pop() ?? p;
     byBasename.set(base, p);
   }
@@ -317,7 +319,7 @@ function autoLinkCode(html: string, knownFiles: Set<string>, currentFilePath: st
       let target: string | undefined;
 
       // 1. Direct match against knownFiles (handles absolute paths like /home/...)
-      if (knownFiles.has(trimmed)) {
+      if (knownSet.has(trimmed)) {
         target = trimmed;
       }
       // 2. Basename match (most common: `07-deploy.md`)
@@ -334,7 +336,7 @@ function autoLinkCode(html: string, knownFiles: Set<string>, currentFilePath: st
           relClean,
         ];
         for (const c of candidates) {
-          if (knownFiles.has(c)) { target = c; break; }
+          if (knownSet.has(c)) { target = c; break; }
         }
         // Also try basename fallback if relative path not found
         if (!target) target = byBasename.get(relClean);
@@ -379,8 +381,11 @@ export async function renderMarkdownToHtml(
     html = `<details class="frontmatter-block"><summary>Properties</summary><pre>${escapeHtml(yaml)}</pre></details>${html}`;
   }
   // Auto-link inline code that names known workspace files
-  if (opts.knownFiles && opts.knownFiles.size > 0) {
-    html = autoLinkCode(html, opts.knownFiles, opts.currentFilePath ?? null);
+  if (opts.knownFiles) {
+    const hasFiles = opts.knownFiles instanceof Set ? opts.knownFiles.size > 0 : opts.knownFiles.length > 0;
+    if (hasFiles) {
+      html = autoLinkCode(html, opts.knownFiles, opts.currentFilePath ?? null);
+    }
   }
   return { html, yaml };
 }

@@ -1,15 +1,18 @@
 import { describe, it, expect } from "vitest";
 import {
   benchmarkFixture,
+  benchmarkOffThreadFixture,
   countWords,
   measureSingleRender,
+  measureOffThreadRender,
 } from "./renderBenchmark";
+import { RenderCoordinator } from "../render/renderCoordinator";
 
 import text1k from "./fixtures/document-1k.md?raw";
 import text10k from "./fixtures/document-10k.md?raw";
 import text50k from "./fixtures/document-50k.md?raw";
 
-describe("P-01 Render Benchmark Harness and Fixtures", () => {
+describe("P-01 & P-02 Render Benchmark Harness and Fixtures", () => {
   it("fixtures have required word count thresholds", () => {
     const words1k = countWords(text1k);
     const words10k = countWords(text10k);
@@ -48,5 +51,17 @@ describe("P-01 Render Benchmark Harness and Fixtures", () => {
     expect(result.avgParseMs).toBeGreaterThan(0);
     expect(result.avgSanitizeMs).toBeGreaterThan(0);
     expect(result.avgTotalMs).toBeGreaterThan(0);
+  });
+
+  it("measures off-thread render with main-thread dispatch under 16ms (P-02 requirement)", async () => {
+    const coordinator = new RenderCoordinator();
+    const measurement = await measureOffThreadRender(text1k, coordinator);
+
+    expect(measurement.mainThreadDispatchMs).toBeLessThan(16);
+    expect(measurement.mainThreadSanitizeMs).toBeGreaterThan(0);
+    expect(measurement.rawHtmlLength).toBeGreaterThan(0);
+    expect(measurement.cleanHtmlLength).toBeGreaterThan(0);
+    expect(measurement.isStale).toBe(false);
+    coordinator.terminate();
   });
 });

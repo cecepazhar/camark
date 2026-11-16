@@ -91,6 +91,7 @@
     type EditorApplyMode,
   } from '$lib/stores/documentContext.svelte';
   import { createLiveMarkdownPlugin } from '$lib/utils/liveMarkdown';
+  import { getRenderCoordinator } from '$lib/render/renderCoordinator';
   import {
     installMarkdownExtensions,
     renderMarkdownToHtml,
@@ -1672,12 +1673,16 @@ graph TD;
       // CommonMark soft breaks by default; opt back into <br> with localStorage camark_soft_breaks=true.
       const softBreaks =
         typeof localStorage !== 'undefined' && localStorage.getItem('camark_soft_breaks') === 'true';
-      const { html: rawHtml } = await renderMarkdownToHtml(content, {
+      const coordinator = getRenderCoordinator();
+      const res = await coordinator.render(content, {
         breaks: softBreaks,
         knownFiles: knownFilesSet,
         currentFilePath: currentFilePath,
       });
-      renderedHtml = DOMPurify.sanitize(rawHtml, {
+      if (res.isStale) {
+        return;
+      }
+      renderedHtml = DOMPurify.sanitize(res.html, {
         ADD_TAGS: ['button', 'span', 'div', 'svg', 'path'],
         ADD_ATTR: [
           'data-lang',
@@ -1762,12 +1767,14 @@ graph TD;
       return;
     }
     try {
-      const { html: rawHtml } = await renderMarkdownToHtml(content, {
+      const coordinator = getRenderCoordinator();
+      const res = await coordinator.render(content, {
         breaks: false,
         knownFiles: knownFilesSet,
         currentFilePath: currentFilePath,
       });
-      compareHtml = DOMPurify.sanitize(rawHtml, {
+      if (res.isStale) return;
+      compareHtml = DOMPurify.sanitize(res.html, {
         ADD_TAGS: ['button', 'span', 'div', 'svg', 'path'],
         ADD_ATTR: ['data-lang', 'data-code', 'type', 'd', 'stroke', 'fill', 'viewBox', 'stroke-width', 'stroke-linecap', 'stroke-linejoin'],
       });
