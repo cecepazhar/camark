@@ -76,6 +76,8 @@
     getIsOutlineOpen,
     setIsOutlineOpen,
     toggleOutline,
+    setTabVersionStamp,
+    getTabVersionStamp,
     type DocTab,
     type ViewMode,
   } from '$lib/stores/docTabs.svelte';
@@ -161,13 +163,13 @@
 
   // File-tree sort control (applied to the top-level tree on each change)
   type TreeSortMode = 'name_asc' | 'name_desc' | 'date_desc' | 'date_asc' | 'size_desc' | 'size_asc';
-  let treeSortMode = $state<TreeSortMode>(() => {
+  let treeSortMode = $state<TreeSortMode>((() => {
     try {
       return (localStorage.getItem('camark_tree_sort') as TreeSortMode) || 'name_asc';
     } catch {
       return 'name_asc';
     }
-  }) as TreeSortMode;
+  })());
   let showSortMenu = $state<boolean>(false);
   const sortModeLabels: Record<TreeSortMode, string> = {
     name_asc: 'Nama A→Z (Natural)',
@@ -444,8 +446,7 @@
   let compareContent = $state<string>('');
   let compareHtml = $state<string>('');
   let compareTitle = $state<string>('');
-  // Split preview visible when compare mode is on and we're not in editor-only modes
-  const showSplitPreview = $derived(isCompareMode && viewMode !== 'editor' && viewMode !== 'live' && !isZenMode);
+
   let vaultConfirmPassword = $state<string>('');
   let isVaultSetup = $state<boolean>(false);
   let vaultPasswordError = $state<string>('');
@@ -564,6 +565,8 @@ graph TD;
 
   // Zen & Focus Mode
   let isZenMode = $state<boolean>(false);
+  // Split preview visible when compare mode is on and we're not in editor-only modes
+  const showSplitPreview = $derived(isCompareMode && viewMode !== 'editor' && viewMode !== 'live' && !isZenMode);
   let isPresentationOpen = $state<boolean>(false);
   const isOutlineOpen = $derived(getIsOutlineOpen());
 
@@ -1239,7 +1242,7 @@ graph TD;
   let showGraph = $state(false);
   let recentPaths = $state<string[]>([]);
   let lightboxSrc = $state<string | null>(null);
-  const noteContentCache = new Map<string, { mtime: number | undefined; content: string }>();
+  const noteContentCache = new Map<string, { mtime: number | undefined; content: string; stamp?: string }>();
   const mermaidSvgCache = new Map<string, string>();
   const MAX_INDEXED_NOTES = 3000;
 
@@ -1301,8 +1304,10 @@ graph TD;
         await Promise.all(
           batch.map(async (n) => {
             try {
-              const content = await invoke<string>('workspace_read_file', { filePath: n.path });
-              noteContentCache.set(n.path, { mtime: n.modified_at, content });
+              const res = await invoke<any>('workspace_read_file', { filePath: n.path });
+              const content = typeof res === 'string' ? res : (res?.content ?? '');
+              const stamp = typeof res === 'object' ? (res?.version_stamp ?? '') : '';
+              noteContentCache.set(n.path, { mtime: n.modified_at, content, stamp });
             } catch {
               noteContentCache.delete(n.path);
             }
@@ -1369,10 +1374,11 @@ graph TD;
     if (path === currentFilePath && editorView) {
       editorView.dispatch({ changes: { from: 0, to: editorView.state.doc.length, insert: content } });
     } else {
-      await invoke('workspace_write_file', { filePath: path, content });
+      const stamp = noteContentCache.get(path)?.stamp ?? '*';
+      const newStamp = await invoke<string>('workspace_write_file', { filePath: path, content, expectedStamp: stamp });
+      const prev = noteContentCache.get(path);
+      noteContentCache.set(path, { mtime: prev?.mtime, content, stamp: newStamp });
     }
-    const prev = noteContentCache.get(path);
-    noteContentCache.set(path, { mtime: prev?.mtime, content });
   }
 
   async function linkMention(m: Backlink) {
@@ -2092,6 +2098,105 @@ graph TD;
     }
   }
 
+  let currentVersionStamp = $state<string>('');
+  let conflictModal = $state<{
+    open: boolean;
+    filePath: string;
+    fileName: string;
+    currentDiskStamp: string;
+    myContent: string;
+  }>({
+    open: false,
+    filePath: '',
+    fileName: '',
+    currentDiskStamp: '',
+    myContent: '',
+  });
+
+  async function resolveConflictKeepMine() {
+    if (!conflictModal.filePath) return;
+    try {
+      const stampToUse = conflictModal.currentDiskStamp || '*';
+      const newStamp = await invoke<string>('workspace_write_file', {
+        filePath: conflictModal.filePath,
+        content: conflictModal.myContent,
+        expectedStamp: stampToUse,
+      });
+      currentVersionStamp = newStamp;
+      if (activeTabId) {
+        setTabVersionStamp(activeTabId, newStamp);
+        setDirty(activeTabId, false);
+      }
+      conflictModal.open = false;
+      showToast(t('editor.conflictKeptMineSuccess'), 'success');
+    } catch (e: any) {
+      showToast(`Overwrite failed: ${e?.message || e}`, 'error');
+    }
+  }
+
+  async function resolveConflictTakeTheirs() {
+    if (!conflictModal.filePath) return;
+    try {
+      const res = await invoke<any>('workspace_read_file', { filePath: conflictModal.filePath });
+      const newContent = typeof res === 'string' ? res : (res?.content ?? '');
+      const stamp = typeof res === 'object' ? (res?.version_stamp ?? '') : '';
+      currentVersionStamp = stamp;
+      rawMarkdown = newContent;
+      if (activeTabId) {
+        setTabVersionStamp(activeTabId, stamp);
+        setDirty(activeTabId, false);
+      }
+      if (editorView) {
+        editorView.dispatch({
+          changes: { from: 0, to: editorView.state.doc.length, insert: newContent },
+        });
+      }
+      renderMarkdown(newContent);
+      conflictModal.open = false;
+      showToast(t('editor.conflictReloadedSuccess'), 'info');
+    } catch (e: any) {
+      showToast(`Reload failed: ${e?.message || e}`, 'error');
+    }
+  }
+
+  async function resolveConflictSaveCopy() {
+    if (!conflictModal.filePath) return;
+    try {
+      const now = new Date();
+      const yyyy = now.getFullYear();
+      const mm = String(now.getMonth() + 1).padStart(2, '0');
+      const dd = String(now.getDate()).padStart(2, '0');
+      const hh = String(now.getHours()).padStart(2, '0');
+      const min = String(now.getMinutes()).padStart(2, '0');
+      const dateStr = `${yyyy}-${mm}-${dd} ${hh}${min}`;
+
+      const origPath = conflictModal.filePath;
+      const lastSlash = origPath.lastIndexOf('/');
+      const dir = lastSlash >= 0 ? origPath.substring(0, lastSlash) : '';
+      const origName = conflictModal.fileName;
+      const baseName = origName.replace(/\.(md|markdown)$/i, '');
+      const ext = origName.includes('.') ? origName.substring(origName.lastIndexOf('.')) : '.md';
+      const copyName = `${baseName} (konflik ${dateStr})${ext}`;
+      const copyPath = dir ? `${dir}/${copyName}` : copyName;
+
+      await invoke('workspace_create_file', { filePath: copyPath });
+      await invoke('workspace_write_file', {
+        filePath: copyPath,
+        content: conflictModal.myContent,
+        expectedStamp: '*',
+      });
+
+      conflictModal.open = false;
+      showToast(t('editor.conflictSavedCopySuccess', { copyName }), 'success');
+      if (workspacePath) {
+        fileTree = await invoke<FileNode[]>('workspace_list_directory', { dirPath: workspacePath });
+      }
+      await openFile({ name: copyName, path: copyPath, is_dir: false });
+    } catch (e: any) {
+      showToast(`Save copy failed: ${e?.message || e}`, 'error');
+    }
+  }
+
   let saveTimeout: any;
   function autoSave() {
     if (!currentFilePath) return;
@@ -2103,15 +2208,36 @@ graph TD;
           await saveVaultDoc();
           if (activeTabId) setDirty(activeTabId, false);
         } else if (currentFilePath) {
-          await invoke('workspace_write_file', { filePath: currentFilePath, content: rawMarkdown });
-          if (activeTabId) setDirty(activeTabId, false);
+          const activeStamp = activeTabId ? (getTabVersionStamp(activeTabId) || currentVersionStamp) : currentVersionStamp;
+          const newStamp = await invoke<string>('workspace_write_file', {
+            filePath: currentFilePath,
+            content: rawMarkdown,
+            expectedStamp: activeStamp,
+          });
+          currentVersionStamp = newStamp;
+          if (activeTabId) {
+            setTabVersionStamp(activeTabId, newStamp);
+            setDirty(activeTabId, false);
+          }
           if (/\.(md|markdown)$/i.test(currentFilePath)) {
-            noteContentCache.set(currentFilePath, { mtime: noteContentCache.get(currentFilePath)?.mtime, content: rawMarkdown });
+            noteContentCache.set(currentFilePath, { mtime: noteContentCache.get(currentFilePath)?.mtime, content: rawMarkdown, stamp: newStamp });
             rebuildIndexFromCache();
           }
         }
-      } catch (e) {
+      } catch (e: any) {
         console.error('Save failed:', e);
+        const isConflict = e?.kind === 'Conflict' || (typeof e === 'string' && (e.startsWith('Conflict') || e.includes('Conflict')));
+        if (isConflict) {
+          const conflictStamp = e?.current_stamp || e?.payload?.current_stamp || '';
+          conflictModal = {
+            open: true,
+            filePath: currentFilePath ?? '',
+            fileName: currentDocTitle ?? '',
+            currentDiskStamp: conflictStamp,
+            myContent: rawMarkdown,
+          };
+          showToast(t('editor.conflictAutoSaveBlocked'), 'error');
+        }
       } finally {
         setTimeout(() => {
           isSaving = false;
@@ -2129,9 +2255,30 @@ graph TD;
       await saveVaultDoc();
     } else if (currentFilePath) {
       try {
-        await invoke('workspace_write_file', { filePath: currentFilePath, content: rawMarkdown });
-      } catch (e) {
+        const activeStamp = activeTabId ? (getTabVersionStamp(activeTabId) || currentVersionStamp) : currentVersionStamp;
+        const newStamp = await invoke<string>('workspace_write_file', {
+          filePath: currentFilePath,
+          content: rawMarkdown,
+          expectedStamp: activeStamp,
+        });
+        currentVersionStamp = newStamp;
+        if (activeTabId) {
+          setTabVersionStamp(activeTabId, newStamp);
+          setDirty(activeTabId, false);
+        }
+      } catch (e: any) {
         console.error('Failed writing file on flush:', e);
+        const isConflict = e?.kind === 'Conflict' || (typeof e === 'string' && (e.startsWith('Conflict') || e.includes('Conflict')));
+        if (isConflict) {
+          const conflictStamp = e?.current_stamp || e?.payload?.current_stamp || '';
+          conflictModal = {
+            open: true,
+            filePath: currentFilePath ?? '',
+            fileName: currentDocTitle ?? '',
+            currentDiskStamp: conflictStamp,
+            myContent: rawMarkdown,
+          };
+        }
       }
     }
     if (activeTabId) setDirty(activeTabId, false);
@@ -2198,7 +2345,11 @@ graph TD;
           binaryPreviewMime = 'application/octet-stream';
           content = `📄 ${tab.title}`;
         } else {
-          content = await invoke<string>('workspace_read_file', { filePath: tab.path });
+          const res = await invoke<any>('workspace_read_file', { filePath: tab.path });
+          content = typeof res === 'string' ? res : (res?.content ?? '');
+          const stamp = typeof res === 'object' ? (res?.version_stamp ?? '') : '';
+          currentVersionStamp = stamp;
+          if (tab.id) setTabVersionStamp(tab.id, stamp);
         }
         currentFilePath = tab.path;
         currentDocTitle = tab.title;
@@ -2273,7 +2424,8 @@ graph TD;
         const mime = targetTab.path.toLowerCase().endsWith('.pdf') ? 'application/pdf' : 'application/octet-stream';
         compareContent = `data:${mime};base64,${b64}`;
       } else {
-        compareContent = await invoke<string>('workspace_read_file', { filePath: targetTab.path });
+        const res = await invoke<any>('workspace_read_file', { filePath: targetTab.path });
+        compareContent = typeof res === 'string' ? res : (res?.content ?? '');
         await renderCompareHtml(compareContent);
       }
       setViewMode('preview');
@@ -2471,7 +2623,8 @@ graph TD;
       for (const file of files) {
         if (results.length >= limit) break;
         try {
-          const content = await invoke<string>('workspace_read_file', { filePath: file.path });
+          const res = await invoke<any>('workspace_read_file', { filePath: file.path });
+          const content = typeof res === 'string' ? res : (res?.content ?? '');
           const lines = content.split('\n');
           for (let i = 0; i < lines.length; i++) {
             if (results.length >= limit) break;
@@ -3057,7 +3210,8 @@ graph TD;
       content = rawMarkdown;
     } else {
       try {
-        content = await invoke<string>('workspace_read_file', { filePath: node.path });
+        const res = await invoke<any>('workspace_read_file', { filePath: node.path });
+        content = typeof res === 'string' ? res : (res?.content ?? '');
       } catch (e) {
         showToast(`Failed to read file: ${e}`, 'error');
         return;
@@ -3094,7 +3248,8 @@ graph TD;
       content = rawMarkdown;
     } else {
       try {
-        content = await invoke<string>('workspace_read_file', { filePath: node.path });
+        const res = await invoke<any>('workspace_read_file', { filePath: node.path });
+        content = typeof res === 'string' ? res : (res?.content ?? '');
       } catch (e) {
         showToast(`Failed to read file: ${e}`, 'error');
         return;
@@ -5273,6 +5428,84 @@ graph TD;
             </Button>
           </div>
         </form>
+      </div>
+    </div>
+  {/if}
+
+  <!-- Conflict Resolution Modal (R-02) -->
+  {#if conflictModal.open}
+    <div
+      role="presentation"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-xs p-4 select-none animate-in fade-in duration-100"
+      onclick={(e) => {
+        if (e.target === e.currentTarget) conflictModal.open = false;
+      }}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        class="w-full max-w-md rounded-2xl bg-neutral-900 border border-amber-500/50 p-5 shadow-2xl shadow-black text-neutral-200"
+      >
+        <div class="flex items-center gap-2 mb-2 text-amber-400">
+          <svg class="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+          </svg>
+          <h2 class="text-sm font-bold text-white tracking-wide">
+            {t('editor.conflictModalTitle')}
+          </h2>
+        </div>
+
+        <p class="text-xs text-neutral-300 mb-3 leading-relaxed">
+          {t('editor.conflictModalDesc', { name: conflictModal.fileName })}
+        </p>
+
+        <div class="p-2.5 rounded-lg bg-neutral-950/80 border border-neutral-800 text-[11px] font-mono text-neutral-400 mb-4 truncate">
+          {conflictModal.filePath}
+        </div>
+
+        <div class="flex flex-col gap-2">
+          <Button
+            type="button"
+            variant="primary"
+            size="sm"
+            onclick={resolveConflictKeepMine}
+            class="!bg-amber-600 hover:!bg-amber-500 text-white w-full justify-center"
+          >
+            {t('editor.conflictKeepMine')}
+          </Button>
+
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onclick={resolveConflictTakeTheirs}
+            class="text-neutral-300 hover:text-white border border-neutral-700 bg-neutral-800/60 hover:bg-neutral-800 w-full justify-center"
+          >
+            {t('editor.conflictTakeTheirs')}
+          </Button>
+
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onclick={resolveConflictSaveCopy}
+            class="text-neutral-300 hover:text-white border border-neutral-700 bg-neutral-800/60 hover:bg-neutral-800 w-full justify-center"
+          >
+            {t('editor.conflictSaveCopy')}
+          </Button>
+        </div>
+
+        <div class="flex justify-end pt-3">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onclick={() => (conflictModal.open = false)}
+            class="text-neutral-400 hover:text-white"
+          >
+            {t('editor.cancelBtn')}
+          </Button>
+        </div>
       </div>
     </div>
   {/if}

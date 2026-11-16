@@ -68,7 +68,8 @@
         const parsed = JSON.parse(customData);
         let content = parsed.content || '';
         if (!content && parsed.path && !parsed.isVault) {
-          content = await invoke<string>('workspace_read_file', { filePath: parsed.path });
+          const res = await invoke<any>('workspace_read_file', { filePath: parsed.path });
+          content = typeof res === 'string' ? res : (res?.content ?? '');
         }
         updateDocumentContext({
           active_doc_path: parsed.path,
@@ -118,7 +119,8 @@
       const path = plainText.trim();
       const name = path.split('/').pop() || 'document.md';
       try {
-        const content = await invoke<string>('workspace_read_file', { filePath: path });
+        const res = await invoke<any>('workspace_read_file', { filePath: path });
+        const content = typeof res === 'string' ? res : (res?.content ?? '');
         updateDocumentContext({
           active_doc_path: path,
           active_doc_title: name,
@@ -178,7 +180,8 @@
       // Safety net: ensure active_doc_content is loaded from disk if path exists
       if (docSnapshot.active_doc_path && !docSnapshot.active_doc_content.trim() && !docSnapshot.is_vault_doc) {
         try {
-          const content = await invoke<string>('workspace_read_file', { filePath: docSnapshot.active_doc_path });
+          const res = await invoke<any>('workspace_read_file', { filePath: docSnapshot.active_doc_path });
+          const content = typeof res === 'string' ? res : (res?.content ?? '');
           if (content) {
             docSnapshot.active_doc_content = content;
             updateDocumentContext({ active_doc_content: content });

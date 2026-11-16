@@ -7,6 +7,7 @@ export interface DocTab {
   title: string;
   isVault: boolean;
   isDirty: boolean;
+  versionStamp?: string;
 }
 
 export type ViewMode = 'editor' | 'live' | 'split' | 'preview';
@@ -157,6 +158,17 @@ export function setDirty(id: string, dirty: boolean): void {
     tabs = [...tabs]; // trigger reactivity
     persist();
   }
+}
+
+export function setTabVersionStamp(id: string, stamp: string): void {
+  const tab = tabs.find((t) => t.id === id);
+  if (tab) {
+    tab.versionStamp = stamp;
+  }
+}
+
+export function getTabVersionStamp(id: string): string | undefined {
+  return tabs.find((t) => t.id === id)?.versionStamp;
 }
 
 export function setViewMode(mode: ViewMode): void {

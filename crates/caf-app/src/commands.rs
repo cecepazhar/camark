@@ -244,7 +244,9 @@ pub async fn workspace_list_directory(dir_path: String) -> Result<Vec<FileNode>,
 }
 
 #[tauri::command]
-pub async fn workspace_read_file(file_path: String) -> Result<String, String> {
+pub async fn workspace_read_file(
+    file_path: String,
+) -> Result<fs_workspace::WorkspaceFileContent, String> {
     fs_workspace::read_file(file_path).await
 }
 
@@ -254,8 +256,12 @@ pub async fn workspace_read_file_base64(file_path: String) -> Result<String, Str
 }
 
 #[tauri::command]
-pub async fn workspace_write_file(file_path: String, content: String) -> Result<(), String> {
-    fs_workspace::write_file(file_path, content).await
+pub async fn workspace_write_file(
+    file_path: String,
+    content: String,
+    expected_stamp: String,
+) -> Result<String, fs_workspace::WorkspaceSaveError> {
+    fs_workspace::write_file(file_path, content, expected_stamp).await
 }
 
 #[tauri::command]

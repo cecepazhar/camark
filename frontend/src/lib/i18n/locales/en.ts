@@ -630,7 +630,16 @@ export const en: Dictionary = {
     namePlaceholder: 'Enter name...',
     createBtn: 'Create',
     renameBtn: 'Rename',
-    deleteBtn: 'Delete'
+    deleteBtn: 'Delete',
+    conflictModalTitle: 'File Conflict Detected',
+    conflictModalDesc: 'The file "{{name}}" has been modified on disk by another program or process. Choose how to resolve this conflict:',
+    conflictKeepMine: 'Keep Mine (Overwrite Disk)',
+    conflictTakeTheirs: 'Take Theirs (Reload from Disk)',
+    conflictSaveCopy: 'Save Mine as Copy',
+    conflictAutoSaveBlocked: 'Auto-save paused: file has been modified on disk.',
+    conflictKeptMineSuccess: 'File overwritten with your edits.',
+    conflictReloadedSuccess: 'File reloaded from disk.',
+    conflictSavedCopySuccess: 'Conflict copy saved as {{copyName}}.'
   }
 };
 

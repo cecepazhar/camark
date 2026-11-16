@@ -168,9 +168,66 @@ pub async fn list_dir(dir_path: String) -> Result<Vec<FileNode>, String> {
     .map_err(|e| e.to_string())?
 }
 
-pub async fn read_file(file_path: String) -> Result<String, String> {
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WorkspaceFileContent {
+    pub content: String,
+    pub version_stamp: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(tag = "kind")]
+pub enum WorkspaceSaveError {
+    Conflict {
+        current_stamp: String,
+        message: String,
+    },
+    NotFound {
+        message: String,
+    },
+    Io {
+        message: String,
+    },
+}
+
+impl std::fmt::Display for WorkspaceSaveError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Conflict {
+                current_stamp,
+                message,
+            } => {
+                write!(f, "Conflict: current stamp {current_stamp} ({message})")
+            }
+            Self::NotFound { message } => write!(f, "File not found: {message}"),
+            Self::Io { message } => write!(f, "IO error: {message}"),
+        }
+    }
+}
+
+impl std::error::Error for WorkspaceSaveError {}
+
+pub fn get_file_version_stamp<P: AsRef<Path>>(path: P) -> std::io::Result<String> {
+    let p = path.as_ref();
+    let meta = fs::metadata(p)?;
+    let mtime = meta.modified()?;
+    let duration = mtime
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default();
+    let nanos = duration.as_nanos();
+    let len = meta.len();
+    Ok(format!("{nanos}:{len}"))
+}
+
+pub async fn read_file(file_path: String) -> Result<WorkspaceFileContent, String> {
     tokio::task::spawn_blocking(move || {
-        fs::read_to_string(&file_path).map_err(|e| format!("Failed to read file: {e}"))
+        let path = Path::new(&file_path);
+        let content = fs::read_to_string(path).map_err(|e| format!("Failed to read file: {e}"))?;
+        let version_stamp = get_file_version_stamp(path)
+            .map_err(|e| format!("Failed to compute version stamp: {e}"))?;
+        Ok(WorkspaceFileContent {
+            content,
+            version_stamp,
+        })
     })
     .await
     .map_err(|e| e.to_string())?
@@ -246,14 +303,48 @@ pub fn write_file_atomic<P: AsRef<Path>, C: AsRef<[u8]>>(
     Ok(())
 }
 
-pub async fn write_file(file_path: String, content: String) -> Result<(), String> {
+pub async fn write_file(
+    file_path: String,
+    content: String,
+    expected_stamp: String,
+) -> Result<String, WorkspaceSaveError> {
     tokio::task::spawn_blocking(move || {
         let path = Path::new(&file_path);
-        write_file_atomic(path, content.as_bytes())
-            .map_err(|e| format!("Failed to write file: {e}"))
+
+        if path.exists() {
+            let current_stamp = get_file_version_stamp(path).map_err(|e| WorkspaceSaveError::Io {
+                message: format!("Failed to read metadata: {e}"),
+            })?;
+
+            if expected_stamp != "*" && expected_stamp != current_stamp {
+                let msg = format!(
+                    "File modified on disk (current stamp: {current_stamp}, expected: {expected_stamp})"
+                );
+                return Err(WorkspaceSaveError::Conflict {
+                    current_stamp,
+                    message: msg,
+                });
+            }
+        } else if !expected_stamp.is_empty() && expected_stamp != "*" && expected_stamp != "new" {
+            return Err(WorkspaceSaveError::NotFound {
+                message: "File does not exist on disk".to_string(),
+            });
+        }
+
+        write_file_atomic(path, content.as_bytes()).map_err(|e| WorkspaceSaveError::Io {
+            message: format!("Failed to write atomic: {e}"),
+        })?;
+
+        let new_stamp = get_file_version_stamp(path).map_err(|e| WorkspaceSaveError::Io {
+            message: format!("Failed to read new metadata: {e}"),
+        })?;
+
+        Ok(new_stamp)
     })
     .await
-    .map_err(|e| e.to_string())?
+    .map_err(|e| WorkspaceSaveError::Io {
+        message: e.to_string(),
+    })?
 }
 
 pub async fn create_file(file_path: String) -> Result<(), String> {
@@ -796,9 +887,13 @@ mod tests {
         let temp = tempfile::tempdir().expect("tempdir");
         let target = temp.path().join("atomic_doc.md");
 
-        write_file(target.to_string_lossy().to_string(), "v1".to_string())
-            .await
-            .expect("initial write");
+        write_file(
+            target.to_string_lossy().to_string(),
+            "v1".to_string(),
+            "*".to_string(),
+        )
+        .await
+        .expect("initial write");
         assert_eq!(fs::read_to_string(&target).expect("read"), "v1");
 
         #[cfg(unix)]
@@ -811,6 +906,7 @@ mod tests {
         write_file(
             target.to_string_lossy().to_string(),
             "v2 updated".to_string(),
+            "*".to_string(),
         )
         .await
         .expect("overwrite");
@@ -852,6 +948,7 @@ mod tests {
             write_file(
                 link_file.to_string_lossy().to_string(),
                 "written through link".to_string(),
+                "*".to_string(),
             )
             .await
             .expect("write through symlink");
@@ -900,5 +997,93 @@ mod tests {
             temp_files.is_empty(),
             "no temp files should remain after failure: {temp_files:?}"
         );
+    }
+    #[tokio::test]
+    async fn test_conflict_detection_stale_stamp_rejects_and_fresh_stamp_succeeds() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let target = temp.path().join("conflict_test.md");
+        let target_str = target.to_string_lossy().to_string();
+
+        // 1. Initial write
+        write_file(
+            target_str.clone(),
+            "initial content".to_string(),
+            "*".to_string(),
+        )
+        .await
+        .expect("initial write");
+
+        // 2. Read file to get initial content + stamp
+        let read_res = read_file(target_str.clone()).await.expect("read initial");
+        assert_eq!(read_res.content, "initial content");
+        let initial_stamp = read_res.version_stamp;
+
+        // 3. Simulate external modification on disk
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        fs::write(&target, "externally modified content").expect("external write");
+
+        // 4. Attempt to write with stale stamp -> must return Conflict error and leave disk untouched
+        let save_res = write_file(
+            target_str.clone(),
+            "my stale editor content".to_string(),
+            initial_stamp,
+        )
+        .await;
+
+        match save_res {
+            Err(WorkspaceSaveError::Conflict { current_stamp, .. }) => {
+                let actual_disk_stamp = get_file_version_stamp(&target).expect("get stamp");
+                assert_eq!(
+                    current_stamp, actual_disk_stamp,
+                    "returned current stamp must match disk"
+                );
+            }
+            other => panic!("expected Conflict error, got {other:?}"),
+        }
+
+        // Verify disk content was untouched!
+        assert_eq!(
+            fs::read_to_string(&target).expect("read"),
+            "externally modified content"
+        );
+
+        // 5. Write with fresh current stamp -> succeeds!
+        let fresh_stamp = get_file_version_stamp(&target).expect("fresh stamp");
+        let new_stamp = write_file(
+            target_str.clone(),
+            "my fresh editor content".to_string(),
+            fresh_stamp,
+        )
+        .await
+        .expect("write with fresh stamp must succeed");
+
+        assert_eq!(
+            fs::read_to_string(&target).expect("read"),
+            "my fresh editor content"
+        );
+        let final_disk_stamp = get_file_version_stamp(&target).expect("final stamp");
+        assert_eq!(new_stamp, final_disk_stamp);
+    }
+
+    #[tokio::test]
+    async fn test_conflict_detection_force_overwrite_with_wildcard() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let target = temp.path().join("wildcard_test.md");
+        let target_str = target.to_string_lossy().to_string();
+
+        fs::write(&target, "external disk content").expect("external write");
+
+        // Wildcard "*" bypasses conflict check for explicit overwrite
+        let new_stamp = write_file(
+            target_str.clone(),
+            "forced content".to_string(),
+            "*".to_string(),
+        )
+        .await
+        .expect("wildcard write succeeds");
+
+        assert_eq!(fs::read_to_string(&target).expect("read"), "forced content");
+        let final_disk_stamp = get_file_version_stamp(&target).expect("final stamp");
+        assert_eq!(new_stamp, final_disk_stamp);
     }
 }

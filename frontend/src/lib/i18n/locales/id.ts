@@ -628,7 +628,16 @@ export const id: Dictionary = {
     namePlaceholder: 'Masukkan nama...',
     createBtn: 'Buat',
     renameBtn: 'Ganti Nama',
-    deleteBtn: 'Hapus'
+    deleteBtn: 'Hapus',
+    conflictModalTitle: 'Konflik Berkas Terdeteksi',
+    conflictModalDesc: 'Berkas "{{name}}" telah dimodifikasi di disk oleh aplikasi atau proses lain. Pilih tindakan penanganan konflik berikut:',
+    conflictKeepMine: 'Pertahankan Milik Saya (Timpa Disk)',
+    conflictTakeTheirs: 'Ambil Milik Disk (Muat Ulang)',
+    conflictSaveCopy: 'Simpan sebagai Salinan Baru',
+    conflictAutoSaveBlocked: 'Penyimpanan otomatis ditahan: berkas di disk telah berubah.',
+    conflictKeptMineSuccess: 'Berkas berhasil ditimpa dengan suntingan Anda.',
+    conflictReloadedSuccess: 'Berkas berhasil dimuat ulang dari disk.',
+    conflictSavedCopySuccess: 'Salinan konflik berhasil disimpan sebagai {{copyName}}.'
   }
 };
 
