@@ -4341,7 +4341,7 @@ graph TD;
 
     <!-- Editor Pane (CodeMirror 6 with Format Toolbar & Zen Mode) -->
     <main
-      class="flex-1 min-h-0 flex flex-col overflow-hidden relative {viewMode === 'live' ? 'bg-white dark:bg-[#0c1017] bg-[linear-gradient(to_right,#00000006_1px,transparent_1px),linear-gradient(to_bottom,#00000006_1px,transparent_1px)] dark:bg-[linear-gradient(to_right,#ffffff05_1px,transparent_1px),linear-gradient(to_bottom,#ffffff05_1px,transparent_1px)] bg-[size:56px_56px]' : 'bg-neutral-50 dark:bg-[#0f141c]'} {viewMode === 'split' ? 'border-r border-neutral-200 dark:border-neutral-800' : ''} {viewMode === 'preview' ? 'hidden' : 'flex'}"
+      class="flex-1 min-h-0 min-w-0 flex flex-col overflow-hidden relative {viewMode === 'live' ? 'bg-white dark:bg-[#0c1017] bg-[linear-gradient(to_right,#00000006_1px,transparent_1px),linear-gradient(to_bottom,#00000006_1px,transparent_1px)] dark:bg-[linear-gradient(to_right,#ffffff05_1px,transparent_1px),linear-gradient(to_bottom,#ffffff05_1px,transparent_1px)] bg-[size:56px_56px]' : 'bg-neutral-50 dark:bg-[#0f141c]'} {viewMode === 'split' ? 'border-r border-neutral-200 dark:border-neutral-800' : ''} {viewMode === 'preview' ? 'hidden' : 'flex'}"
     >
       <!-- Format Toolbar Above Editor -->
       <MarkdownFormatToolbar
@@ -4405,7 +4405,7 @@ graph TD;
       bind:this={previewElement}
       onscroll={viewMode === 'split' ? syncScrollPreviewToEditor : undefined}
       onclick={handlePreviewClick}
-      class="preview-scroll-accel flex-1 bg-white dark:bg-[#0c1017] {isHtmlFile(currentFilePath) ? '!p-0 overflow-hidden' : isSvgFile(currentFilePath) ? 'p-4 sm:p-6 overflow-y-auto' : (showSplitPreview ? 'p-0 overflow-hidden' : 'p-8 sm:p-10 overflow-y-auto')} markdown-preview max-w-none select-text overscroll-contain will-change-[scroll-position] bg-[linear-gradient(to_right,#00000006_1px,transparent_1px),linear-gradient(to_bottom,#00000006_1px,transparent_1px)] dark:bg-[linear-gradient(to_right,#ffffff05_1px,transparent_1px),linear-gradient(to_bottom,#ffffff05_1px,transparent_1px)] bg-[size:56px_56px] {viewMode === 'editor' || viewMode === 'live' || isZenMode ? 'hidden' : 'block'} relative"
+      class="preview-scroll-accel flex-1 min-w-0 bg-white dark:bg-[#0c1017] {isHtmlFile(currentFilePath) ? '!p-0 overflow-hidden' : isSvgFile(currentFilePath) ? 'p-4 sm:p-6 overflow-y-auto' : (showSplitPreview ? 'p-0 overflow-hidden' : 'p-8 sm:p-10 overflow-y-auto')} markdown-preview max-w-none select-text overscroll-contain will-change-[scroll-position] bg-[linear-gradient(to_right,#00000006_1px,transparent_1px),linear-gradient(to_bottom,#00000006_1px,transparent_1px)] dark:bg-[linear-gradient(to_right,#ffffff05_1px,transparent_1px),linear-gradient(to_bottom,#ffffff05_1px,transparent_1px)] bg-[size:56px_56px] {viewMode === 'editor' || viewMode === 'live' || isZenMode ? 'hidden' : 'block'} relative"
     >
       <!-- Split Compare Toggle (visible in Preview/Split mode) -->
       {#if viewMode === 'preview' || viewMode === 'split'}
