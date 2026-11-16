@@ -4,7 +4,8 @@
   "version": "1.0.45",
   "type": "module",
   "scripts": {
-    "test": "vitest run",
+    "test": "vitest run --exclude src/lib/bench/renderBenchmarkRunner.test.ts",
+    "bench": "vitest run src/lib/bench/renderBenchmarkRunner.test.ts",
     "dev": "vite dev",
     "build": "vite build",
     "preview": "vite preview",
