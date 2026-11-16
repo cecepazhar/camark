@@ -6,24 +6,35 @@ content: string;
 version_stamp: string;
 }
 
-export async function invoke_windowMinimize(window: any): Promise<void> {
-  return invoke('window_minimize', { window: window });
+export type FileChangeKind = 'created' | 'modified' | 'removed' | 'renamed';
+
+export interface WorkspaceFileChange {
+path: string;
+kind: FileChangeKind;
 }
 
-export async function invoke_windowMaximize(window: any): Promise<void> {
-  return invoke('window_maximize', { window: window });
+export interface WorkspaceChangesPayload {
+changes: WorkspaceFileChange[];
 }
 
-export async function invoke_windowClose(window: any): Promise<void> {
-  return invoke('window_close', { window: window });
+export async function invoke_windowMinimize(): Promise<void> {
+  return invoke('window_minimize');
 }
 
-export async function invoke_windowShow(window: any): Promise<void> {
-  return invoke('window_show', { window: window });
+export async function invoke_windowMaximize(): Promise<void> {
+  return invoke('window_maximize');
 }
 
-export async function invoke_windowStartDragging(window: any): Promise<void> {
-  return invoke('window_start_dragging', { window: window });
+export async function invoke_windowClose(): Promise<void> {
+  return invoke('window_close');
+}
+
+export async function invoke_windowShow(): Promise<void> {
+  return invoke('window_show');
+}
+
+export async function invoke_windowStartDragging(): Promise<void> {
+  return invoke('window_start_dragging');
 }
 
 export async function invoke_isVaultInitialized(): Promise<boolean> {
@@ -172,6 +183,14 @@ export async function invoke_workspaceOpenFileApp(filePath: string): Promise<any
 
 export async function invoke_getInitialFilePath(): Promise<string | null> {
   return invoke('get_initial_file_path');
+}
+
+export async function invoke_workspaceWatchDirectory(dirPath: string): Promise<any> {
+  return invoke('workspace_watch_directory', { dirPath: dirPath });
+}
+
+export async function invoke_workspaceUnwatchDirectory(): Promise<any> {
+  return invoke('workspace_unwatch_directory');
 }
 
 export async function invoke_vaultListDocuments(callerProfileId: string): Promise<any[]> {

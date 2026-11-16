@@ -573,7 +573,7 @@ dependencies = [
 
 [[package]]
 name = "caf-cli"
-version = "1.0.44"
+version = "1.0.45"
 dependencies = [
  "caf-core",
  "clap",
@@ -584,7 +584,7 @@ dependencies = [
 
 [[package]]
 name = "caf-core"
-version = "1.0.44"
+version = "1.0.45"
 dependencies = [
  "aes-gcm",
  "argon2",
@@ -637,7 +637,7 @@ dependencies = [
 
 [[package]]
 name = "caf-xtask"
-version = "1.0.44"
+version = "1.0.45"
 dependencies = [
  "axum",
  "base64 0.23.1",
@@ -688,12 +688,13 @@ dependencies = [
 
 [[package]]
 name = "camark"
-version = "1.0.44"
+version = "1.0.45"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
  "caf-core",
  "mimalloc",
+ "notify",
  "parking_lot",
  "serde",
  "serde_json",

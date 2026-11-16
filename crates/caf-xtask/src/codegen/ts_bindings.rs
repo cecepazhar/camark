@@ -17,6 +17,14 @@ pub fn generate_bindings(repo_root: &Path) -> Result<(), Box<dyn std::error::Err
         export interface WorkspaceFileContent {\n\
           content: string;\n\
           version_stamp: string;\n\
+        }\n\n\
+        export type FileChangeKind = 'created' | 'modified' | 'removed' | 'renamed';\n\n\
+        export interface WorkspaceFileChange {\n\
+          path: string;\n\
+          kind: FileChangeKind;\n\
+        }\n\n\
+        export interface WorkspaceChangesPayload {\n\
+          changes: WorkspaceFileChange[];\n\
         }\n\n",
     );
 
@@ -32,17 +40,20 @@ pub fn generate_bindings(repo_root: &Path) -> Result<(), Box<dyn std::error::Err
             let mut invoke_args = Vec::new();
 
             for input in func.sig.inputs {
-                if let syn::FnArg::Typed(pat_type) = input
-                    && let syn::Pat::Ident(pat_ident) = *pat_type.pat
-                {
-                    let arg_name_snake = pat_ident.ident.to_string();
-                    let arg_name_camel = arg_name_snake.to_case(Case::Camel);
+                if let syn::FnArg::Typed(pat_type) = input {
+                    if is_injected_tauri_type(&pat_type.ty) {
+                        continue;
+                    }
+                    if let syn::Pat::Ident(pat_ident) = *pat_type.pat {
+                        let arg_name_snake = pat_ident.ident.to_string();
+                        let arg_name_camel = arg_name_snake.to_case(Case::Camel);
 
-                    // Naive type translation for basic params (most complex types go through ts-rs)
-                    let ts_type = rust_type_to_ts(&pat_type.ty);
+                        // Naive type translation for basic params (most complex types go through ts-rs)
+                        let ts_type = rust_type_to_ts(&pat_type.ty);
 
-                    ts_args.push(format!("{}: {}", arg_name_camel, ts_type));
-                    invoke_args.push(format!("{}: {}", arg_name_camel, arg_name_camel));
+                        ts_args.push(format!("{}: {}", arg_name_camel, ts_type));
+                        invoke_args.push(format!("{}: {}", arg_name_camel, arg_name_camel));
+                    }
                 }
             }
 
@@ -148,4 +159,14 @@ fn rust_ret_to_ts(output: &syn::ReturnType) -> String {
             rust_type_to_ts(ty)
         }
     }
+}
+
+fn is_injected_tauri_type(ty: &syn::Type) -> bool {
+    if let syn::Type::Path(type_path) = ty {
+        if let Some(seg) = type_path.path.segments.last() {
+            let ident = seg.ident.to_string();
+            return ident == "Window" || ident == "AppHandle";
+        }
+    }
+    false
 }

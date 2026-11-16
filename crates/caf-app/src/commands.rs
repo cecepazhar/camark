@@ -304,6 +304,20 @@ pub fn get_initial_file_path() -> Option<String> {
     fs_workspace::get_initial_file_path()
 }
 
+#[tauri::command]
+pub async fn workspace_watch_directory(
+    app: tauri::AppHandle,
+    dir_path: String,
+) -> Result<(), String> {
+    crate::fs_watcher::start_watching(app, dir_path)
+}
+
+#[tauri::command]
+pub async fn workspace_unwatch_directory() -> Result<(), String> {
+    crate::fs_watcher::stop_watching();
+    Ok(())
+}
+
 // CAMark Encrypted Vault Document commands
 #[tauri::command]
 pub async fn vault_list_documents(caller_profile_id: String) -> Result<Vec<VaultDocument>, String> {

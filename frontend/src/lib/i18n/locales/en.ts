@@ -639,7 +639,9 @@ export const en: Dictionary = {
     conflictAutoSaveBlocked: 'Auto-save paused: file has been modified on disk.',
     conflictKeptMineSuccess: 'File overwritten with your edits.',
     conflictReloadedSuccess: 'File reloaded from disk.',
-    conflictSavedCopySuccess: 'Conflict copy saved as {{copyName}}.'
+    conflictSavedCopySuccess: 'Conflict copy saved as {{copyName}}.',
+    changedOnDisk: 'Changed on disk',
+    fileChangedOnDiskTooltip: 'This file has been modified externally on disk'
   }
 };
 

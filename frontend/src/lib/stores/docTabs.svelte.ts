@@ -8,6 +8,7 @@ export interface DocTab {
   isVault: boolean;
   isDirty: boolean;
   versionStamp?: string;
+  changedOnDisk?: boolean;
 }
 
 export type ViewMode = 'editor' | 'live' | 'split' | 'preview';
@@ -169,6 +170,18 @@ export function setTabVersionStamp(id: string, stamp: string): void {
 
 export function getTabVersionStamp(id: string): string | undefined {
   return tabs.find((t) => t.id === id)?.versionStamp;
+}
+
+export function setTabChangedOnDisk(id: string, changed: boolean): void {
+  const tab = tabs.find((t) => t.id === id);
+  if (tab && tab.changedOnDisk !== changed) {
+    tab.changedOnDisk = changed;
+    tabs = [...tabs];
+  }
+}
+
+export function getTabChangedOnDisk(id: string): boolean {
+  return !!tabs.find((t) => t.id === id)?.changedOnDisk;
 }
 
 export function setViewMode(mode: ViewMode): void {

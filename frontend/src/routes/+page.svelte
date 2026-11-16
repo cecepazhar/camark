@@ -78,9 +78,12 @@
     toggleOutline,
     setTabVersionStamp,
     getTabVersionStamp,
+    setTabChangedOnDisk,
+    getTabChangedOnDisk,
     type DocTab,
     type ViewMode,
   } from '$lib/stores/docTabs.svelte';
+  import type { WorkspaceFileContent, WorkspaceChangesPayload } from '$lib/api/generated_bindings';
   import {
     updateDocumentContext,
     registerEditorApplyHandler,
@@ -408,6 +411,12 @@
   let isVaultMode = $state<boolean>(false);
   let isVaultUnlocked = $state<boolean>(false);
   let vaultModalOpen = $state<boolean>(false);
+  // Set when the user explicitly cancels the vault unlock/setup modal while still on
+  // the Vault panel. Prevents the panel-sync $effect from immediately re-opening the
+  // modal (which made the dialog feel "blocking" — cancel had no visible effect and the
+  // menu behind it stayed inaccessible). Cleared only when the user actively switches
+  // away from and back to the Vault panel.
+  let vaultModalDismissed = $state<boolean>(false);
 
   // ---- Unified sidebar panel state (driven by the icon rail in +layout.svelte) ----
   const sidebarPanelStore = getSidebarPanelStore();
@@ -429,7 +438,18 @@
 
   // Sync vault mode with the active sidebar panel (icon rail drives it).
   $effect(() => {
+    // Track panel transitions to clear the cancel-dismissed latch. Whenever the
+    // user navigates to a non-Vault panel then back to Vault, they get a fresh
+    // prompt; the latch only suppresses immediate re-opens within the same visit.
+    const wasVault = panelIsVault;
+    if (!wasVault) {
+      vaultModalDismissed = false;
+    }
     if (panelIsVault && !isVaultMode) {
+      if (vaultModalDismissed) {
+        // The user cancelled this session's prompt; do not force it back open.
+        return;
+      }
       enterVaultMode();
     } else if (panelIsFiles && isVaultMode) {
       leaveVaultMode();
@@ -1205,6 +1225,61 @@ graph TD;
       }
     }).catch((e) => console.warn('Failed to listen to open-file event:', e));
 
+    let unlistenWatcher: (() => void) | null = null;
+    listen<WorkspaceChangesPayload>('workspace://file-changed', async (event) => {
+      const changes = event.payload?.changes;
+      if (!changes || changes.length === 0) return;
+
+      if (workspacePath) {
+        try {
+          fileTree = await invoke<FileNode[]>('workspace_list_directory', { dirPath: workspacePath });
+          applyTreeSort(fileTree);
+        } catch (e) {
+          console.warn('Cannot refresh tree on watcher event:', e);
+        }
+      }
+
+      for (const change of changes) {
+        for (const tab of getDocTabs()) {
+          if (tab.isVault) continue;
+          const tabMatches = tab.path === change.path ||
+            (workspacePath && change.path.endsWith(tab.path)) ||
+            (workspacePath && tab.path.endsWith(change.path));
+
+          if (tabMatches) {
+            if (!tab.isDirty) {
+              try {
+                const res = await invoke<WorkspaceFileContent>('workspace_read_file', { filePath: tab.path });
+                setTabVersionStamp(tab.id, res.version_stamp);
+                setTabChangedOnDisk(tab.id, false);
+                noteContentCache.set(tab.path, {
+                  content: res.content,
+                  stamp: res.version_stamp,
+                  mtime: Date.now(),
+                });
+
+                if (activeTabId === tab.id) {
+                  rawMarkdown = res.content;
+                  currentVersionStamp = res.version_stamp;
+                  if (editorView) {
+                    editorView.dispatch({
+                      changes: { from: 0, to: editorView.state.doc.length, insert: res.content },
+                    });
+                  }
+                }
+              } catch (e) {
+                console.warn(`Failed to reload clean tab ${tab.path}:`, e);
+              }
+            } else {
+              setTabChangedOnDisk(tab.id, true);
+            }
+          }
+        }
+      }
+    }).then((unlisten) => {
+      unlistenWatcher = unlisten;
+    }).catch((e) => console.warn('Failed to listen to workspace://file-changed:', e));
+
     loadBookmarks();
     const hasActiveWs = loadWorkspacesAndTemplates();
 
@@ -1231,6 +1306,8 @@ graph TD;
       unregisterApply();
       unregisterUndo();
       unregisterExporter();
+      if (unlistenWatcher) unlistenWatcher();
+      invoke('workspace_unwatch_directory').catch(() => {});
     };
   });
 
@@ -1714,6 +1791,11 @@ graph TD;
     try {
       fileTree = await invoke<FileNode[]>('workspace_list_directory', { dirPath: path });
       applyTreeSort(fileTree);
+      if (path && path !== '.') {
+        invoke('workspace_watch_directory', { dirPath: path }).catch((e) => {
+          console.warn('Failed to start file watcher:', e);
+        });
+      }
     } catch (e) {
       console.warn('Cannot list directory:', e);
     }
@@ -1793,6 +1875,7 @@ graph TD;
     multiRootFolders = [];
     multiRootTrees = [];
     workspacePath = '';
+    invoke('workspace_unwatch_directory').catch(() => {});
     showToast(t('editor.workspaceCreatedEmpty'), 'info');
   }
 
@@ -2126,6 +2209,7 @@ graph TD;
       if (activeTabId) {
         setTabVersionStamp(activeTabId, newStamp);
         setDirty(activeTabId, false);
+        setTabChangedOnDisk(activeTabId, false);
       }
       conflictModal.open = false;
       showToast(t('editor.conflictKeptMineSuccess'), 'success');
@@ -2145,6 +2229,7 @@ graph TD;
       if (activeTabId) {
         setTabVersionStamp(activeTabId, stamp);
         setDirty(activeTabId, false);
+        setTabChangedOnDisk(activeTabId, false);
       }
       if (editorView) {
         editorView.dispatch({
@@ -2218,6 +2303,7 @@ graph TD;
           if (activeTabId) {
             setTabVersionStamp(activeTabId, newStamp);
             setDirty(activeTabId, false);
+            setTabChangedOnDisk(activeTabId, false);
           }
           if (/\.(md|markdown)$/i.test(currentFilePath)) {
             noteContentCache.set(currentFilePath, { mtime: noteContentCache.get(currentFilePath)?.mtime, content: rawMarkdown, stamp: newStamp });
@@ -2265,6 +2351,7 @@ graph TD;
         if (activeTabId) {
           setTabVersionStamp(activeTabId, newStamp);
           setDirty(activeTabId, false);
+          setTabChangedOnDisk(activeTabId, false);
         }
       } catch (e: any) {
         console.error('Failed writing file on flush:', e);
@@ -2738,6 +2825,9 @@ graph TD;
     vaultPassword = '';
     vaultConfirmPassword = '';
     vaultPasswordError = '';
+    // Latch so the panel-sync effect does not immediately re-open the dialog.
+    // The user can still re-trigger it by switching panels away and back.
+    vaultModalDismissed = true;
     if (!isVaultUnlocked) {
       isVaultMode = false;
     }
@@ -3590,6 +3680,19 @@ graph TD;
           </span>
 
           <span class="truncate flex-1 min-w-0">{tab.title}</span>
+          {#if tab.changedOnDisk}
+            <span
+              class="w-2 h-2 rounded-full bg-amber-500 shrink-0"
+              title={t('editor.fileChangedOnDiskTooltip')}
+              aria-label={t('editor.changedOnDisk')}
+            ></span>
+          {:else if tab.isDirty}
+            <span
+              class="w-1.5 h-1.5 rounded-full bg-cyan-500/70 shrink-0"
+              title={t('editor.unsavedChanges')}
+              aria-label={t('editor.unsavedChanges')}
+            ></span>
+          {/if}
 
           {#if tabs.length > 1}
             <button

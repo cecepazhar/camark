@@ -300,6 +300,8 @@ pub fn write_file_atomic<P: AsRef<Path>, C: AsRef<[u8]>>(
         let _ = dir_file.sync_all();
     }
 
+    crate::fs_watcher::record_app_write(target);
+
     Ok(())
 }
 
@@ -361,6 +363,8 @@ pub async fn create_file(file_path: String) -> Result<(), String> {
 
 pub async fn rename_file(old_path: String, new_path: String) -> Result<(), String> {
     tokio::task::spawn_blocking(move || {
+        crate::fs_watcher::record_app_write(&old_path);
+        crate::fs_watcher::record_app_write(&new_path);
         fs::rename(&old_path, &new_path).map_err(|e| format!("Failed to rename file: {e}"))
     })
     .await
@@ -370,6 +374,7 @@ pub async fn rename_file(old_path: String, new_path: String) -> Result<(), Strin
 pub async fn create_directory(dir_path: String) -> Result<(), String> {
     tokio::task::spawn_blocking(move || {
         let path = Path::new(&dir_path);
+        crate::fs_watcher::record_app_write(path);
         fs::create_dir_all(path).map_err(|e| format!("Failed to create directory: {e}"))
     })
     .await
@@ -379,6 +384,7 @@ pub async fn create_directory(dir_path: String) -> Result<(), String> {
 pub async fn delete_file(file_path: String) -> Result<(), String> {
     tokio::task::spawn_blocking(move || {
         let path = Path::new(&file_path);
+        crate::fs_watcher::record_app_write(path);
         if path.is_dir() {
             fs::remove_dir_all(path).map_err(|e| format!("Failed to delete directory: {e}"))
         } else {
@@ -431,7 +437,9 @@ pub async fn open_with_default_app(file_path: String) -> Result<(), String> {
                                 let mut chunk = [0u8; 1024];
                                 if let Ok(n) = err_pipe.read(&mut chunk) {
                                     if n > 0 {
-                                        stderr_buf.extend_from_slice(&chunk[..n]);
+                                        if let Some(slice) = chunk.get(..n) {
+                                            stderr_buf.extend_from_slice(slice);
+                                        }
                                     }
                                 }
                             }
@@ -459,7 +467,9 @@ pub async fn open_with_default_app(file_path: String) -> Result<(), String> {
                     let mut chunk = [0u8; 4096];
                     while let Ok(n) = err_pipe.read(&mut chunk) {
                         if n == 0 { break; }
-                        stderr_buf.extend_from_slice(&chunk[..n]);
+                        if let Some(slice) = chunk.get(..n) {
+                            stderr_buf.extend_from_slice(slice);
+                        }
                     }
                 }
                 let stderr_str = String::from_utf8_lossy(&stderr_buf);
@@ -625,6 +635,7 @@ pub async fn copy_file(src_path: String, dest_path: String) -> Result<(), String
             if let Some(parent) = dest.parent() {
                 let _ = fs::create_dir_all(parent);
             }
+            crate::fs_watcher::record_app_write(dest);
             fs::copy(src, dest)
                 .map(|_| ())
                 .map_err(|e| format!("Failed to copy file: {e}"))
@@ -671,7 +682,7 @@ fn natural_key(name: &str) -> Vec<(bool, Vec<u8>)> {
     let mut out: Vec<(bool, Vec<u8>)> = Vec::new();
     let mut chars = name.chars().peekable();
     while chars.peek().is_some() {
-        if chars.peek().unwrap().is_ascii_digit() {
+        if chars.peek().is_some_and(|c| c.is_ascii_digit()) {
             let mut digits = String::new();
             while let Some(&c) = chars.peek() {
                 if c.is_ascii_digit() {
@@ -686,7 +697,9 @@ fn natural_key(name: &str) -> Vec<(bool, Vec<u8>)> {
             out.push((true, trimmed.as_bytes().to_vec()));
         } else {
             let mut token = String::new();
-            token.push(chars.next().unwrap());
+            if let Some(c) = chars.next() {
+                token.push(c);
+            }
             while let Some(&c) = chars.peek() {
                 if !c.is_ascii_digit() {
                     token.push(c);

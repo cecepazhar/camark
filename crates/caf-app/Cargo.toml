@@ -19,7 +19,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-caf-core = { path = "../caf-core", version = "=1.0.44" }
+caf-core = { path = "../caf-core", version = "=1.0.45" }
 tauri = { version = "2", features = [] }
 serde.workspace = true
 serde_json.workspace = true
@@ -33,6 +33,7 @@ tauri-plugin-fs = "2"
 ts-rs = "12.0.1"
 base64 = "0.22"
 tempfile = "3"
+notify = { version = "7", features = ["macos_kqueue"] }
 
 [dev-dependencies]
 

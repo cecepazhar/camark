@@ -637,7 +637,9 @@ export const id: Dictionary = {
     conflictAutoSaveBlocked: 'Penyimpanan otomatis ditahan: berkas di disk telah berubah.',
     conflictKeptMineSuccess: 'Berkas berhasil ditimpa dengan suntingan Anda.',
     conflictReloadedSuccess: 'Berkas berhasil dimuat ulang dari disk.',
-    conflictSavedCopySuccess: 'Salinan konflik berhasil disimpan sebagai {{copyName}}.'
+    conflictSavedCopySuccess: 'Salinan konflik berhasil disimpan sebagai {{copyName}}.',
+    changedOnDisk: 'Diubah di disk',
+    fileChangedOnDiskTooltip: 'Berkas ini telah diubah secara eksternal di disk'
   }
 };
 
