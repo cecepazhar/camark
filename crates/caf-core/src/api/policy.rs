@@ -191,6 +191,11 @@ pub const COMMAND_POLICIES: &[CommandPolicy] = &[
         returns_list: false,
     },
     CommandPolicy {
+        name: "workspace_read_file_base64",
+        policy: Policy::Public,
+        returns_list: false,
+    },
+    CommandPolicy {
         name: "workspace_write_file",
         policy: Policy::Public,
         returns_list: false,
@@ -222,6 +227,11 @@ pub const COMMAND_POLICIES: &[CommandPolicy] = &[
     },
     CommandPolicy {
         name: "workspace_copy_file",
+        policy: Policy::Public,
+        returns_list: false,
+    },
+    CommandPolicy {
+        name: "workspace_open_file_app",
         policy: Policy::Public,
         returns_list: false,
     },

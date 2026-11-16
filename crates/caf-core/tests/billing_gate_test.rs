@@ -30,6 +30,14 @@ fn create_token(payload: &EntitlementPayload, signing_key: &SigningKey, kid: &st
 
 #[test]
 fn test_require_pro_rust_guard_rejection_and_acceptance() {
+    let temp_dir = std::env::temp_dir().join(format!("camark_test_gate_{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(&temp_dir).unwrap();
+    let prev_cmrk = std::env::var_os("CMRK_DATA_DIR");
+    unsafe {
+        std::env::set_var("CMRK_DATA_DIR", &temp_dir);
+    }
+    caf_core::vault::validate_password("test-password-gate").expect("unlock vault");
+
     let (key, pub_b64, kid) = generate_keys();
     let keys = vec![(kid.clone(), pub_b64)];
 
@@ -60,4 +68,16 @@ fn test_require_pro_rust_guard_rejection_and_acceptance() {
     let res_ok = require_pro(&keys, "CACASH", 1000).expect("require_pro should succeed");
     assert!(res_ok.is_pro);
     assert_eq!(res_ok.billing_type, "lifetime");
+
+    caf_core::vault::lock();
+    if let Some(prev) = prev_cmrk {
+        unsafe {
+            std::env::set_var("CMRK_DATA_DIR", prev);
+        }
+    } else {
+        unsafe {
+            std::env::remove_var("CMRK_DATA_DIR");
+        }
+    }
+    let _ = std::fs::remove_dir_all(&temp_dir);
 }

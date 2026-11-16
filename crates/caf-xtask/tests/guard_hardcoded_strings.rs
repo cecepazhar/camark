@@ -11,11 +11,7 @@ fn get_workspace_root() -> PathBuf {
 }
 
 fn bin_path() -> PathBuf {
-    let mut p = get_workspace_root();
-    p.push("target");
-    p.push("debug");
-    p.push("caf-xtask");
-    p
+    PathBuf::from(env!("CARGO_BIN_EXE_caf-xtask"))
 }
 
 #[test]

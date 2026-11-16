@@ -16,9 +16,11 @@ pub async fn export_html(
     doc_title: String,
     target_path: String,
 ) -> Result<ExportResult, String> {
-    tokio::task::spawn_blocking(move || export_html_sync(&html_content, &doc_title, &target_path, false))
-        .await
-        .map_err(|e| e.to_string())?
+    tokio::task::spawn_blocking(move || {
+        export_html_sync(&html_content, &doc_title, &target_path, false)
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 pub async fn export_pdf(
@@ -26,9 +28,11 @@ pub async fn export_pdf(
     doc_title: String,
     target_path: String,
 ) -> Result<ExportResult, String> {
-    tokio::task::spawn_blocking(move || export_html_sync(&html_content, &doc_title, &target_path, true))
-        .await
-        .map_err(|e| e.to_string())?
+    tokio::task::spawn_blocking(move || {
+        export_html_sync(&html_content, &doc_title, &target_path, true)
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 fn export_html_sync(

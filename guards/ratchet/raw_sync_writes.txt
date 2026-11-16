@@ -1,8 +1,8 @@
 # Raw sync writes baseline
 # resolves-in: F5
-crates/caf-core/src/profiles.rs:126: INSERT INTO PROFILES
-crates/caf-core/src/profiles.rs:136: UPDATE PROFILES
-crates/caf-core/src/profiles.rs:256: DELETE FROM PROFILES
-crates/caf-core/src/notes.rs:110: UPDATE NOTES
-crates/caf-core/src/notes.rs:121: INSERT INTO NOTES
-crates/caf-core/src/notes.rs:205: UPDATE NOTES
+crates/caf-core/src/profiles.rs:126: UPDATE PROFILES
+crates/caf-core/src/profiles.rs:136: INSERT INTO PROFILES
+crates/caf-core/src/profiles.rs:256: UPDATE PROFILES
+crates/caf-core/src/notes.rs:190: UPDATE NOTES
+crates/caf-core/src/notes.rs:201: INSERT INTO NOTES
+crates/caf-core/src/notes.rs:285: UPDATE NOTES

@@ -58,6 +58,9 @@ export const id: Dictionary = {
     editor: 'Studio Markdown',
     vault: 'Brankas Catatan',
     ai_copilot: 'Asisten AI',
+    search: 'Cari',
+    bookmarks: 'Bookmark',
+    knowledge: 'Peta Pengetahuan',
     notes: 'Catatan',
     settings: 'Pengaturan',
     contribution: 'Kontribusi'

@@ -13,7 +13,11 @@ const NAV_ICONS: Record<string, string> = {
   workspace: 'M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z',
   editor: 'M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z',
   vault: 'M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z',
-  ai_copilot: 'M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.286L13 21l-2.286-6.857L5 12l5.714-2.286L13 3z'
+  ai_copilot: 'M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.286L13 21l-2.286-6.857L5 12l5.714-2.286L13 3z',
+  search: 'M21 21l-4.35-4.35m0 0A7.5 7.5 0 105 5.85a7.5 7.5 0 0011.65 10.8z',
+  bookmark: 'M5 5a2 2 0 012-2h10a2 2 0 012 2v15l-7-3.5L5 20V5z',
+  graph: 'M6.75 21L12 16.5m0 0L17.25 21m-5.25-4.5V4.5m0 12l5.25 4.5m-5.25-4.5L1.5 18.75M12 4.5l5.25 4.5M12 4.5L6.75 9m5.25-4.5H6.75',
+  open_file: 'M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z'
 };
 
 export function navItems(): NavItem[] {
@@ -31,10 +35,22 @@ export function navItems(): NavItem[] {
       path: NAV_ICONS.vault
     },
     {
-      key: 'ai_copilot',
-      href: '/copilot',
-      label: t('nav.ai_copilot'),
-      path: NAV_ICONS.ai_copilot
+      key: 'search',
+      href: '/?panel=search',
+      label: t('nav.search'),
+      path: NAV_ICONS.search
+    },
+    {
+      key: 'bookmarks',
+      href: '/?panel=bookmarks',
+      label: t('nav.bookmarks'),
+      path: NAV_ICONS.bookmark
+    },
+    {
+      key: 'knowledge',
+      href: '/?panel=knowledge',
+      label: t('nav.knowledge'),
+      path: NAV_ICONS.graph
     }
   ];
 }

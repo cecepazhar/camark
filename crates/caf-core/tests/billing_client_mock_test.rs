@@ -8,6 +8,15 @@ use std::sync::{Arc, Mutex};
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_billing_client_integration_against_mock() {
+    let temp_dir =
+        std::env::temp_dir().join(format!("camark_test_client_mock_{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(&temp_dir).unwrap();
+    let prev_cmrk = std::env::var_os("CMRK_DATA_DIR");
+    unsafe {
+        std::env::set_var("CMRK_DATA_DIR", &temp_dir);
+    }
+    caf_core::vault::validate_password("test-password-client-mock").expect("unlock vault");
+
     let (signing_key, verifying_key, kid) = init_dev_keys();
     let pub_key_b64 = base64::engine::general_purpose::STANDARD.encode(verifying_key.as_bytes());
 
@@ -121,4 +130,16 @@ async fn test_billing_client_integration_against_mock() {
         .deactivate_device("dev-client-2")
         .expect("deactivate failed");
     assert!(store::get_device_token().unwrap().is_none());
+
+    caf_core::vault::lock();
+    if let Some(prev) = prev_cmrk {
+        unsafe {
+            std::env::set_var("CMRK_DATA_DIR", prev);
+        }
+    } else {
+        unsafe {
+            std::env::remove_var("CMRK_DATA_DIR");
+        }
+    }
+    let _ = std::fs::remove_dir_all(&temp_dir);
 }

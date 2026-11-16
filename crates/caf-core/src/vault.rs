@@ -198,10 +198,8 @@ pub fn change_master_password(old_pass: &str, new_pass: &str) -> Result<(), CafE
     // canary is reverted, the database keeps its old key and the old password
     // still unlocks everything — no state where the two disagree.
 
-    let migration_was_legacy =
-        migrate_legacy_vault_key(&old_key).map_err(|e| {
-            VaultError::Generic(format!("legacy vault.key migration failed: {e}"))
-        })?;
+    let migration_was_legacy = migrate_legacy_vault_key(&old_key)
+        .map_err(|e| VaultError::Generic(format!("legacy vault.key migration failed: {e}")))?;
 
     let new_encrypted = crate::secret::encrypt_bytes(&new_key, CANARY_PLAINTEXT)?;
     let tmp_path = data_dir.join(format!("{CANARY_FILE}.tmp"));
@@ -256,11 +254,7 @@ fn rekey_db(
     conn.execute_batch(&rekey_stmt)
         .map_err(|e| CafError::Db(DbError::Generic(format!("failed to rekey database: {e}"))))?;
     conn.query_row("SELECT count(*) FROM sqlite_master", [], |_| Ok(()))
-        .map_err(|e| {
-            CafError::Db(DbError::Generic(format!(
-                "rekey verification failed: {e}"
-            )))
-        })?;
+        .map_err(|e| CafError::Db(DbError::Generic(format!("rekey verification failed: {e}"))))?;
     rekey_stmt.zeroize();
     Ok(())
 }
@@ -288,8 +282,7 @@ fn migrate_legacy_vault_key(derived_key: &[u8; 32]) -> Result<bool, CafError> {
         return Ok(false);
     }
 
-    let legacy_hex = std::fs::read_to_string(&legacy_path)
-        .map_err(|e| vault_err(e.to_string()))?;
+    let legacy_hex = std::fs::read_to_string(&legacy_path).map_err(|e| vault_err(e.to_string()))?;
     let legacy_hex = legacy_hex.trim().to_string();
 
     let is_valid_legacy_hex = legacy_hex.len() == 64 && hex::decode(&legacy_hex).is_ok();
@@ -310,20 +303,15 @@ fn migrate_legacy_vault_key(derived_key: &[u8; 32]) -> Result<bool, CafError> {
     derived_hex.zeroize();
 
     let conn = crate::db::open_keyed(&db_path, &format!("\"x'{legacy_hex}'\""))?;
-    conn.execute_batch(&rekey_stmt)
-        .map_err(|e| {
-            CafError::Db(DbError::Generic(format!(
-                "failed to rekey legacy database: {e}"
-            )))
-        })?;
+    conn.execute_batch(&rekey_stmt).map_err(|e| {
+        CafError::Db(DbError::Generic(format!(
+            "failed to rekey legacy database: {e}"
+        )))
+    })?;
 
     // Only after the rekeyed database demonstrably works do we drop the file.
     conn.query_row("SELECT count(*) FROM sqlite_master", [], |_| Ok(()))
-        .map_err(|e| {
-            CafError::Db(DbError::Generic(format!(
-                "rekey verification failed: {e}"
-            )))
-        })?;
+        .map_err(|e| CafError::Db(DbError::Generic(format!("rekey verification failed: {e}"))))?;
     rekey_stmt.zeroize();
 
     let _ = std::fs::remove_file(&legacy_path);
@@ -377,7 +365,10 @@ mod tests {
         change_master_password(OLD_PASS, NEW_PASS).expect("change password");
         lock();
 
-        assert!(validate_password(OLD_PASS).is_err(), "old password must be rejected");
+        assert!(
+            validate_password(OLD_PASS).is_err(),
+            "old password must be rejected"
+        );
         assert!(validate_password(NEW_PASS).expect("unlock new"));
         assert_eq!(count_rows(), 3, "rows must survive password change");
 
@@ -387,7 +378,10 @@ mod tests {
             .map(|e| e.file_name().to_string_lossy().to_string())
             .filter(|n| n.contains(".bak") || n.ends_with(".tmp"))
             .collect();
-        assert!(leftovers.is_empty(), "no .bak/.tmp files expected: {leftovers:?}");
+        assert!(
+            leftovers.is_empty(),
+            "no .bak/.tmp files expected: {leftovers:?}"
+        );
     }
 
     #[test]
@@ -427,11 +421,21 @@ mod tests {
         assert!(!is_unlocked().expect("vault locked, so is_unlocked() == false"));
 
         let err = crate::db::open().expect_err("locked vault must fail");
-        assert_eq!(err.code(), "CMRK-VAULT-001", "locked must map to VaultError::Locked");
+        assert_eq!(
+            err.code(),
+            "CMRK-VAULT-001",
+            "locked must map to VaultError::Locked"
+        );
 
         // Neither the plaintext key file nor the database may be created while locked.
-        assert!(!dir.path.join("vault.key").exists(), "vault.key must never be created");
-        assert!(!dir.path.join("camark.db").exists(), "db must not be created while locked");
+        assert!(
+            !dir.path.join("vault.key").exists(),
+            "vault.key must never be created"
+        );
+        assert!(
+            !dir.path.join("camark.db").exists(),
+            "db must not be created while locked"
+        );
     }
 
     #[test]
@@ -440,7 +444,10 @@ mod tests {
         assert!(validate_password(OLD_PASS).expect("init + unlock"));
         let _ = crate::db::open().expect("db open while unlocked");
 
-        assert!(!dir.path.join("vault.key").exists(), "vault.key must never be created");
+        assert!(
+            !dir.path.join("vault.key").exists(),
+            "vault.key must never be created"
+        );
     }
 
     #[test]
@@ -452,21 +459,29 @@ mod tests {
         std::fs::write(dir.path.join("vault.key"), legacy_hex).expect("write legacy key");
         {
             let conn = crate::db::open_encrypted(&dir.path, legacy_hex).expect("legacy db");
-            conn.execute("INSERT INTO app_kv (key, value) VALUES ('legacy', 'kept')", [])
-                .expect("insert");
+            conn.execute(
+                "INSERT INTO app_kv (key, value) VALUES ('legacy', 'kept')",
+                [],
+            )
+            .expect("insert");
         }
 
         assert!(!crate::vault::is_vault_initialized().expect("no canary yet"));
         assert!(validate_password(OLD_PASS).expect("unlock migrates"));
 
         // Legacy file gone, data readable, and a lock/unlock cycle still works.
-        assert!(!dir.path.join("vault.key").exists(), "vault.key must be removed after migration");
+        assert!(
+            !dir.path.join("vault.key").exists(),
+            "vault.key must be removed after migration"
+        );
 
         assert_eq!(
             crate::db::open()
                 .and_then(|c| {
-                    c.query_row("SELECT value FROM app_kv WHERE key='legacy'", [], |r| r.get::<_, String>(0))
-                        .map_err(|e| CafError::Db(crate::error::DbError::Generic(e.to_string())))
+                    c.query_row("SELECT value FROM app_kv WHERE key='legacy'", [], |r| {
+                        r.get::<_, String>(0)
+                    })
+                    .map_err(|e| CafError::Db(crate::error::DbError::Generic(e.to_string())))
                 })
                 .expect("legible data after migration"),
             "kept"
@@ -475,7 +490,10 @@ mod tests {
         lock();
         assert!(crate::db::open().expect_err("locked again").code() == "CMRK-VAULT-001");
         assert!(validate_password(OLD_PASS).expect("re-unlock"));
-        assert!(crate::db::open().is_ok(), "db opens with master-derived key after migration");
+        assert!(
+            crate::db::open().is_ok(),
+            "db opens with master-derived key after migration"
+        );
     }
 
     #[test]
@@ -489,6 +507,9 @@ mod tests {
 
         assert!(validate_password(NEW_PASS).expect("new password unlocks rekeyed db"));
         assert_eq!(count_rows(), 3, "data survives rekey");
-        assert!(!dir.path.join("vault.key").exists(), "no legacy key file involved");
+        assert!(
+            !dir.path.join("vault.key").exists(),
+            "no legacy key file involved"
+        );
     }
 }

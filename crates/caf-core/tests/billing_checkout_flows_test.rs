@@ -8,6 +8,15 @@ use std::sync::{Arc, Mutex};
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_checkout_modes_poll_and_license_key() {
+    let temp_dir =
+        std::env::temp_dir().join(format!("camark_test_checkout_{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(&temp_dir).unwrap();
+    let prev_cmrk = std::env::var_os("CMRK_DATA_DIR");
+    unsafe {
+        std::env::set_var("CMRK_DATA_DIR", &temp_dir);
+    }
+    caf_core::vault::validate_password("test-password-checkout").expect("unlock vault");
+
     let (signing_key, verifying_key, kid) = init_dev_keys();
     let pub_key_b64 = base64::engine::general_purpose::STANDARD.encode(verifying_key.as_bytes());
 
@@ -115,7 +124,7 @@ async fn test_checkout_modes_poll_and_license_key() {
     store::clear_billing_state().unwrap();
 
     let usd_plans = client.get_plans(Some("USD")).expect("get USD plans failed");
-    let lifetime_usd = usd_plans
+    let _lifetime_usd = usd_plans
         .iter()
         .find(|p| p.billing_type == "lifetime")
         .unwrap();
@@ -148,4 +157,16 @@ async fn test_checkout_modes_poll_and_license_key() {
     assert_eq!(payload_lic.billing_type, "lifetime");
     assert_eq!(state_lic.tier, EffectiveTier::Pro);
     assert!(state_lic.is_pro);
+
+    caf_core::vault::lock();
+    if let Some(prev) = prev_cmrk {
+        unsafe {
+            std::env::set_var("CMRK_DATA_DIR", prev);
+        }
+    } else {
+        unsafe {
+            std::env::remove_var("CMRK_DATA_DIR");
+        }
+    }
+    let _ = std::fs::remove_dir_all(&temp_dir);
 }

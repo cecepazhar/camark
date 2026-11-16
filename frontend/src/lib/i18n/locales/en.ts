@@ -60,6 +60,9 @@ export const en: Dictionary = {
     editor: 'Markdown Studio',
     vault: 'Encrypted Vault',
     ai_copilot: 'AI Copilot',
+    search: 'Search',
+    bookmarks: 'Bookmarks',
+    knowledge: 'Knowledge Map',
     notes: 'Notes',
     settings: 'Settings',
     contribution: 'Contribution'

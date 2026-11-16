@@ -131,8 +131,6 @@ pub enum CafError {
     NotImplemented(String),
 }
 
-
-
 impl CafError {
     pub fn code(&self) -> &'static str {
         match self {

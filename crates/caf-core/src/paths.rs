@@ -136,14 +136,12 @@ pub fn device_id() -> Result<String, CafError> {
         }
     }
 
-    std::fs::create_dir_all(&dir).map_err(|e| {
-        CafError::Io(IoError::Generic(format!("failed to create data dir: {e}")))
-    })?;
+    std::fs::create_dir_all(&dir)
+        .map_err(|e| CafError::Io(IoError::Generic(format!("failed to create data dir: {e}"))))?;
 
     let new_id = uuid::Uuid::new_v4().to_string();
-    std::fs::write(&id_file, &new_id).map_err(|e| {
-        CafError::Io(IoError::Generic(format!("failed to write device id: {e}")))
-    })?;
+    std::fs::write(&id_file, &new_id)
+        .map_err(|e| CafError::Io(IoError::Generic(format!("failed to write device id: {e}"))))?;
 
     Ok(new_id)
 }

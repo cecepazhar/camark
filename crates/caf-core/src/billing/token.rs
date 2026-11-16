@@ -46,12 +46,9 @@ pub fn verify_and_parse_token(
 
     let header_bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
         .decode(part0)
-        .map_err(|e| {
-            CafError::Vault(VaultError::Generic(format!("invalid header base64: {e}")))
-        })?;
-    let header: JwsHeader = serde_json::from_slice(&header_bytes).map_err(|e| {
-        CafError::Vault(VaultError::Generic(format!("invalid header JSON: {e}")))
-    })?;
+        .map_err(|e| CafError::Vault(VaultError::Generic(format!("invalid header base64: {e}"))))?;
+    let header: JwsHeader = serde_json::from_slice(&header_bytes)
+        .map_err(|e| CafError::Vault(VaultError::Generic(format!("invalid header JSON: {e}"))))?;
 
     if header.alg != "EdDSA" {
         return Err(CafError::Vault(VaultError::Generic(
@@ -86,9 +83,8 @@ pub fn verify_and_parse_token(
 
     let mut key_arr = [0u8; 32];
     key_arr.copy_from_slice(&pub_key_bytes);
-    let verifying_key = VerifyingKey::from_bytes(&key_arr).map_err(|e| {
-        CafError::Vault(VaultError::Generic(format!("invalid verifying key: {e}")))
-    })?;
+    let verifying_key = VerifyingKey::from_bytes(&key_arr)
+        .map_err(|e| CafError::Vault(VaultError::Generic(format!("invalid verifying key: {e}"))))?;
 
     let sig_bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
         .decode(part2)
@@ -122,9 +118,8 @@ pub fn verify_and_parse_token(
         .map_err(|e| {
             CafError::Vault(VaultError::Generic(format!("invalid payload base64: {e}")))
         })?;
-    let payload: EntitlementPayload = serde_json::from_slice(&payload_bytes).map_err(|e| {
-        CafError::Vault(VaultError::Generic(format!("invalid payload JSON: {e}")))
-    })?;
+    let payload: EntitlementPayload = serde_json::from_slice(&payload_bytes)
+        .map_err(|e| CafError::Vault(VaultError::Generic(format!("invalid payload JSON: {e}"))))?;
 
     if payload.product_code != expected_product_code {
         return Err(CafError::Vault(VaultError::Generic(format!(

@@ -518,9 +518,16 @@ pub fn chat_with_doc_context(
         let mut doc_parts = Vec::new();
         let doc_title = doc_ctx.active_doc_title.as_deref().unwrap_or("Untitled");
         let doc_path = doc_ctx.active_doc_path.as_deref().unwrap_or("in-memory");
-        let storage_kind = if doc_ctx.is_vault_doc { "Encrypted Vault" } else { "Local Workspace" };
+        let storage_kind = if doc_ctx.is_vault_doc {
+            "Encrypted Vault"
+        } else {
+            "Local Workspace"
+        };
 
-        doc_parts.push(format!("Active Document: \"{}\" (Path: {}, Storage: {})", doc_title, doc_path, storage_kind));
+        doc_parts.push(format!(
+            "Active Document: \"{}\" (Path: {}, Storage: {})",
+            doc_title, doc_path, storage_kind
+        ));
 
         // H-06: vault documents must not leave the machine unless the endpoint is
         // loopback or the caller gave explicit consent for this request.
@@ -536,7 +543,10 @@ pub fn chat_with_doc_context(
         if !withhold_body && !doc_ctx.selected_text.trim().is_empty() {
             let (scrubbed_sel, sel_redactions) = scrub_text(&doc_ctx.selected_text);
             total_redactions += sel_redactions;
-            doc_parts.push(format!("User Selected Text in Editor:\n\"\"\"\n{}\n\"\"\"", scrubbed_sel));
+            doc_parts.push(format!(
+                "User Selected Text in Editor:\n\"\"\"\n{}\n\"\"\"",
+                scrubbed_sel
+            ));
         }
 
         if !withhold_body && !doc_ctx.active_doc_content.trim().is_empty() {
@@ -545,7 +555,10 @@ pub fn chat_with_doc_context(
             let truncated_content = truncate_on_char_boundary(raw_content, 25000);
             let (scrubbed_content, doc_redactions) = scrub_text(&truncated_content);
             total_redactions += doc_redactions;
-            doc_parts.push(format!("Active Document Content:\n```markdown\n{}\n```", scrubbed_content));
+            doc_parts.push(format!(
+                "Active Document Content:\n```markdown\n{}\n```",
+                scrubbed_content
+            ));
         }
 
         if !doc_parts.is_empty() {
@@ -663,8 +676,9 @@ fn parse_completions_response(raw: &str) -> Result<(String, Option<u32>), CafErr
                 {
                     collected.push_str(content);
                 }
-                if let Some(tokens) =
-                    chunk.pointer("/usage/total_tokens").and_then(|v| v.as_u64())
+                if let Some(tokens) = chunk
+                    .pointer("/usage/total_tokens")
+                    .and_then(|v| v.as_u64())
                 {
                     total_tokens = Some(tokens as u32);
                 }
@@ -896,7 +910,8 @@ pub mod tests {
             "is_vault_doc": false
         }"##;
 
-        let doc_ctx: DocContext = serde_json::from_str(json_input).expect("deserialization snake_case");
+        let doc_ctx: DocContext =
+            serde_json::from_str(json_input).expect("deserialization snake_case");
         assert_eq!(doc_ctx.active_doc_title.as_deref(), Some("Test Doc"));
         assert_eq!(doc_ctx.selected_text, "secret@fathforce.com");
 
@@ -908,7 +923,8 @@ pub mod tests {
             "selectedText": "selected",
             "isVaultDoc": true
         }"##;
-        let doc_camel: DocContext = serde_json::from_str(json_camel).expect("deserialization camelCase");
+        let doc_camel: DocContext =
+            serde_json::from_str(json_camel).expect("deserialization camelCase");
         assert_eq!(doc_camel.active_doc_title.as_deref(), Some("Camel Doc"));
         assert_eq!(doc_camel.active_doc_content, "# Camel Content");
         assert!(doc_camel.is_vault_doc);
@@ -933,6 +949,9 @@ pub mod tests {
 
     #[test]
     fn h06_short_text_is_returned_unchanged() {
-        assert_eq!(truncate_on_char_boundary("halo — dunia", 25_000), "halo — dunia");
+        assert_eq!(
+            truncate_on_char_boundary("halo — dunia", 25_000),
+            "halo — dunia"
+        );
     }
 }
