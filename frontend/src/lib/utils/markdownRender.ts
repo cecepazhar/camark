@@ -14,6 +14,27 @@ export function escapeHtml(s: string): string {
     .replace(/'/g, '&#039;');
 }
 
+/** Small stable hash (FNV-1a) used to cache rendered Mermaid SVG, KaTeX and Markdown blocks by source. */
+export function hashString(s: string): string {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return (h >>> 0).toString(36);
+}
+
+/** Source-hash cache for rendered KaTeX output (P-03). */
+const katexCache = new Map<string, string>();
+
+export function getKatexCacheStats(): { size: number } {
+  return { size: katexCache.size };
+}
+
+export function clearKatexCache(): void {
+  katexCache.clear();
+}
+
 export interface FrontmatterResult {
   /** Raw YAML between the fences, or null when the document has none. */
   yaml: string | null;
@@ -29,8 +50,15 @@ export function splitFrontmatter(src: string): FrontmatterResult {
 }
 
 function renderMath(tex: string, displayMode: boolean): string {
+  const hash = hashString(tex);
+  const cacheKey = `${displayMode ? 'D' : 'I'}:${hash}`;
+  const cached = katexCache.get(cacheKey);
+  if (cached) return cached;
   try {
-    return katex.renderToString(tex, { displayMode, throwOnError: false });
+    const rendered = katex.renderToString(tex, { displayMode, throwOnError: false });
+    if (katexCache.size > 2000) katexCache.clear();
+    katexCache.set(cacheKey, rendered);
+    return rendered;
   } catch {
     return escapeHtml(tex);
   }
@@ -70,7 +98,9 @@ const blockMath: TokenizerAndRendererExtension = {
     return undefined;
   },
   renderer(token) {
-    return `<div class="katex-block">${renderMath((token as unknown as { text: string }).text, true)}</div>\n`;
+    const text = (token as unknown as { text: string }).text;
+    const hash = hashString(text);
+    return `<div class="katex-block" data-katex-hash="${hash}">${renderMath(text, true)}</div>\n`;
   },
 };
 
@@ -146,15 +176,7 @@ export function extractSection(content: string, heading: string): string | null 
   return start < 0 ? null : lines.slice(start).join('\n').trimEnd();
 }
 
-/** Small stable hash (FNV-1a) used to cache rendered Mermaid SVG by source. */
-export function hashString(s: string): string {
-  let h = 0x811c9dc5;
-  for (let i = 0; i < s.length; i++) {
-    h ^= s.charCodeAt(i);
-    h = Math.imul(h, 0x01000193);
-  }
-  return (h >>> 0).toString(36);
-}
+// (hashString moved up to top of file)
 
 // ---------------------------------------------------------------- images ![alt|300](src)
 

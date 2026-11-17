@@ -1,29 +1,46 @@
 /**
- * Markdown Render Coordinator (CAMark P-02).
+ * Markdown Render Coordinator (CAMark P-02 & P-03).
  *
  * Coordinates off-thread Markdown + KaTeX parsing using a Web Worker.
  *
- * Sequence Numbering & Stale Result Strategy:
+ * Sequence Numbering & Stale Result Strategy (P-02):
  * 1. Every parse request receives an auto-incremented sequence number (seq).
  * 2. When worker responses return, any result with seq < latestCompletedSeq is
  *    immediately dropped as stale without touching DOMPurify or the DOM.
- * 3. Only the latest valid response updates latestCompletedSeq and is delivered
- *    to the main thread for DOMPurify sanitization.
- * 4. Main-thread typing latency is reduced to sub-frame dispatch (< 16 ms)
- *    even on 50,000-word documents.
+ * 3. Only the latest valid response updates latestCompletedSeq.
+ *
+ * Incremental Block Sanitization (P-03):
+ * 1. The worker returns unsanitized HTML blocks with source hashes.
+ * 2. The main thread sanitizes ONLY changed blocks with DOMPurify and reuses
+ *    cached clean HTML for unchanged blocks.
+ * 3. Full sanitized HTML and structured blocks are provided for per-block DOM patching.
  */
 
 import type { RenderOptions } from '../utils/markdownRender';
-import { renderMarkdownToHtml } from '../utils/markdownRender';
-import type { MarkdownWorkerRequest, MarkdownWorkerResponse } from './markdownParser.worker';
+import DOMPurify from 'dompurify';
+import { DOMPURIFY_CONFIG } from '../bench/renderBenchmark';
+import {
+  defaultBlockCache,
+  type RenderedBlock,
+  type BlockType,
+} from './incrementalRender';
+import type {
+  MarkdownWorkerRequest,
+  MarkdownWorkerResponse,
+  WorkerRawBlock,
+} from './markdownParser.worker';
 
 export interface RenderResult {
   seq: number;
   html: string;
   yaml: string | null;
+  blocks?: RenderedBlock[];
   isStale: boolean;
   error?: string;
   workerDurationMs?: number;
+  totalBlocks?: number;
+  reRenderedBlocks?: number;
+  cachedBlocks?: number;
 }
 
 export interface CoordinatorStats {
@@ -52,6 +69,7 @@ export class RenderCoordinator {
   private droppedStaleCount = 0;
   private completedCount = 0;
   private lastDispatchMs = 0;
+  private cleanBlockCache = new Map<string, string>();
   private pendingRequests = new Map<
     number,
     {
@@ -101,7 +119,7 @@ export class RenderCoordinator {
    * Internal handler for results returned by worker or fallback.
    */
   public handleWorkerResponse(data: MarkdownWorkerResponse): void {
-    const { seq, html, yaml, error } = data;
+    const { seq, html: rawHtmlFallback, yaml, blocks: rawBlocks, error } = data;
     const pending = this.pendingRequests.get(seq);
     const startTime = pending ? pending.startTime : performance.now();
     const workerDurationMs = performance.now() - startTime;
@@ -130,10 +148,47 @@ export class RenderCoordinator {
     this.latestCompletedSeq = seq;
     this.completedCount++;
 
+    let fullCleanHtml = '';
+    let renderedBlocks: RenderedBlock[] | undefined = undefined;
+
+    if (rawBlocks && rawBlocks.length > 0) {
+      renderedBlocks = [];
+      for (const rb of rawBlocks) {
+        let cleanHtml = this.cleanBlockCache.get(rb.hash);
+        let isCached = true;
+        if (cleanHtml === undefined) {
+          cleanHtml = DOMPurify.sanitize(rb.rawHtml, DOMPURIFY_CONFIG);
+          if (this.cleanBlockCache.size > 5000) this.cleanBlockCache.clear();
+          this.cleanBlockCache.set(rb.hash, cleanHtml);
+          isCached = false;
+        }
+
+        const wrappedHtml = `<div class="preview-block" data-block-id="${rb.id}" data-block-hash="${rb.hash}" data-line-start="${rb.startLine}" data-line-end="${rb.endLine}">${cleanHtml}</div>`;
+        renderedBlocks.push({
+          id: rb.id,
+          hash: rb.hash,
+          startLine: rb.startLine,
+          endLine: rb.endLine,
+          type: rb.type,
+          rawHtml: rb.rawHtml,
+          cleanHtml,
+          wrappedHtml,
+          isCached,
+        });
+      }
+      fullCleanHtml = renderedBlocks.map((b) => b.wrappedHtml).join('\n');
+    } else {
+      fullCleanHtml = DOMPurify.sanitize(rawHtmlFallback, DOMPURIFY_CONFIG);
+    }
+
     const result: RenderResult = {
       seq,
-      html,
+      html: fullCleanHtml,
       yaml,
+      blocks: renderedBlocks,
+      totalBlocks: data.totalBlocks ?? renderedBlocks?.length,
+      reRenderedBlocks: data.reRenderedBlocks,
+      cachedBlocks: data.cachedBlocks,
       isStale: false,
       error,
       workerDurationMs,
@@ -184,16 +239,28 @@ export class RenderCoordinator {
         this.worker.postMessage(request);
         this.lastDispatchMs = performance.now() - t0;
       } else {
-        // Asynchronous fallback for environments without Web Worker (e.g. Node / Vitest jsdom)
+        // Fallback for testing environments (Vitest jsdom)
         this.lastDispatchMs = performance.now() - t0;
         setTimeout(async () => {
           try {
-            const { html, yaml } = await renderMarkdownToHtml(content, options);
+            const inc = await defaultBlockCache.renderDocumentIncremental(content, options);
+            const rawBlocks: WorkerRawBlock[] = inc.blocks.map((b) => ({
+              id: b.id,
+              hash: b.hash,
+              startLine: b.startLine,
+              endLine: b.endLine,
+              type: b.type,
+              rawHtml: b.rawHtml,
+            }));
             this.handleWorkerResponse({
               type: 'renderResult',
               seq,
-              html,
-              yaml,
+              html: inc.fullHtml,
+              yaml: inc.yaml,
+              blocks: rawBlocks,
+              totalBlocks: inc.totalBlocks,
+              reRenderedBlocks: inc.reRenderedBlocks,
+              cachedBlocks: inc.cachedBlocks,
             });
           } catch (err: unknown) {
             const errMsg = err instanceof Error ? err.message : String(err);
@@ -250,12 +317,24 @@ export class RenderCoordinator {
       this.lastDispatchMs = performance.now() - t0;
       setTimeout(async () => {
         try {
-          const { html, yaml } = await renderMarkdownToHtml(content, options);
+          const inc = await defaultBlockCache.renderDocumentIncremental(content, options);
+          const rawBlocks: WorkerRawBlock[] = inc.blocks.map((b) => ({
+            id: b.id,
+            hash: b.hash,
+            startLine: b.startLine,
+            endLine: b.endLine,
+            type: b.type,
+            rawHtml: b.rawHtml,
+          }));
           this.handleWorkerResponse({
             type: 'renderResult',
             seq,
-            html,
-            yaml,
+            html: inc.fullHtml,
+            yaml: inc.yaml,
+            blocks: rawBlocks,
+            totalBlocks: inc.totalBlocks,
+            reRenderedBlocks: inc.reRenderedBlocks,
+            cachedBlocks: inc.cachedBlocks,
           });
         } catch (err: unknown) {
           const errMsg = err instanceof Error ? err.message : String(err);
@@ -295,6 +374,7 @@ export class RenderCoordinator {
     this.latestCompletedSeq = initialSeq;
     this.droppedStaleCount = 0;
     this.completedCount = 0;
+    this.cleanBlockCache.clear();
     this.pendingRequests.clear();
   }
 
@@ -306,6 +386,7 @@ export class RenderCoordinator {
       this.worker.terminate();
     }
     this.worker = null;
+    this.cleanBlockCache.clear();
     this.pendingRequests.clear();
   }
 }

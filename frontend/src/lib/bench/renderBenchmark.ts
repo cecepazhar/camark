@@ -1,8 +1,8 @@
 /**
- * Repeatable Render Benchmark Harness for CAMark (P-01 & P-02).
+ * Repeatable Render Benchmark Harness for CAMark (P-01, P-02, P-03).
  *
  * Measures:
- * 1. Parse time: Markdown AST + KaTeX math tokenization (in-thread vs off-thread worker)
+ * 1. Parse time: Markdown AST + KaTeX math tokenization (in-thread vs off-thread worker vs incremental block cache)
  * 2. Main-thread dispatch duration: Blocking time on UI thread when typing initiates render (<16ms)
  * 3. Sanitize time: DOMPurify HTML sanitization with production allowlist
  * 4. Total time: parse time + sanitize time
@@ -10,13 +10,54 @@
 
 import { renderMarkdownToHtml } from '../utils/markdownRender';
 import { RenderCoordinator } from '../render/renderCoordinator';
+import { BlockRenderCache } from '../render/incrementalRender';
 import DOMPurify from 'dompurify';
 
 export const DOMPURIFY_CONFIG = {
-  ADD_TAGS: ['button', 'span', 'div', 'svg', 'path'],
+  ADD_TAGS: [
+    'button',
+    'span',
+    'div',
+    'svg',
+    'path',
+    'details',
+    'summary',
+    'pre',
+    'code',
+    'ol',
+    'ul',
+    'li',
+    'table',
+    'thead',
+    'tbody',
+    'tr',
+    'th',
+    'td',
+    'a',
+    'p',
+    'h1',
+    'h2',
+    'h3',
+    'h4',
+    'h5',
+    'h6',
+    'hr',
+    'blockquote',
+    'input',
+  ],
   ADD_ATTR: [
     'data-lang',
     'data-code',
+    'data-wikilink',
+    'data-heading',
+    'data-embed',
+    'data-katex-hash',
+    'data-block-id',
+    'data-block-hash',
+    'data-line-start',
+    'data-line-end',
+    'data-block-type',
+    'data-dirty',
     'type',
     'd',
     'stroke',
@@ -25,6 +66,10 @@ export const DOMPURIFY_CONFIG = {
     'stroke-width',
     'stroke-linecap',
     'stroke-linejoin',
+    'class',
+    'href',
+    'title',
+    'id',
   ],
 };
 
@@ -72,6 +117,33 @@ export interface OffThreadFixtureBenchmarkResult {
   medianMainThreadDispatchMs: number;
   avgWorkerParseMs: number;
   medianWorkerParseMs: number;
+  avgSanitizeMs: number;
+  medianSanitizeMs: number;
+  avgTotalMs: number;
+  medianTotalMs: number;
+}
+
+export interface IncrementalBenchmarkMeasurement {
+  totalBlocks: number;
+  reRenderedBlocks: number;
+  cachedBlocks: number;
+  parseMs: number;
+  sanitizeMs: number;
+  totalMs: number;
+  rawHtmlLength: number;
+  cleanHtmlLength: number;
+}
+
+export interface IncrementalFixtureBenchmarkResult {
+  fixtureName: string;
+  wordCount: number;
+  byteSize: number;
+  totalBlocks: number;
+  reRenderedBlocks: number;
+  cachedBlocks: number;
+  iterations: number;
+  avgParseMs: number;
+  medianParseMs: number;
   avgSanitizeMs: number;
   medianSanitizeMs: number;
   avgTotalMs: number;
@@ -237,6 +309,75 @@ export async function benchmarkOffThreadFixture(
     medianMainThreadDispatchMs: median(dispatchTimes),
     avgWorkerParseMs: average(parseTimes),
     medianWorkerParseMs: median(parseTimes),
+    avgSanitizeMs: average(sanitizeTimes),
+    medianSanitizeMs: median(sanitizeTimes),
+    avgTotalMs: average(totalTimes),
+    medianTotalMs: median(totalTimes),
+  };
+}
+
+/**
+ * Measure incremental rendering (P-03):
+ * Primes the block cache with initialDoc, then measures re-render latency of editedDoc.
+ */
+export async function measureIncrementalRender(
+  initialDoc: string,
+  editedDoc: string,
+  cache = new BlockRenderCache(),
+  purifyInstance: { sanitize: (html: string, cfg: any) => string } = DOMPurify
+): Promise<IncrementalBenchmarkMeasurement> {
+  // Prime cache with initial document
+  await cache.renderDocumentIncremental(initialDoc, { breaks: false }, purifyInstance);
+
+  // Measure re-render of edited document
+  const t0 = performance.now();
+  const res = await cache.renderDocumentIncremental(editedDoc, { breaks: false }, purifyInstance);
+  const totalMs = performance.now() - t0;
+
+  return {
+    totalBlocks: res.totalBlocks,
+    reRenderedBlocks: res.reRenderedBlocks,
+    cachedBlocks: res.cachedBlocks,
+    parseMs: res.parseMs,
+    sanitizeMs: res.sanitizeMs,
+    totalMs,
+    rawHtmlLength: res.fullHtml.length,
+    cleanHtmlLength: res.fullHtml.length,
+  };
+}
+
+/**
+ * Run a multi-iteration incremental benchmark on a fixture document with a simulated single-block edit.
+ */
+export async function benchmarkIncrementalFixture(
+  fixtureName: string,
+  initialDoc: string,
+  editedDoc: string,
+  iterations = 5,
+  cache = new BlockRenderCache(),
+  purifyInstance: { sanitize: (html: string, cfg: any) => string } = DOMPurify
+): Promise<IncrementalFixtureBenchmarkResult> {
+  const runs: IncrementalBenchmarkMeasurement[] = [];
+  for (let i = 0; i < iterations; i++) {
+    cache.clear();
+    const measurement = await measureIncrementalRender(initialDoc, editedDoc, cache, purifyInstance);
+    runs.push(measurement);
+  }
+
+  const parseTimes = runs.map((r) => r.parseMs);
+  const sanitizeTimes = runs.map((r) => r.sanitizeMs);
+  const totalTimes = runs.map((r) => r.totalMs);
+
+  return {
+    fixtureName,
+    wordCount: countWords(editedDoc),
+    byteSize: new TextEncoder().encode(editedDoc).length,
+    totalBlocks: runs[0].totalBlocks,
+    reRenderedBlocks: runs[0].reRenderedBlocks,
+    cachedBlocks: runs[0].cachedBlocks,
+    iterations,
+    avgParseMs: average(parseTimes),
+    medianParseMs: median(parseTimes),
     avgSanitizeMs: average(sanitizeTimes),
     medianSanitizeMs: median(sanitizeTimes),
     avgTotalMs: average(totalTimes),

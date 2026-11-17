@@ -5,6 +5,7 @@ import {
   countWords,
   measureSingleRender,
   measureOffThreadRender,
+  measureIncrementalRender,
 } from "./renderBenchmark";
 import { RenderCoordinator } from "../render/renderCoordinator";
 
@@ -12,7 +13,7 @@ import text1k from "./fixtures/document-1k.md?raw";
 import text10k from "./fixtures/document-10k.md?raw";
 import text50k from "./fixtures/document-50k.md?raw";
 
-describe("P-01 & P-02 Render Benchmark Harness and Fixtures", () => {
+describe("P-01, P-02, P-03 Render Benchmark Harness and Fixtures", () => {
   it("fixtures have required word count thresholds", () => {
     const words1k = countWords(text1k);
     const words10k = countWords(text10k);
@@ -63,5 +64,15 @@ describe("P-01 & P-02 Render Benchmark Harness and Fixtures", () => {
     expect(measurement.cleanHtmlLength).toBeGreaterThan(0);
     expect(measurement.isStale).toBe(false);
     coordinator.terminate();
+  });
+
+  it("measures incremental render on edited document with block caching (P-03 requirement)", async () => {
+    const edited1k = text1k.replace("Raft", "Raft-Consensus-P03");
+    const measurement = await measureIncrementalRender(text1k, edited1k);
+
+    expect(measurement.totalBlocks).toBeGreaterThan(1);
+    expect(measurement.reRenderedBlocks).toBe(1);
+    expect(measurement.cachedBlocks).toBe(measurement.totalBlocks - 1);
+    expect(measurement.totalMs).toBeGreaterThanOrEqual(0);
   });
 });

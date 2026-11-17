@@ -536,7 +536,11 @@ import { getSidebarPanelStore, setActiveSidebarPanel, type SidebarPanel } from '
                 type="button"
                 onclick={() => {
                   mobileDrawerOpen = false;
-                  setActiveSidebarPanel(panelForKey(item.key));
+                  const panel = panelForKey(item.key);
+                  setActiveSidebarPanel(panel);
+                  if (page.url.pathname !== '/') {
+                    goto('/');
+                  }
                 }}
                 title={item.label}
                 aria-pressed={active}
@@ -599,7 +603,13 @@ import { getSidebarPanelStore, setActiveSidebarPanel, type SidebarPanel } from '
             {@const active = isPanelActive(item.key)}
             <button
               type="button"
-              onclick={() => setActiveSidebarPanel(panelForKey(item.key))}
+              onclick={() => {
+                const panel = panelForKey(item.key);
+                setActiveSidebarPanel(panel);
+                if (page.url.pathname !== '/') {
+                  goto('/');
+                }
+              }}
               title={item.label}
               aria-pressed={active}
               class="relative w-full px-2.5 py-2 rounded-lg flex items-center gap-3 transition-colors overflow-hidden {active ? 'bg-cyan-500/15 text-cyan-600 dark:text-cyan-400 font-medium' : 'text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200/50 dark:hover:bg-neutral-800/40 hover:text-neutral-900 dark:hover:text-white'}"
