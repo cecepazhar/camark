@@ -50,7 +50,7 @@
 
 <!-- The header pattern every workspace page shares: an accent icon tile,
      title + optional pill badge, a one-line subtitle, and room for page-specific actions -->
-<header class="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-neutral-200 dark:border-neutral-800/80">
+<header class="flex flex-col md:flex-row md:items-center justify-between gap-4 pt-2 pb-5 border-b border-neutral-200 dark:border-neutral-800/80">
   <div class="flex items-center gap-3 min-w-0">
     {#if paths.length > 0}
       <div class="w-10 h-10 rounded-xl border flex items-center justify-center shrink-0 {accentClass}">

@@ -147,9 +147,9 @@
 </script>
 
 {#if open}
-  <div class="fixed inset-0 z-[60] bg-black/70 backdrop-blur-xs flex items-center justify-center p-6" role="presentation" onclick={onClose}>
+  <div class="absolute inset-0 z-[60] bg-black/70 backdrop-blur-xs flex items-center justify-center p-4" role="presentation" onclick={onClose}>
     <div
-      class="relative w-full h-full max-w-6xl rounded-xl border border-neutral-800 bg-neutral-950 overflow-hidden flex flex-col"
+      class="relative w-full h-full max-w-4xl rounded-xl border border-neutral-800 bg-neutral-950 overflow-hidden flex flex-col"
       role="dialog"
       aria-modal="true"
       aria-label="Graph View"

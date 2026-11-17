@@ -92,6 +92,7 @@
   } from '$lib/stores/documentContext.svelte';
   import { createLiveMarkdownPlugin } from '$lib/utils/liveMarkdown';
   import { getRenderCoordinator } from '$lib/render/renderCoordinator';
+  import { patchDomPreview } from '$lib/render/incrementalRender';
   import {
     installMarkdownExtensions,
     renderMarkdownToHtml,
@@ -135,7 +136,7 @@
   } from '$lib/utils/markdownTools';
   import { getPro } from '$lib/stores/pro.svelte';
   import { openAiChat } from '$lib/stores/aiChat.svelte';
-  import { getSidebarPanelStore, type SidebarPanel } from '$lib/stores/sidebarPanel.svelte';
+  import { getSidebarPanelStore, setActiveSidebarPanel, type SidebarPanel } from '$lib/stores/sidebarPanel.svelte';
   import { goto } from '$app/navigation';
 
   // State
@@ -608,6 +609,7 @@ graph TD;
 
   let editorElement = $state<HTMLDivElement | null>(null);
   let previewElement = $state<HTMLElement | null>(null);
+  let previewContainer = $state<HTMLElement | null>(null);
   let editorView = $state<EditorView | null>(null);
 
   const languageCompartment = new Compartment();
@@ -1682,37 +1684,27 @@ graph TD;
       if (res.isStale) {
         return;
       }
-      renderedHtml = DOMPurify.sanitize(res.html, {
-        ADD_TAGS: ['button', 'span', 'div', 'svg', 'path'],
-        ADD_ATTR: [
-          'data-lang',
-          'data-code',
-          'type',
-          'd',
-          'stroke',
-          'fill',
-          'viewBox',
-          'stroke-width',
-          'stroke-linecap',
-          'stroke-linejoin',
-        ],
-      });
+      renderedHtml = res.html;
+      if (previewContainer && res.blocks) {
+        patchDomPreview(previewContainer, res.blocks);
+      }
 
       // 3. Render Mermaid blocks on next tick (lazy-load mermaid only if needed)
       setTimeout(async () => {
         void highlightPreviewCode();
         void fillNoteEmbeds();
         if (previewElement) {
-          const mermaidBlocks = previewElement.querySelectorAll('code.language-mermaid');
+          const mermaidBlocks = previewElement.querySelectorAll<HTMLElement>('code.language-mermaid:not([data-rendered])');
           if (mermaidBlocks.length > 0) {
             await ensureMermaidInitialized();
             const m = await getMermaid();
-            mermaidBlocks.forEach(async (block, index) => {
+            mermaidBlocks.forEach(async (block) => {
+              block.dataset.rendered = '1';
               const code = block.textContent || '';
-              const id = `mermaid-svg-${index}-${Date.now()}`;
+              const cacheKey = hashString(code);
+              const id = `mermaid-svg-${cacheKey}`;
               try {
                 // Cache by source: unchanged diagrams are not re-rendered on every edit.
-                const cacheKey = hashString(code);
                 let safeSvg = mermaidSvgCache.get(cacheKey);
                 if (!safeSvg) {
                   const { svg } = await m.render(id, code);
@@ -1721,6 +1713,8 @@ graph TD;
                   mermaidSvgCache.set(cacheKey, safeSvg);
                 }
                 const container = document.createElement('div');
+                container.id = `mermaid-container-${cacheKey}`;
+                container.dataset.mermaidHash = cacheKey;
                 container.className = 'my-4 flex justify-center overflow-x-auto';
                 container.innerHTML = safeSvg;
                 block.parentElement?.replaceWith(container);
@@ -3754,7 +3748,7 @@ graph TD;
     <!-- Workspace Files / Vault Explorer Sidebar -->
     <aside
       oncontextmenu={(e) => e.preventDefault()}
-      class="{showFileTree ? 'w-60 sm:w-64' : 'hidden'} border-r border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-[#111111] flex flex-col shrink-0 select-none file-tree-sidebar no-print"
+      class="{showFileTree ? 'w-60 sm:w-64' : 'hidden'} border-r border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-[#111111] flex flex-col shrink-0 select-none file-tree-sidebar no-print overflow-hidden"
     >
       <!-- Panel header: active panel title + Open File button (driven by icon rail, not sub-tabs) -->
       <div class="px-3 py-2 border-b border-neutral-200 dark:border-neutral-800/80 flex items-center justify-between bg-neutral-100/80 dark:bg-neutral-950/60">
@@ -4219,13 +4213,13 @@ graph TD;
                   </div>
                 </div>
               {/if}
-              <div class="rounded-lg border border-neutral-200 dark:border-neutral-800 overflow-hidden">
+              <div class="rounded-lg border border-neutral-200 dark:border-neutral-800 overflow-hidden relative">
                 <GraphView
                   open={true}
                   index={knowledgeIndex}
                   currentKey={currentNoteKey || ''}
                   onOpen={(path: string) => openNoteByPath(path)}
-                  onClose={() => {}}
+                  onClose={() => setActiveSidebarPanel('files')}
                 />
               </div>
             {:else}
@@ -4544,7 +4538,11 @@ graph TD;
           <!-- Split side-by-side: Document A (left) + Document B (right) -->
           <div class="flex w-full h-full overflow-hidden">
             <div class="w-1/2 min-w-0 overflow-y-auto p-8 sm:p-10">
-              {@html renderedHtml}
+              <div bind:this={previewContainer} class="preview-blocks-container">
+                {#if !previewContainer}
+                  {@html renderedHtml}
+                {/if}
+              </div>
             </div>
             <div class="w-1/2 min-w-0 border-l border-neutral-200 dark:border-neutral-800 overflow-y-auto">
               <div class="h-8 px-3 bg-neutral-100 dark:bg-[#161616] border-b border-neutral-200 dark:border-neutral-800 flex items-center justify-between text-xs font-mono text-neutral-500 select-none sticky top-0 z-10">
@@ -4570,7 +4568,11 @@ graph TD;
             </div>
           </div>
         {:else}
-          {@html renderedHtml}
+          <div bind:this={previewContainer} class="preview-blocks-container">
+            {#if !previewContainer}
+              {@html renderedHtml}
+            {/if}
+          </div>
         {/if}
       {/if}
 

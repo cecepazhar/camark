@@ -9,7 +9,6 @@ export const WEBSITE_URL = 'https://camark.fathforce.com';
 export const AUTHOR_NAME = 'Cecep Saeful Azhar Hidayat, ST';
 export const AUTHOR_URL = 'https://www.cecepazhar.com';
 export const CONTACT_EMAIL = 'hi@cecepazhar.com';
-export const CONTACT_PHONE = '0852 2069 6117';
 export const INCUBATOR_NAME = 'Fathforce';
 export const INCUBATOR_URL = 'https://fathforce.com';
 export const PRICING_URL = 'https://www.cecepazhar.com/#pricing';

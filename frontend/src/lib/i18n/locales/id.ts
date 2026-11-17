@@ -380,7 +380,7 @@ export const id: Dictionary = {
       subtitle: 'Kerangka kerja starter open-source untuk aplikasi desktop & mobile yang mengutamakan privasi.',
       version: 'Versi Kerangka Kerja',
       stack: 'Tumpukan Arsitektur',
-      stackVal: 'Tauri 2 + Rust Edition 2024 + Svelte 5 + SQLCipher',
+      stackVal: 'Rust Edition 2024 + Svelte 5 + SQLCipher',
       license: 'Lisensi',
       licenseVal: 'MIT (dengan CATerm Attribution Notice)',
       author: 'Pengembang',

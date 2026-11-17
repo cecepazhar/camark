@@ -23,7 +23,6 @@
     AUTHOR_NAME,
     AUTHOR_URL,
     CONTACT_EMAIL,
-    CONTACT_PHONE,
     INCUBATOR_NAME,
     INCUBATOR_URL
   } from '$lib/appInfo';
@@ -289,7 +288,7 @@
   });
 </script>
 
-<div class="max-w-5xl mx-auto space-y-6">
+<div class="max-w-5xl mx-auto space-y-6 px-4 sm:px-6 py-6 pb-12">
   <!-- Page Header using Standardized CATerm Tile Design -->
   <PageHeader
     icon={[
@@ -915,13 +914,9 @@
         </div>
         <div class="flex justify-between items-center py-2.5">
           <span class={MUTED}>Contact & Support</span>
-          <div class="flex items-center gap-3">
-            <a href="mailto:{CONTACT_EMAIL}" class="text-neutral-800 dark:text-neutral-200 hover:text-cyan-500 font-mono">
-              {CONTACT_EMAIL}
-            </a>
-            <span class="text-neutral-300 dark:text-neutral-700">•</span>
-            <span class="text-neutral-800 dark:text-neutral-200 font-mono">{CONTACT_PHONE}</span>
-          </div>
+          <a href="mailto:{CONTACT_EMAIL}" class="text-neutral-800 dark:text-neutral-200 hover:text-cyan-500 font-mono">
+            {CONTACT_EMAIL}
+          </a>
         </div>
         <div class="flex justify-between items-center py-2.5">
           <span class={MUTED}>Studio / Incubator</span>

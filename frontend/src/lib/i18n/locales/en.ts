@@ -382,7 +382,7 @@ export const en: Dictionary = {
       subtitle: 'Open-source starter framework for privacy-first desktop & mobile apps.',
       version: 'Framework Version',
       stack: 'Architecture Stack',
-      stackVal: 'Tauri 2 + Rust Edition 2024 + Svelte 5 + SQLCipher',
+      stackVal: 'Rust Edition 2024 + Svelte 5 + SQLCipher',
       license: 'License',
       licenseVal: 'MIT (with CATerm Attribution Notice)',
       author: 'Author',
