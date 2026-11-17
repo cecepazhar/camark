@@ -134,6 +134,11 @@
     htmlTableToMarkdown,
     tsvToMarkdown,
   } from '$lib/utils/markdownTools';
+  import {
+    buildBlockMap,
+    lineBlockToPreviewScroll,
+    previewScrollToLine,
+  } from '$lib/utils/scrollSync';
   import { getPro } from '$lib/stores/pro.svelte';
   import { openAiChat } from '$lib/stores/aiChat.svelte';
   import { getSidebarPanelStore, setActiveSidebarPanel, type SidebarPanel } from '$lib/stores/sidebarPanel.svelte';
@@ -821,7 +826,7 @@ graph TD;
     }
   }
 
-  // Synchronized Scrolling Logic
+  // Synchronized Scrolling Logic (P-04 Line-Based)
   function syncScrollEditorToPreview() {
     if (isSyncingPreview || !editorView || !previewElement || viewMode !== 'split') return;
     if (syncRafId) cancelAnimationFrame(syncRafId);
@@ -830,9 +835,22 @@ graph TD;
       const scrollDom = editorView!.scrollDOM;
       const editorMax = scrollDom.scrollHeight - scrollDom.clientHeight;
       if (editorMax > 0 && previewElement) {
-        const ratio = scrollDom.scrollTop / editorMax;
-        const previewMax = previewElement.scrollHeight - previewElement.clientHeight;
-        previewElement.scrollTop = ratio * previewMax;
+        const blockMap = buildBlockMap(previewContainer || previewElement, previewElement);
+        if (blockMap.length > 0) {
+          const blockInfo = editorView!.lineBlockAtHeight(scrollDom.scrollTop);
+          const topVisibleLine = editorView!.state.doc.lineAt(blockInfo.from).number;
+          const targetScroll = lineBlockToPreviewScroll(
+            topVisibleLine,
+            blockMap,
+            previewElement.scrollHeight,
+            previewElement.clientHeight
+          );
+          previewElement.scrollTop = targetScroll;
+        } else {
+          const ratio = scrollDom.scrollTop / editorMax;
+          const previewMax = previewElement.scrollHeight - previewElement.clientHeight;
+          previewElement.scrollTop = ratio * previewMax;
+        }
       }
       setTimeout(() => {
         isSyncingEditor = false;
@@ -847,10 +865,19 @@ graph TD;
       isSyncingPreview = true;
       const previewMax = previewElement!.scrollHeight - previewElement!.clientHeight;
       if (previewMax > 0 && editorView) {
-        const ratio = previewElement!.scrollTop / previewMax;
-        const scrollDom = editorView!.scrollDOM;
-        const editorMax = scrollDom.scrollHeight - scrollDom.clientHeight;
-        scrollDom.scrollTop = ratio * editorMax;
+        const blockMap = buildBlockMap(previewContainer || previewElement, previewElement);
+        if (blockMap.length > 0) {
+          const totalLines = editorView!.state.doc.lines;
+          const targetLine = previewScrollToLine(previewElement!.scrollTop, blockMap, totalLines);
+          const lineInfo = editorView!.state.doc.line(Math.min(totalLines, Math.max(1, targetLine)));
+          const block = editorView!.lineBlockAt(lineInfo.from);
+          editorView!.scrollDOM.scrollTop = block.top;
+        } else {
+          const ratio = previewElement!.scrollTop / previewMax;
+          const scrollDom = editorView!.scrollDOM;
+          const editorMax = scrollDom.scrollHeight - scrollDom.clientHeight;
+          scrollDom.scrollTop = ratio * editorMax;
+        }
       }
       setTimeout(() => {
         isSyncingPreview = false;

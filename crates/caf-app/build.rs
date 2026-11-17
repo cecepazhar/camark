@@ -77,6 +77,16 @@ const COMMANDS: &[&str] = &[
 fn main() {
     println!("cargo:rerun-if-changed=icons/icon.ico");
     println!("cargo:rerun-if-changed=tauri.conf.json");
+    // The `tauri::generate_context!()` macro in src/lib.rs embeds everything under
+    // `frontendDist` (see tauri.conf.json: "../../frontend/build") into the binary at
+    // compile time. Cargo has no built-in knowledge that lib.rs depends on those
+    // frontend files, so a frontend-only rebuild would silently ship the PREVIOUS
+    // embedded UI. Declaring the dist dir here makes cargo track it: the build script
+    // re-runs whenever files in frontend/build are added/removed (SvelteKit emits
+    // fresh content-hashed filenames every build, so this fires on each frontend
+    // rebuild), which in turn marks the embedded assets as changed and forces lib.rs
+    // — and thus `generate_context!()` — to re-expand and re-embed the new UI.
+    println!("cargo:rerun-if-changed=../../frontend/build");
     tauri_build::try_build(
         tauri_build::Attributes::new()
             .app_manifest(tauri_build::AppManifest::new().commands(COMMANDS)),
