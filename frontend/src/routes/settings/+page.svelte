@@ -409,7 +409,18 @@
                 <span class="text-xl font-bold text-neutral-900 dark:text-white">CAMark Pro Lifetime</span>
                 <span class="px-2 py-0.5 rounded-full text-[10px] font-black tracking-wider bg-amber-400 dark:bg-amber-500 text-neutral-950 shadow-xs border border-white dark:border-neutral-900">FOUNDER</span>
               </div>
-              <p class="text-xs text-neutral-500 dark:text-neutral-400 mt-1">Status lisensi terverifikasi permanen untuk perangkat ini.</p>
+              <p class="text-xs text-neutral-500 dark:text-neutral-400 mt-1">
+                Status lisensi terverifikasi permanen untuk perangkat ini.
+              </p>
+              {#if pro.status?.entitlement && 'expiresAt' in pro.status.entitlement && pro.status.entitlement.expiresAt}
+                <p class="text-xs text-neutral-500 dark:text-neutral-400 mt-1">
+                  Tempo kadaluarsa: {new Date(pro.status.entitlement.expiresAt * 1000).toLocaleDateString('id-ID', {
+                    year: 'numeric',
+                    month: 'short',
+                    day: 'numeric'
+                  })}
+                </p>
+              {/if}
             </div>
             <Button
               type="button"
