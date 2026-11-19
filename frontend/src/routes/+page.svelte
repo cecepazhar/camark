@@ -557,6 +557,11 @@ graph TD;
   const activeTab = $derived(getActiveTab());
   const pro = getPro();
 
+  // Opsi A: hide the tab scroll buttons when there are few open tabs — with a
+  // short strip there is nothing to scroll, so the left/right chevron buttons
+  // just waste horizontal space. Threshold: 8 tabs.
+  const tabsFew = $derived(tabs.length < 8);
+
   // View mode: 'editor' | 'live' | 'split' | 'preview' (synchronized via docTabs store)
   const viewMode = $derived(getViewMode());
   let isSaving = $state<boolean>(false);
@@ -1112,6 +1117,15 @@ graph TD;
   }
 
   onMount(() => {
+    // Opsi A: clicking the folder icon in the rail resets the file explorer to
+    // the workspace root (dispatched by +layout.svelte `handleNavClick`).
+    const onResetFolderRoot = () => {
+      if (workspacePath) {
+        loadDirectory(workspacePath, true).catch((e) => console.warn('reset folder root:', e));
+      }
+    };
+    window.addEventListener('camark:reset-folder-root', onResetFolderRoot);
+
     const unregisterApply = registerEditorApplyHandler((text: string, mode: EditorApplyMode) => {
       if (!editorView) return;
       const doc = editorView.state.doc;
@@ -1433,6 +1447,7 @@ graph TD;
 
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('camark:reset-folder-root', onResetFolderRoot);
       unregisterApply();
       unregisterUndo();
       unregisterExporter();
@@ -3750,7 +3765,8 @@ graph TD;
       <div class="h-4 w-px bg-neutral-300 dark:bg-neutral-800 mx-0.5"></div>
     </div>
 
-    <!-- Scroll Left Button -->
+    <!-- Scroll Left Button (hidden when few tabs: nothing to scroll) -->
+    {#if !tabsFew}
     <button
       type="button"
       onclick={scrollTabsLeft}
@@ -3762,6 +3778,7 @@ graph TD;
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
       </svg>
     </button>
+    {/if}
 
     <!-- Center/Fill: Document Tabs Strip -->
     <div
@@ -3844,6 +3861,7 @@ graph TD;
 
     <!-- Scroll Right Button & New Tab Button -->
     <div class="flex items-center gap-0.5 shrink-0">
+      {#if !tabsFew}
       <button
         type="button"
         onclick={scrollTabsRight}
@@ -3855,6 +3873,7 @@ graph TD;
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
         </svg>
       </button>
+      {/if}
 
       <button
         type="button"

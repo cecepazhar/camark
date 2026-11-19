@@ -24,6 +24,9 @@ pub fn create_main_window(app: &tauri::App) -> tauri::Result<WebviewWindow> {
 
     #[allow(unused_mut)]
     let mut builder = tauri::WebviewWindowBuilder::from_config(app.handle(), &config)?;
+    // CAMark is a document studio; open it maximized so the editor + side panels
+    // get full space by default. Users can still restore to the last size manually.
+    builder = builder.maximized(true);
     if !prefs::load_performance_prefs()
         .map(|p| p.gpu_acceleration)
         .unwrap_or(false)

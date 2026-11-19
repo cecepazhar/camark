@@ -101,6 +101,28 @@ import { getSidebarPanelStore, setActiveSidebarPanel, type SidebarPanel } from '
     return activePanel === panelForKey(key);
   }
 
+  // Opsi A (owner): the Files/Vault tree is always visible; the Search/Bookmarks/
+  // Knowledge panels are cards that float above it. Clicking an icon:
+  //   • editor (folder)  → reset to the root folder + plain tree (no card)
+  //   • special card      → toggle: if this card is open, close it (back to tree);
+  //   • otherwise         → open that card
+  // While on a non-editor route (e.g. /settings) we first navigate back to `/`.
+  function handleNavClick(item: { key: string }) {
+    const panel = panelForKey(item.key);
+    if (item.key === 'editor') {
+      setActiveSidebarPanel('files');
+      // Ask the page to reset the file explorer to the workspace root.
+      window.dispatchEvent(new CustomEvent('camark:reset-folder-root'));
+    } else if (activePanel === panel) {
+      setActiveSidebarPanel('files'); // toggle the card off
+    } else {
+      setActiveSidebarPanel(panel); // toggle the card on
+    }
+    if (page.url.pathname !== '/') {
+      goto('/');
+    }
+  }
+
   const currentSection = $derived(
     [...navItems, settingsItem].find((item) => {
       const p = page.url.pathname as string;
@@ -185,6 +207,9 @@ import { getSidebarPanelStore, setActiveSidebarPanel, type SidebarPanel } from '
     initTheme();
     isVaultUnlocked = true;
     refreshProStatus().catch(() => {});
+
+    // Open maximized (belt-and-suspenders with window.rs `maximized(true)`).
+    maximizeWindow().catch(() => {});
 
     if (!import.meta.env.DEV) {
       checkForUpdates({ silent: true }).catch(() => {});
@@ -536,11 +561,7 @@ import { getSidebarPanelStore, setActiveSidebarPanel, type SidebarPanel } from '
                 type="button"
                 onclick={() => {
                   mobileDrawerOpen = false;
-                  const panel = panelForKey(item.key);
-                  setActiveSidebarPanel(panel);
-                  if (page.url.pathname !== '/') {
-                    goto('/');
-                  }
+                  handleNavClick(item);
                 }}
                 title={item.label}
                 aria-pressed={active}
@@ -603,13 +624,7 @@ import { getSidebarPanelStore, setActiveSidebarPanel, type SidebarPanel } from '
             {@const active = isPanelActive(item.key)}
             <button
               type="button"
-              onclick={() => {
-                const panel = panelForKey(item.key);
-                setActiveSidebarPanel(panel);
-                if (page.url.pathname !== '/') {
-                  goto('/');
-                }
-              }}
+              onclick={() => handleNavClick(item)}
               title={item.label}
               aria-pressed={active}
               class="relative w-full px-2.5 py-2 rounded-lg flex items-center gap-3 transition-colors overflow-hidden {active ? 'bg-cyan-500/15 text-cyan-600 dark:text-cyan-400 font-medium' : 'text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200/50 dark:hover:bg-neutral-800/40 hover:text-neutral-900 dark:hover:text-white'}"
