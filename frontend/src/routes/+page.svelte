@@ -99,6 +99,12 @@
     toggleNthTask,
   } from '$lib/utils/markdownRender';
   import { highlightToHtml } from '$lib/utils/highlight';
+  import {
+    isAllowedImage,
+    MAX_IMAGE_BYTES,
+    buildImageMarkdown,
+    fileToBase64 as fileToBase64Util,
+  } from '$lib/utils/imageInsert';
   import { extractSection, hashString } from '$lib/utils/markdownRender';
   import {
     buildIndex,
@@ -887,6 +893,15 @@ graph TD;
 
   // Smart Paste Handler (converts HTML tables and Excel TSV to Markdown table)
   function handleEditorPaste(e: ClipboardEvent): boolean {
+    // I-01: image paste takes priority — clipboard image files are routed to the
+    // workspace assets folder, not inserted as text.
+    const imageFiles = e.clipboardData?.files ? Array.from(e.clipboardData.files).filter((f) => f.type.startsWith('image/')) : [];
+    if (imageFiles.length > 0) {
+      e.preventDefault();
+      void handleImageFiles(imageFiles, 'paste');
+      return true;
+    }
+
     const html = e.clipboardData?.getData('text/html');
     const text = e.clipboardData?.getData('text/plain');
 
@@ -920,6 +935,91 @@ graph TD;
       selection: { anchor: sel.from + textToInsert.length },
     });
     editorView.focus();
+  }
+
+  // I-01: paste / drag-and-drop image handling. Saves each image to the active
+  // document's assets folder and inserts a relative markdown image link.
+  // `source` is 'paste' or 'drop' and only affects the toast copy.
+  async function handleImageFiles(files: File[], source: 'paste' | 'drop') {
+    // 1. Encrypted vault notes do not support external assets this phase.
+    if (currentFilePath?.startsWith('vault://')) {
+      showToast(t('editor.imageVaultUnsupported'), 'info');
+      return;
+    }
+    // 2. Need a concrete workspace document to anchor the assets folder to.
+    if (!currentFilePath) {
+      showToast(t('editor.imageSaveFailed'), 'error');
+      return;
+    }
+
+    for (const file of files) {
+      // 3+4. Client-side type + size gate (backend re-validates; this just
+      //      gives a fast, specific toast instead of a round-trip error).
+      if (!isAllowedImage(file.type, file.size)) {
+        showToast(
+          file.size > MAX_IMAGE_BYTES ? t('editor.imageRejectedSize') : t('editor.imageRejectedType'),
+          'error',
+        );
+        continue;
+      }
+      try {
+        const b64 = await fileToBase64Util(file);
+        const res = await invoke<{ link: string; stored_path: string; bytes: number }>(
+          'workspace_save_image',
+          { docPath: currentFilePath, dataB64: b64, mime: file.type },
+        );
+        const link = res?.link ?? '';
+        if (!link) throw new Error('no link returned');
+        insertImageMarkdownAtCursor(link, file.name);
+        showToast(t('editor.imageInserted'), 'success');
+      } catch (err) {
+        const msg: string =
+          typeof err === 'string' ? err : ((err as { message?: string })?.message ?? String(err ?? ''));
+        showToast(
+          msg.includes('Unsupported')
+            ? t('editor.imageRejectedType')
+            : msg.includes('too large')
+              ? t('editor.imageRejectedSize')
+              : t('editor.imageSaveFailed'),
+          'error',
+        );
+      }
+    }
+    // `source` is retained for potential future copy differentiation.
+    void source;
+  }
+
+  function insertImageMarkdownAtCursor(link: string, fileName: string) {
+    if (!editorView) return;
+    const sel = editorView.state.selection.main;
+    const doc = editorView.state.doc.toString();
+    const before = sel.from > 0 ? doc.slice(sel.from - 1, sel.from) : '\n';
+    const after = doc.slice(sel.to, sel.to + 1);
+    const insert = buildImageMarkdown(link, fileName, before, after);
+    editorView.dispatch({
+      changes: { from: sel.from, to: sel.to, insert },
+      selection: { anchor: sel.from + insert.length },
+    });
+    editorView.focus();
+  }
+
+  // Native drag-and-drop on the editor container. `dragover` must be prevented
+  // to allow the drop; we only accept image drops (others fall through to the
+  // default CM6 drop-cursor behaviour for text).
+  function handleEditorDrop(e: DragEvent) {
+    const files = e.dataTransfer?.files ? Array.from(e.dataTransfer.files) : [];
+    if (files.length === 0) return;
+    const hasImage = files.some((f) => f.type.startsWith('image/'));
+    if (!hasImage) return; // let CM6 handle text/file drops otherwise
+    e.preventDefault();
+    e.stopPropagation();
+    void handleImageFiles(files, 'drop');
+  }
+  function handleEditorDragOver(e: DragEvent) {
+    const files = e.dataTransfer?.files ? Array.from(e.dataTransfer.files) : [];
+    if (files.some((f) => f.type.startsWith('image/'))) {
+      e.preventDefault();
+    }
   }
 
   // Table Auto-Formatter
@@ -4410,6 +4510,8 @@ graph TD;
       <!-- CodeMirror Editor Viewport (no overflow-auto or padding that would push gutters out of alignment) -->
       <div
         bind:this={editorElement}
+        ondrop={handleEditorDrop}
+        ondragover={handleEditorDragOver}
         class="flex-1 min-h-0 h-full w-full overflow-hidden {viewMode === 'live' ? 'cm-live-mode max-w-4xl w-full mx-auto' : ''} {isZenMode ? 'max-w-3xl mx-auto w-full pt-12 pb-32' : ''}"
       ></div>
 

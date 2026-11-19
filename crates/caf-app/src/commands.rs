@@ -299,6 +299,22 @@ pub async fn workspace_open_file_app(file_path: String) -> Result<(), String> {
     fs_workspace::open_with_default_app(file_path).await
 }
 
+/// I-01: Persist a pasted / dropped image into the active document's `assets/`
+/// folder and return the markdown-relative link to embed. `data_b64` is the
+/// image bytes base64-encoded; `mime` is the source MIME type (validated
+/// against a whitelist); `doc_path` is the active document's path (used only
+/// to locate the containing folder — the asset always lands in `<doc_dir>/assets`
+/// so the markdown link stays a short `assets/<name>` that survives moving the
+/// whole workspace).
+#[tauri::command]
+pub async fn workspace_save_image(
+    doc_path: String,
+    data_b64: String,
+    mime: String,
+) -> Result<fs_workspace::WorkspaceImageResult, String> {
+    fs_workspace::save_image(doc_path, data_b64, mime).await
+}
+
 #[tauri::command]
 pub fn get_initial_file_path() -> Option<String> {
     fs_workspace::get_initial_file_path()

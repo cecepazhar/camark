@@ -809,6 +809,210 @@ fn read_dir_recursive(path: &Path, depth: u8) -> Result<Vec<FileNode>, String> {
     Ok(entries)
 }
 
+// ─── I-01: Image paste / drag-and-drop asset saving ──────────────────────────
+/// Maximum image size accepted from the clipboard or drop target.
+pub const MAX_IMAGE_BYTES: u64 = 25 * 1024 * 1024; // 25 MB
+
+/// Allowed image MIME types and their canonical extensions.
+pub const ALLOWED_IMAGE_MIMES: &[(&str, &str)] = &[
+    ("image/png", "png"),
+    ("image/jpeg", "jpg"),
+    ("image/jpg", "jpg"),
+    ("image/webp", "webp"),
+    ("image/gif", "gif"),
+    ("image/bmp", "bmp"),
+    ("image/avif", "avif"),
+    ("image/svg+xml", "svg"),
+    ("image/tiff", "tif"),
+];
+
+/// Resolve a MIME type to its stored-file extension. Rejects anything not explicitly
+/// whitelisted so unknown binary blobs never land in the assets folder.
+fn mime_to_extension(mime: &str) -> Result<&'static str, String> {
+    let normalized = mime
+        .split(';')
+        .next()
+        .unwrap_or(mime)
+        .trim()
+        .to_ascii_lowercase();
+    ALLOWED_IMAGE_MIMES
+        .iter()
+        .find(|(m, _)| *m == normalized)
+        .map(|(_, ext)| *ext)
+        .ok_or_else(|| format!("Unsupported image type: {mime}"))
+}
+
+/// Result of saving an image into the workspace assets folder.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct WorkspaceImageResult {
+    /// Markdown-relative link path to embed in the active document, e.g. `assets/foo.png`.
+    pub link: String,
+    /// Absolute (or cwd-relative) stored path, useful for the UI / watcher.
+    pub stored_path: String,
+    /// Byte size of the stored image.
+    pub bytes: u64,
+}
+
+/// Error variants for image saving, surfaced to the frontend as a `String` by the
+/// Tauri command wrapper.
+#[derive(Debug)]
+pub enum ImageSaveError {
+    /// MIME type not in the allow-list.
+    UnsupportedMime(String),
+    /// Decoded payload exceeds [`MAX_IMAGE_BYTES`].
+    TooLarge(u64),
+    /// Resolved asset path would escape the workspace root (path traversal).
+    PathTraversal(String),
+    /// Underlying filesystem error.
+    Io(std::io::Error),
+}
+
+impl std::fmt::Display for ImageSaveError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::UnsupportedMime(m) => write!(f, "Unsupported image type: {m}"),
+            Self::TooLarge(n) => write!(f, "Image too large ({n} bytes); limit {MAX_IMAGE_BYTES}"),
+            Self::PathTraversal(p) => write!(f, "Refusing to write outside workspace: {p}"),
+            Self::Io(e) => write!(f, "IO error saving image: {e}"),
+        }
+    }
+}
+
+/// Synchronous, testable core of image saving. Runs on a blocking thread via
+/// [`save_image`].
+///
+/// Layout: for a document at `…/notes/sub/file.md` the image is written to
+/// `…/notes/sub/assets/<name>` so the generated markdown link is always a short
+/// relative path (`assets/<name>`) that keeps working if the whole workspace is
+/// moved. The filename is collision-safe: a local-timestamp + short SHA-256 of
+/// the payload + an optional `-N` suffix when an identical name already exists.
+fn save_image_inner(
+    doc_path: &str,
+    data: &[u8],
+    mime: &str,
+) -> Result<WorkspaceImageResult, ImageSaveError> {
+    // 1. Type validation — reject before touching the filesystem.
+    let ext = mime_to_extension(mime).map_err(ImageSaveError::UnsupportedMime)?;
+
+    // 2. Size validation.
+    let len = data.len() as u64;
+    if len > MAX_IMAGE_BYTES {
+        return Err(ImageSaveError::TooLarge(len));
+    }
+    if len == 0 {
+        return Err(ImageSaveError::Io(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "empty image payload",
+        )));
+    }
+
+    // 3. Resolve the document to a canonical path. A relative `doc_path` is
+    //    interpreted against the process CWD (the frontend always passes a path
+    //    that is valid in the app's working directory).
+    let doc = std::path::Path::new(doc_path);
+    let doc_abs = if doc.is_absolute() {
+        doc.to_path_buf()
+    } else {
+        std::env::current_dir()
+            .map_err(|e| ImageSaveError::Io(e))?
+            .join(doc)
+    };
+
+    // 4. Containment guard. Reject any `..` (ParentDir) component in the
+    //    caller-supplied document path first — that is the only untrusted input,
+    //    and a parent-directory segment is how an attacker would walk outside
+    //    the workspace root. This must run before `canonicalize` so a malicious
+    //    path is refused rather than surfacing as a filesystem error.
+    for component in doc.components() {
+        if matches!(component, std::path::Component::ParentDir) {
+            return Err(ImageSaveError::PathTraversal(doc_path.to_string()));
+        }
+    }
+    // The document's parent is the "containing folder"; the assets dir sits next
+    // to the document itself so the markdown link stays `assets/…` regardless of
+    // how deep the document is nested.
+    let doc_parent = doc_abs.parent().ok_or_else(|| {
+        ImageSaveError::Io(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "document has no parent directory",
+        ))
+    })?;
+    let doc_parent_canon = std::fs::canonicalize(doc_parent).map_err(|e| {
+        ImageSaveError::Io(std::io::Error::new(
+            e.kind(),
+            format!("document folder not found: {e}"),
+        ))
+    })?;
+    let assets_abs = doc_parent_canon.join("assets");
+
+    // 5. Collision-safe name: `YYYYMMDD-HHMMSS-{hash8}.{ext}` with `-N` suffix
+    //    when the exact name already exists.
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let ts = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    // Cheap UTC-ish local timestamp from seconds (sufficient for naming; the
+    // hash below is the real uniqueness source).
+    let ts_tag = ts.to_string();
+    let hash: String = {
+        use sha2::{Digest, Sha256};
+        let mut h = Sha256::new();
+        h.update(data);
+        hex::encode(&Sha256::finalize(h)[..4])
+    };
+    let base_name = format!("{ts_tag}-{hash}.{ext}");
+
+    fs::create_dir_all(&assets_abs).map_err(ImageSaveError::Io)?;
+
+    // Find a free filename.
+    let mut candidate = assets_abs.join(&base_name);
+    let mut suffix = 1u32;
+    while candidate.exists() {
+        candidate = assets_abs.join(format!("{base_name}-{suffix}"));
+        suffix += 1;
+    }
+
+    // 6. Atomic write (reuses R-01 helper so permissions are preserved and the
+    //    file watcher learns it was an app write via `record_app_write`).
+    write_file_atomic(&candidate, data).map_err(ImageSaveError::Io)?;
+
+    // 7. Compute the relative markdown link from the document to the stored
+    //    asset. Since both live under `doc_parent`, the link is simply
+    //    `assets/<candidate_file_name>`.
+    let link = format!(
+        "assets/{}",
+        candidate.file_name().unwrap().to_string_lossy()
+    );
+
+    Ok(WorkspaceImageResult {
+        link,
+        stored_path: candidate.to_string_lossy().to_string(),
+        bytes: len,
+    })
+}
+
+/// Tauri-facing async wrapper: decodes the base64 payload and hands off to the
+/// blocking [`save_image_inner`]. The Tauri command signature in `commands.rs`
+/// keeps the base64 encoding so the JS side can `File`/`Blob` → `ArrayBuffer` →
+/// base64 without serializing raw `Vec<u8>` through the FFI boundary (which
+/// Tauri v2 would otherwise base64 for us, but we keep the contract explicit).
+pub async fn save_image(
+    doc_path: String,
+    data_b64: String,
+    mime: String,
+) -> Result<WorkspaceImageResult, String> {
+    use base64::Engine;
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(data_b64)
+        .map_err(|e| format!("Invalid base64 image payload: {e}"))?
+        .to_vec();
+    tokio::task::spawn_blocking(move || save_image_inner(&doc_path, &bytes, &mime))
+        .await
+        .map_err(|e| e.to_string())?
+        .map_err(|e| e.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1098,5 +1302,135 @@ mod tests {
         assert_eq!(fs::read_to_string(&target).expect("read"), "forced content");
         let final_disk_stamp = get_file_version_stamp(&target).expect("final stamp");
         assert_eq!(new_stamp, final_disk_stamp);
+    }
+
+    // ─── I-01 image-save tests ──────────────────────────────────────
+    use base64::Engine as _;
+
+    fn png_bytes(seed: u8) -> Vec<u8> {
+        // Minimal valid-looking payload; we only exercise naming / guards, not
+        // real PNG decoding. Content uniqueness comes from `seed`.
+        let mut v = vec![0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+        v.extend_from_slice(&[seed, seed.wrapping_add(1), 0, 1, 2, 3, 4, 5]);
+        v
+    }
+
+    #[tokio::test]
+    async fn image_save_writes_asset_and_returns_relative_link() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let doc_dir = temp.path().join("notes");
+        fs::create_dir_all(&doc_dir).unwrap();
+        let doc = doc_dir.join("file.md");
+        fs::write(&doc, "# hi").unwrap();
+
+        let res = save_image(
+            doc.to_string_lossy().to_string(),
+            base64::engine::general_purpose::STANDARD.encode(png_bytes(1)),
+            "image/png".into(),
+        )
+        .await
+        .expect("image save");
+
+        // Link is a short relative path rooted at the document's folder.
+        assert!(res.link.starts_with("assets/"), "link={}", res.link);
+        assert!(res.link.ends_with(".png"), "link={}", res.link);
+        assert_eq!(res.bytes, png_bytes(1).len() as u64);
+
+        // The stored file actually exists next to the document under assets/.
+        let expected = doc_dir
+            .join("assets")
+            .join(res.link.strip_prefix("assets/").unwrap());
+        assert!(expected.exists(), "missing {expected:?}");
+        assert_eq!(fs::read(&expected).unwrap(), png_bytes(1));
+    }
+
+    #[tokio::test]
+    async fn image_save_collision_safety_appends_suffix() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let doc_dir = temp.path().join("d");
+        fs::create_dir_all(&doc_dir).unwrap();
+        let doc = doc_dir.join("file.md");
+        fs::write(&doc, "").unwrap();
+
+        let same = png_bytes(7);
+        let b64 = base64::engine::general_purpose::STANDARD.encode(&same);
+        // Two saves of identical bytes must produce two distinct files.
+        let r1 = save_image(
+            doc.to_string_lossy().into(),
+            b64.clone(),
+            "image/png".into(),
+        )
+        .await
+        .expect("first");
+        let r2 = save_image(doc.to_string_lossy().into(), b64, "image/png".into())
+            .await
+            .expect("second");
+
+        assert_ne!(r1.link, r2.link, "collision-safe names must differ");
+        assert!(
+            doc_dir
+                .join("assets")
+                .join(r1.link.strip_prefix("assets/").unwrap())
+                .exists()
+        );
+        assert!(
+            doc_dir
+                .join("assets")
+                .join(r2.link.strip_prefix("assets/").unwrap())
+                .exists()
+        );
+    }
+
+    #[tokio::test]
+    async fn image_save_rejects_unsupported_mime() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let doc = temp.path().join("f.md");
+        fs::write(&doc, "").unwrap();
+        let res = save_image(
+            doc.to_string_lossy().into(),
+            base64::engine::general_purpose::STANDARD.encode(b"exec"),
+            "application/octet-stream".into(),
+        )
+        .await;
+        assert!(res.is_err(), "octet-stream must be rejected");
+        let msg = res.unwrap_err();
+        assert!(msg.contains("Unsupported image type"), "got: {msg}");
+    }
+
+    #[tokio::test]
+    async fn image_save_rejects_oversized_payload() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let doc = temp.path().join("f.md");
+        fs::write(&doc, "").unwrap();
+
+        let big: Vec<u8> = vec![0u8; (MAX_IMAGE_BYTES as usize) + 1];
+        let res = save_image(
+            doc.to_string_lossy().into(),
+            base64::engine::general_purpose::STANDARD.encode(&big),
+            "image/png".into(),
+        )
+        .await;
+        assert!(res.is_err(), "oversized payload must be rejected");
+        let msg = res.unwrap_err();
+        assert!(msg.contains("too large"), "got: {msg}");
+    }
+
+    #[tokio::test]
+    async fn image_save_rejects_path_traversal() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let doc = temp.path().join("f.md");
+        fs::write(&doc, "").unwrap();
+
+        // `..` in the document path is refused outright.
+        let malicious = format!("{}///../escape.png", doc.to_string_lossy());
+        let res = save_image(
+            malicious,
+            base64::engine::general_purpose::STANDARD.encode(png_bytes(9)),
+            "image/png".into(),
+        )
+        .await;
+        assert!(res.is_err(), "path traversal must be rejected");
+        let msg = res.unwrap_err();
+        assert!(msg.contains("outside workspace"), "got: {msg}");
     }
 }

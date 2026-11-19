@@ -253,6 +253,7 @@ pub fn run_with_start(_start: std::time::Instant) {
             commands::workspace_reveal_file,
             commands::workspace_copy_file,
             commands::workspace_open_file_app,
+            commands::workspace_save_image,
             commands::workspace_watch_directory,
             commands::workspace_unwatch_directory,
             commands::get_initial_file_path,
