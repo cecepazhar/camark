@@ -5,6 +5,7 @@ import {
   splitFrontmatter,
   toggleNthTask,
   escapeHtml,
+  rewriteRelativeImageSrcs,
 } from './markdownRender';
 
 beforeAll(() => installMarkdownExtensions());
@@ -162,5 +163,37 @@ describe('syntax highlight', () => {
     const code = 'fn main() {\n    println!("hi");\n}\n';
     const html = (await highlightToHtml(code, 'rust'))!;
     expect(html.replace(/<[^>]+>/g, '').replace(/&quot;/g, '"').replace(/&#039;/g, "'")).toBe(code);
+  });
+});
+
+describe('I-02 image src rewriting', () => {
+  const resolve = (abs: string) => `asset://${abs}`;
+
+  it('rewrites a relative asset src to the resolver URL and keeps the relative path in title', () => {
+    const out = rewriteRelativeImageSrcs(
+      '<img src="assets/a.png" alt="a">',
+      '/home/u/ws/notes/sub',
+      resolve,
+    );
+    expect(out).toContain('asset:///home/u/ws/notes/sub/assets/a.png');
+    expect(out).toContain('title="assets/a.png"');
+  });
+
+  it('leaves http(s)/data/absolute external URLs untouched', () => {
+    const out = rewriteRelativeImageSrcs(
+      '<img src="https://x/a.png"> <img src="data:image/png;base64,AA"> <img src="asset://already">',
+      '/w',
+      resolve,
+    );
+    expect(out).toContain('src="https://x/a.png"');
+    expect(out).toContain('src="data:image/png;base64,AA"');
+    expect(out).toContain('src="asset://already"');
+    expect(out).not.toContain('asset:///w');
+  });
+
+  it('is a no-op when baseDir is empty', () => {
+    expect(rewriteRelativeImageSrcs('<img src="assets/a.png">', '', resolve)).toBe(
+      '<img src="assets/a.png">',
+    );
   });
 });

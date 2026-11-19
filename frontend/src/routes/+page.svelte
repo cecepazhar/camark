@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, tick, untrack } from 'svelte';
-  import { invoke } from '@tauri-apps/api/core';
+  import { invoke, convertFileSrc } from '@tauri-apps/api/core';
   import { listen } from '@tauri-apps/api/event';
   import { open } from '@tauri-apps/plugin-dialog';
   import {
@@ -276,6 +276,7 @@
     name: string;
     folders: string[];
     favoritePaths: { path: string; name: string; is_dir: boolean }[];
+    assetFolder?: string;
   }
 
   interface FolderFormationTemplate {
@@ -355,6 +356,10 @@
   // Workspace Multi-Root State
   let customWorkspaces = $state<CustomWorkspace[]>([]);
   let activeWorkspace = $state<CustomWorkspace | null>(null);
+
+  // I-02: configurable asset folder name (default `assets`). Read from the active
+  // workspace, falling back to the default for single-root / no-workspace mode.
+  const assetFolderName = $derived<string>(activeWorkspace?.assetFolder?.trim() || 'assets');
   let multiRootFolders = $state<string[]>([]);
   let multiRootTrees = $state<FileNode[]>([]);
   let customTemplates = $state<FolderFormationTemplate[]>([]);
@@ -556,6 +561,22 @@ graph TD;
   const activeTabId = $derived(getActiveTabId());
   const activeTab = $derived(getActiveTab());
   const pro = getPro();
+
+  // I-02: absolute directory containing the active document. Image links in the
+  // markdown are relative to this dir (assets live in <doc_dir>/<assetFolder>),
+  // so the preview resolves `assets/foo.png` against this absolute base.
+  const activeDocBaseDir = $derived.by<string | null>(() => {
+    if (!currentFilePath || currentFilePath.startsWith('vault://')) return null;
+    // currentFilePath is workspace-relative (e.g. `notes/sub/file.md`); join with
+    // the workspace root. If it's already absolute, use its dir directly.
+    if (currentFilePath.startsWith('/')) {
+      return currentFilePath.replace(/\/[^/]+$/, '') || '/';
+    }
+    const relDir = currentFilePath.includes('/') ? currentFilePath.slice(0, currentFilePath.lastIndexOf('/')) : '';
+    const root = (workspacePath === '.' ? '' : workspacePath.replace(/\/+$/, ''));
+    const base = relDir ? `${root}/${relDir}` : root;
+    return base === '' ? null : base;
+  });
 
   // Opsi A: hide the tab scroll buttons when there are few open tabs — with a
   // short strip there is nothing to scroll, so the left/right chevron buttons
@@ -971,7 +992,7 @@ graph TD;
         const b64 = await fileToBase64Util(file);
         const res = await invoke<{ link: string; stored_path: string; bytes: number }>(
           'workspace_save_image',
-          { docPath: currentFilePath, dataB64: b64, mime: file.type },
+          { docPath: currentFilePath, dataB64: b64, mime: file.type, assetFolder: assetFolderName },
         );
         const link = res?.link ?? '';
         if (!link) throw new Error('no link returned');
@@ -1822,6 +1843,8 @@ graph TD;
         breaks: softBreaks,
         knownFiles: knownFilesSet,
         currentFilePath: currentFilePath,
+        assetBaseDir: activeDocBaseDir,
+        imageResolver: convertFileSrc,
       });
       if (res.isStale) {
         return;
@@ -3218,6 +3241,17 @@ graph TD;
           noteContentCache.set(newPath, cached);
         }
         await updateLinksAfterRename(target.name, cleanName);
+        // I-02: carry the note's asset folder across a folder-changing rename so
+        // relative image links keep resolving.
+        try {
+          await invoke('workspace_move_note_assets', {
+            oldDocPath: target.path,
+            newDocPath: newPath,
+            assetFolder: assetFolderName,
+          });
+        } catch (e) {
+          console.warn('Failed to move note assets on rename:', e);
+        }
       }
 
       // Sync tabs

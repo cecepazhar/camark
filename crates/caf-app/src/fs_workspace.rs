@@ -890,6 +890,7 @@ fn save_image_inner(
     doc_path: &str,
     data: &[u8],
     mime: &str,
+    asset_folder: &str,
 ) -> Result<WorkspaceImageResult, ImageSaveError> {
     // 1. Type validation — reject before touching the filesystem.
     let ext = mime_to_extension(mime).map_err(ImageSaveError::UnsupportedMime)?;
@@ -943,7 +944,26 @@ fn save_image_inner(
             format!("document folder not found: {e}"),
         ))
     })?;
-    let assets_abs = doc_parent_canon.join("assets");
+    // Sanitise the configurable asset folder: a single relative path component only.
+    // Reject absolute paths (leading / or \\) AND any `..` / nested-segment input,
+    // falling back to `assets`. Check the *raw* input for absoluteness before
+    // trimming, otherwise `/abs/` would be trimmed to the valid-looking `abs`.
+    let raw_folder = asset_folder.trim();
+    let is_absolute = raw_folder.starts_with('/') || raw_folder.starts_with('\\');
+    let folder = raw_folder
+        .trim_matches(|c| c == '/' || c == '\\')
+        .to_string();
+    let folder = if is_absolute
+        || folder.is_empty()
+        || folder.contains("..")
+        || folder.contains('/')
+        || folder.contains('\\')
+    {
+        "assets"
+    } else {
+        &folder
+    };
+    let assets_abs = doc_parent_canon.join(folder);
 
     // 5. Collision-safe name: `YYYYMMDD-HHMMSS-{hash8}.{ext}` with `-N` suffix
     //    when the exact name already exists.
@@ -979,9 +999,10 @@ fn save_image_inner(
 
     // 7. Compute the relative markdown link from the document to the stored
     //    asset. Since both live under `doc_parent`, the link is simply
-    //    `assets/<candidate_file_name>`.
+    //    `<asset_folder>/<candidate_file_name>`.
     let link = format!(
-        "assets/{}",
+        "{}/{}",
+        folder,
         candidate.file_name().unwrap().to_string_lossy()
     );
 
@@ -995,22 +1016,80 @@ fn save_image_inner(
 /// Tauri-facing async wrapper: decodes the base64 payload and hands off to the
 /// blocking [`save_image_inner`]. The Tauri command signature in `commands.rs`
 /// keeps the base64 encoding so the JS side can `File`/`Blob` → `ArrayBuffer` →
-/// base64 without serializing raw `Vec<u8>` through the FFI boundary (which
-/// Tauri v2 would otherwise base64 for us, but we keep the contract explicit).
+/// base64 without serializing raw `Vec<u8>` through the FFI boundary.
 pub async fn save_image(
     doc_path: String,
     data_b64: String,
     mime: String,
+    asset_folder: Option<String>,
 ) -> Result<WorkspaceImageResult, String> {
     use base64::Engine;
     let bytes = base64::engine::general_purpose::STANDARD
         .decode(data_b64)
         .map_err(|e| format!("Invalid base64 image payload: {e}"))?
         .to_vec();
-    tokio::task::spawn_blocking(move || save_image_inner(&doc_path, &bytes, &mime))
+    let folder = asset_folder.unwrap_or_else(|| "assets".to_string());
+    tokio::task::spawn_blocking(move || save_image_inner(&doc_path, &bytes, &mime, &folder))
         .await
         .map_err(|e| e.to_string())?
         .map_err(|e| e.to_string())
+}
+
+/// I-02: when a note file is renamed / moved to a *different* folder, carry its
+/// sibling asset folder (`<old_dir>/<asset_folder>` → `<new_dir>/<asset_folder>`) so
+/// the relative `assets/<name>` image links inside the note keep working.
+/// No-op when the note stays in the same folder or has no asset folder.
+pub fn move_note_assets(
+    old_doc_path: &str,
+    new_doc_path: &str,
+    asset_folder: &str,
+) -> Result<(), String> {
+    let folder = if asset_folder.trim().is_empty() {
+        "assets"
+    } else {
+        asset_folder
+    };
+    let old_dir = Path::new(old_doc_path)
+        .parent()
+        .map(|p| p.to_path_buf())
+        .ok_or_else(|| "old doc has no parent".to_string())?;
+    let new_dir = Path::new(new_doc_path)
+        .parent()
+        .map(|p| p.to_path_buf())
+        .ok_or_else(|| "new doc has no parent".to_string())?;
+    if old_dir == new_dir {
+        return Ok(()); // same folder: links already relative, nothing to move
+    }
+    let src = old_dir.join(folder);
+    if !src.exists() {
+        return Ok(()); // this note has no asset folder
+    }
+    let dest = new_dir.join(folder);
+    fs::create_dir_all(&dest).map_err(|e| format!("failed to create asset dir: {e}"))?;
+    // Move each asset file; if a same-named file already exists at the
+    // destination, rename the incoming one with a numeric suffix to avoid
+    // clobbering (keeps both copies so no link silently breaks).
+    for entry in fs::read_dir(&src).map_err(|e| e.to_string())? {
+        let entry = entry.map_err(|e| e.to_string())?;
+        let file_name = entry.file_name();
+        let from = entry.path();
+        if !from.is_file() {
+            continue;
+        }
+        let mut to = dest.join(&file_name);
+        if to.exists() {
+            let mut n = 1u32;
+            let stem = file_name.to_string_lossy();
+            while to.exists() {
+                to = dest.join(format!("{stem}-{n}"));
+                n += 1;
+            }
+        }
+        fs::rename(&from, &to).map_err(|e| format!("failed to move asset: {e}"))?;
+    }
+    // Remove the now-empty old asset folder.
+    let _ = fs::remove_dir(&src);
+    Ok(())
 }
 
 #[cfg(test)]
@@ -1327,6 +1406,7 @@ mod tests {
             doc.to_string_lossy().to_string(),
             base64::engine::general_purpose::STANDARD.encode(png_bytes(1)),
             "image/png".into(),
+            None,
         )
         .await
         .expect("image save");
@@ -1359,10 +1439,11 @@ mod tests {
             doc.to_string_lossy().into(),
             b64.clone(),
             "image/png".into(),
+            None,
         )
         .await
         .expect("first");
-        let r2 = save_image(doc.to_string_lossy().into(), b64, "image/png".into())
+        let r2 = save_image(doc.to_string_lossy().into(), b64, "image/png".into(), None)
             .await
             .expect("second");
 
@@ -1390,6 +1471,7 @@ mod tests {
             doc.to_string_lossy().into(),
             base64::engine::general_purpose::STANDARD.encode(b"exec"),
             "application/octet-stream".into(),
+            None,
         )
         .await;
         assert!(res.is_err(), "octet-stream must be rejected");
@@ -1408,6 +1490,7 @@ mod tests {
             doc.to_string_lossy().into(),
             base64::engine::general_purpose::STANDARD.encode(&big),
             "image/png".into(),
+            None,
         )
         .await;
         assert!(res.is_err(), "oversized payload must be rejected");
@@ -1427,10 +1510,104 @@ mod tests {
             malicious,
             base64::engine::general_purpose::STANDARD.encode(png_bytes(9)),
             "image/png".into(),
+            None,
         )
         .await;
         assert!(res.is_err(), "path traversal must be rejected");
         let msg = res.unwrap_err();
         assert!(msg.contains("outside workspace"), "got: {msg}");
+    }
+
+    #[tokio::test]
+    async fn image_save_custom_asset_folder() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let doc_dir = temp.path().join("d");
+        fs::create_dir_all(&doc_dir).unwrap();
+        let doc = doc_dir.join("file.md");
+        fs::write(&doc, "").unwrap();
+
+        let b64 = base64::engine::general_purpose::STANDARD.encode(png_bytes(3));
+        let res = save_image(
+            doc.to_string_lossy().into(),
+            b64,
+            "image/png".into(),
+            Some("media".into()),
+        )
+        .await
+        .expect("custom folder save");
+
+        assert!(res.link.starts_with("media/"), "link={}", res.link);
+        assert!(
+            doc_dir
+                .join("media")
+                .join(res.link.strip_prefix("media/").unwrap())
+                .exists()
+        );
+    }
+
+    #[tokio::test]
+    async fn image_save_rejects_asset_folder_traversal() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let doc_dir = temp.path().join("d");
+        fs::create_dir_all(&doc_dir).unwrap();
+        let doc = doc_dir.join("file.md");
+        fs::write(&doc, "").unwrap();
+
+        // `..` / absolute / nested folders are coerced back to `assets`.
+        for bad in ["../evil", "/abs/", "a/b", ""] {
+            let b64 = base64::engine::general_purpose::STANDARD.encode(png_bytes(5));
+            let res = save_image(
+                doc.to_string_lossy().into(),
+                b64,
+                "image/png".into(),
+                Some(bad.to_string()),
+            )
+            .await
+            .expect("fallback to assets");
+            assert!(res.link.starts_with("assets/"), "link={}", res.link);
+        }
+    }
+
+    #[test]
+    fn move_note_assets_carries_folder_across_move() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let old_dir = temp.path().join("old");
+        let new_dir = temp.path().join("new");
+        fs::create_dir_all(old_dir.join("assets")).unwrap();
+        fs::create_dir_all(&new_dir).unwrap();
+        fs::write(old_dir.join("assets".to_string() + "/a.png"), b"img").unwrap();
+
+        let old_doc = old_dir.join("note.md");
+        let new_doc = new_dir.join("note.md");
+        move_note_assets(
+            old_doc.to_string_lossy().as_ref(),
+            new_doc.to_string_lossy().as_ref(),
+            "assets",
+        )
+        .expect("move assets");
+
+        assert!(
+            new_dir.join("assets/a.png").exists(),
+            "asset must be carried to the new folder"
+        );
+        assert!(!old_dir.join("assets/a.png").exists());
+    }
+
+    #[test]
+    fn move_note_assets_same_folder_is_noop() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let dir = temp.path().join("d");
+        fs::create_dir_all(dir.join("assets")).unwrap();
+        fs::write(dir.join("assets/a.png"), b"img").unwrap();
+
+        move_note_assets(
+            dir.join("a.md").to_string_lossy().as_ref(),
+            dir.join("b.md").to_string_lossy().as_ref(),
+            "assets",
+        )
+        .expect("same-folder move");
+
+        // Same folder: the asset dir is untouched.
+        assert!(dir.join("assets/a.png").exists());
     }
 }

@@ -5,6 +5,34 @@
 import { marked, type TokenizerAndRendererExtension } from 'marked';
 import katex from 'katex';
 
+/**
+ * Rewrite relative image `src` attributes in rendered HTML to a Tauri asset
+ * URL so the preview displays the on-disk file. `resolve` is injected (kept
+ * pure for unit-testing); the original relative path is preserved in `title`.
+ * Absolute / http(s) / data: / already-asset URLs are left untouched.
+ */
+export function rewriteRelativeImageSrcs(
+  html: string,
+  baseDir: string,
+  resolve: (absPath: string) => string,
+): string {
+  const base = baseDir.replace(/\/+$/, '');
+  if (!base) return html;
+  return html.replace(/<img([^>]*?)\s+src="([^"]+)"([^>]*?)>/g, (whole, pre, src, post) => {
+    // Leave external / already-resolved / data URIs alone.
+    if (/^(https?:|data:|asset:|tauri:|\/\/)/i.test(src)) return whole;
+    const clean = src.replace(/^\.\//, '');
+    const abs = `${base}/${clean}`;
+    const resolved = resolve(abs);
+    // Keep the relative path visible in the title (spec: preview shows relative path).
+    const titleAttr = ` title="${escapeHtml(clean)}"`;
+    // Rebuild the tag, injecting/overriding title before the closing `>`.
+    const tag = whole.slice(0, whole.lastIndexOf('>'));
+    const stripped = tag.replace(/\s+title="[^"]*"/, '');
+    return `${stripped}${titleAttr} src="${resolved}"${post.replace(/<.*$/, '')}>`;
+  });
+}
+
 export function escapeHtml(s: string): string {
   return s
     .replace(/&/g, '&amp;')
@@ -304,6 +332,20 @@ export interface RenderOptions {
   knownFiles?: Set<string> | string[];
   /** The currently open file path — used to resolve relative filenames against its directory. */
   currentFilePath?: string | null;
+  /**
+   * Absolute path of the workspace root (or the document's containing directory).
+   * When provided, any relative `<img src>` (e.g. `assets/foo.png`) emitted by the
+   * renderer is rewritten to a Tauri asset-protocol URL so the preview actually
+   * displays the on-disk image. The original relative path is kept in the
+   * image `title` for reference.
+   */
+  assetBaseDir?: string | null;
+  /**
+   * Resolver that turns an absolute on-disk path into a URL the webview can
+   * load (Tauri `convertFileSrc`). Injected so this module stays Tauri-free.
+   * When omitted, relative images are left as-is.
+   */
+  imageResolver?: (absPath: string) => string;
 }
 
 /**
@@ -401,6 +443,11 @@ export async function renderMarkdownToHtml(
   }
   if (yaml !== null) {
     html = `<details class="frontmatter-block"><summary>Properties</summary><pre>${escapeHtml(yaml)}</pre></details>${html}`;
+  }
+  // I-02: resolve relative image `src` (assets folder) to a loadable URL so the
+  // preview shows the on-disk image; keep the relative path in the title.
+  if (opts.assetBaseDir && opts.imageResolver) {
+    html = rewriteRelativeImageSrcs(html, opts.assetBaseDir, opts.imageResolver);
   }
   // Auto-link inline code that names known workspace files
   if (opts.knownFiles) {

@@ -311,8 +311,21 @@ pub async fn workspace_save_image(
     doc_path: String,
     data_b64: String,
     mime: String,
+    asset_folder: Option<String>,
 ) -> Result<fs_workspace::WorkspaceImageResult, String> {
-    fs_workspace::save_image(doc_path, data_b64, mime).await
+    fs_workspace::save_image(doc_path, data_b64, mime, asset_folder).await
+}
+
+/// I-02: carry a note's asset folder across a rename/move so relative image
+/// links keep resolving. No-op when the note stays in the same folder.
+#[tauri::command]
+pub fn workspace_move_note_assets(
+    old_doc_path: String,
+    new_doc_path: String,
+    asset_folder: Option<String>,
+) -> Result<(), String> {
+    let folder = asset_folder.unwrap_or_else(|| "assets".to_string());
+    fs_workspace::move_note_assets(&old_doc_path, &new_doc_path, &folder)
 }
 
 #[tauri::command]

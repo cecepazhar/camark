@@ -2289,6 +2289,12 @@
           "markdownDescription": "Enables the workspace_list_directory command without any pre-configured scope."
         },
         {
+          "description": "Enables the workspace_move_note_assets command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-workspace-move-note-assets",
+          "markdownDescription": "Enables the workspace_move_note_assets command without any pre-configured scope."
+        },
+        {
           "description": "Enables the workspace_open_file_app command without any pre-configured scope.",
           "type": "string",
           "const": "allow-workspace-open-file-app",
@@ -2629,6 +2635,12 @@
           "type": "string",
           "const": "deny-workspace-list-directory",
           "markdownDescription": "Denies the workspace_list_directory command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the workspace_move_note_assets command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-workspace-move-note-assets",
+          "markdownDescription": "Denies the workspace_move_note_assets command without any pre-configured scope."
         },
         {
           "description": "Denies the workspace_open_file_app command without any pre-configured scope.",
