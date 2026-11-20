@@ -141,7 +141,7 @@ pub fn validate_password(password: &str) -> Result<bool, CafError> {
     if !canary_path.exists() {
         // First run — initialize vault
         let salt = load_or_create_salt(&data_dir)?;
-        let mut key = derive_key(password, &salt)?;
+        let key = derive_key(password, &salt)?;
         let encrypted = crate::secret::encrypt_bytes(&key, CANARY_PLAINTEXT)?;
         std::fs::write(&canary_path, encrypted).map_err(|e| vault_err(e.to_string()))?;
 
@@ -158,7 +158,7 @@ pub fn validate_password(password: &str) -> Result<bool, CafError> {
     }
 
     let salt = load_or_create_salt(&data_dir)?;
-    let mut key = derive_key(password, &salt)?;
+    let key = derive_key(password, &salt)?;
     if verify_canary(&key, &canary_path).is_ok() {
         {
             let mut guard = ACTIVE_VAULT_KEY.write();
@@ -188,7 +188,7 @@ pub fn change_master_password(old_pass: &str, new_pass: &str) -> Result<(), CafE
     let mut old_key = derive_key(old_pass, &salt)?;
     verify_canary(&old_key, &canary_path)?;
 
-    let mut new_key = derive_key(new_pass, &salt)?;
+    let new_key = derive_key(new_pass, &salt)?;
 
     // NOTE (H-02 + P0.3): the SQLCipher database is keyed by the
     // master-password-derived key (after the one-time P0.3 migration from the
@@ -295,7 +295,7 @@ fn migrate_legacy_vault_key(derived_key: &[u8; 32]) -> Result<bool, CafError> {
     let mut derived_hex = hex::encode(derived_key);
     let mut rekey_stmt = format!("PRAGMA rekey = \"x'{derived_hex}'\";");
 
-    let conn = crate::db::open_keyed(&db_path, &format!("\"x'{legacy_hex}'\""))?;
+    let _conn = crate::db::open_keyed(&db_path, &format!("\"x'{legacy_hex}'\""))?;
     {
         let mut legacy_hex_copy = legacy_hex.clone();
         legacy_hex_copy.zeroize();

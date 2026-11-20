@@ -56,13 +56,13 @@ pub fn data_dir() -> Result<PathBuf, CafError> {
 }
 
 fn resolve_data_dir_with(env_override: Option<&str>) -> Result<DataDirInfo, CafError> {
-    if let Ok(lock) = CUSTOM_DATA_DIR.read() {
-        if let Some(ref dir) = *lock {
-            return Ok(DataDirInfo {
-                path: dir.clone(),
-                source: DataDirSource::EnvOverride,
-            });
-        }
+    if let Ok(lock) = CUSTOM_DATA_DIR.read()
+        && let Some(ref dir) = *lock
+    {
+        return Ok(DataDirInfo {
+            path: dir.clone(),
+            source: DataDirSource::EnvOverride,
+        });
     }
 
     if let Some(dir) = env_override {

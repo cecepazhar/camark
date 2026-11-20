@@ -397,11 +397,9 @@ pub fn build_context(
                 .map_err(|e| CafError::Db(DbError::Generic(e.to_string())))?;
 
             let mut notes_text = String::new();
-            for r in rows {
-                if let Ok(entry) = r {
-                    notes_text.push_str(&entry);
-                    notes_text.push_str("\n\n");
-                }
+            for entry in rows.flatten() {
+                notes_text.push_str(&entry);
+                notes_text.push_str("\n\n");
             }
 
             let (scrubbed, count) = scrub_text(&notes_text);
@@ -437,11 +435,9 @@ pub fn build_context(
                 .map_err(|e| CafError::Db(DbError::Generic(e.to_string())))?;
 
             let mut notes_text = String::new();
-            for r in rows {
-                if let Ok(entry) = r {
-                    notes_text.push_str(&entry);
-                    notes_text.push_str("\n\n");
-                }
+            for entry in rows.flatten() {
+                notes_text.push_str(&entry);
+                notes_text.push_str("\n\n");
             }
 
             // In Full mode, still run basic scrubber for high sensitivity tokens

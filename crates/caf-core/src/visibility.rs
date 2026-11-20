@@ -19,7 +19,8 @@ impl Visibility {
         }
     }
 
-    pub fn from_str(s: &str) -> Option<Self> {
+    /// Parses the stored form produced by [`Visibility::as_str`].
+    pub fn parse(s: &str) -> Option<Self> {
         match s {
             "shared" => Some(Self::Shared),
             "private_summary" => Some(Self::PrivateSummary),
