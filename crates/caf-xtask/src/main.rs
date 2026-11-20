@@ -398,6 +398,7 @@ mod codegen;
 pub mod gcc_mock;
 mod guard;
 mod scanner;
+mod version_sync;
 
 fn run_check(config_path: &Path) -> Result<(), Box<dyn std::error::Error>> {
     let cfg = load_config(config_path)?;

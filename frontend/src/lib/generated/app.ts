@@ -4,7 +4,7 @@ export const APP_CONFIG = {
   name: "CAMark",
   slug: "camark",
   bundleId: "com.fathforce.camark",
-  version: "1.0.25",
+  version: "1.1.0-beta.1",
   accentColor: "cyan",
   errorPrefix: "CMRK",
   description: "High-Performance, Local-First & Zero-Knowledge Markdown Studio",

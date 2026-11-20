@@ -50,6 +50,11 @@ pub fn run_guard(only: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
         check_genericity(&root, &mut failures)?;
     }
 
+    // (g) Every version location matches the workspace Cargo.toml
+    if should_run("version_sync", only) {
+        crate::version_sync::check_version_sync(&root, &mut failures);
+    }
+
     if !failures.is_empty() {
         for f in &failures {
             eprintln!("{}", f);

@@ -52,7 +52,8 @@ pub mod visibility;
 
 pub use error::CafError;
 
-pub const CORE_VERSION: &str = "1.0.50";
+/// The workspace version from `Cargo.toml`, so it can never drift from the build.
+pub const CORE_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// Test-only helpers shared across modules.
 #[cfg(test)]

@@ -1,6 +1,6 @@
 # CAMark — High-Performance Zero-Knowledge Markdown & Knowledge Studio
 
-[![Release](https://img.shields.io/badge/release-v1.0.17-06b6d4.svg?style=flat-square)](https://github.com/cecepazhar/camark)
+[![Release](https://img.shields.io/badge/release-v1.1.0--beta.1-06b6d4.svg?style=flat-square)](https://github.com/cecepazhar/camark)
 [![Rust](https://img.shields.io/badge/rust-2024%20(1.85%2B)-orange.svg?style=flat-square&logo=rust)](https://www.rust-lang.org)
 [![Tauri](https://img.shields.io/badge/tauri-v2.0-24C8DB.svg?style=flat-square&logo=tauri)](https://v2.tauri.app)
 [![Svelte](https://img.shields.io/badge/svelte-5%20(Runes)-FF3E00.svg?style=flat-square&logo=svelte)](https://svelte.dev)
