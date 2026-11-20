@@ -1,4 +1,8 @@
-name: Release CAMark Multi-Platform
+name: Release CAMark
+
+# Push a tag that equals the workspace version (for example `v1.1.0-beta.1`).
+# The release is created as a DRAFT: the updater ignores drafts, so nothing reaches users
+# until the owner has smoke-tested the installers and pressed "Publish release" on GitHub.
 
 on:
   push:
@@ -8,55 +12,130 @@ on:
 permissions:
   contents: write
 
+env:
+  # @cecepazhar/caui is a `file:../../caui` dependency of the frontend. Pin the commit the
+  # release was built and tested with; bump it deliberately.
+  CAUI_REPO: https://github.com/cecepazhar/caui.git
+  CAUI_REF: 483b7e1841eb47b55525aeebdd01088358c5f88d
+
 jobs:
-  release:
+  verify:
+    name: Verify version
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Rust toolchain (from rust-toolchain.toml)
+        run: rustup show active-toolchain
+
+      - name: Tag equals workspace version
+        run: |
+          version=$(cargo metadata --no-deps --format-version 1 \
+            | jq -r '.packages[] | select(.name == "camark") | .version')
+          echo "workspace version: $version, tag: $GITHUB_REF_NAME"
+          test "v$version" = "$GITHUB_REF_NAME"
+
+      - name: Every version location is in sync
+        run: cargo run -q -p caf-xtask -- guard --only version_sync
+
+  build:
+    name: Build ${{ matrix.name }}
+    needs: verify
     strategy:
       fail-fast: false
       matrix:
         include:
-          - platform: 'windows-latest'
-            args: ''
+          - name: Linux
+            platform: ubuntu-22.04
+            rust_targets: ''
+            args: '--bundles deb,rpm,appimage'
+          - name: Windows
+            platform: windows-latest
+            rust_targets: ''
+            # MSI (WiX) rejects pre-release versions such as 1.1.0-beta.1; NSIS does not.
+            args: '--bundles nsis'
+          - name: macOS
+            platform: macos-latest
+            rust_targets: 'aarch64-apple-darwin,x86_64-apple-darwin'
+            args: '--target universal-apple-darwin'
     runs-on: ${{ matrix.platform }}
+    defaults:
+      run:
+        shell: bash
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Node.js & pnpm
-        uses: pnpm/action-setup@v4
+      - name: Linux system packages
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf rpm
+
+      - name: Rust toolchain (from rust-toolchain.toml)
+        run: |
+          rustup show active-toolchain
+          if [ -n "${{ matrix.rust_targets }}" ]; then
+            rustup target add $(echo "${{ matrix.rust_targets }}" | tr ',' ' ')
+          fi
+
+      - uses: swatinem/rust-cache@v2
         with:
-          version: 9
+          key: ${{ matrix.platform }}
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'pnpm'
-          cache-dependency-path: frontend/pnpm-lock.yaml
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
 
-      - name: Setup Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: x86_64-pc-windows-msvc
+      - name: Build @cecepazhar/caui at the pinned commit
+        run: |
+          git clone "$CAUI_REPO" ../caui
+          git -C ../caui checkout --detach "$CAUI_REF"
+          cd ../caui
+          npm ci
+          npm run package
 
-      - name: Rust cache
-        uses: swatinem/rust-cache@v2
-        with:
-          workspaces: './crates -> target'
-
-      - name: Install frontend dependencies
+      - name: Build frontend
         run: |
           cd frontend
-          pnpm install --frozen-lockfile || pnpm install
+          npm ci
+          npm run build
 
-      - name: Build and Package Tauri App
+      - name: Build, sign updater artifacts, upload to draft release
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
+          projectPath: crates/caf-app
+          tauriScript: ${{ github.workspace }}/frontend/node_modules/.bin/tauri
           tagName: ${{ github.ref_name }}
           releaseName: 'CAMark ${{ github.ref_name }}'
-          releaseDraft: false
+          releaseBody: |
+            See CHANGELOG.md for what changed. Installers are not code-signed by Windows or Apple yet:
+            on Windows choose "More info" → "Run anyway"; on macOS right-click the app → Open.
+            Verify downloads against the SHA256SUMS files attached to this release.
+          releaseDraft: true
           prerelease: false
+          includeUpdaterJson: true
           args: ${{ matrix.args }}
+          # OS code signing / notarization goes here once certificates exist (owner decision 7b).
+
+      - name: SHA-256 checksums
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          out="SHA256SUMS-${{ matrix.name }}.txt"
+          find target -path '*/release/bundle/*' -type f \
+            \( -name '*.deb' -o -name '*.rpm' -o -name '*.AppImage' -o -name '*.exe' \
+               -o -name '*.dmg' -o -name '*.app.tar.gz' \) -print0 \
+            | sort -z \
+            | while IFS= read -r -d '' f; do
+                if command -v sha256sum >/dev/null; then sha256sum "$f"; else shasum -a 256 "$f"; fi
+              done \
+            | sed 's#  .*/#  #' > "$out"
+          cat "$out"
+          test -s "$out"
+          gh release upload "$GITHUB_REF_NAME" "$out" --clobber
