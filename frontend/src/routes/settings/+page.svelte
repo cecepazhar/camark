@@ -322,13 +322,13 @@
   {#if activeTab === 'profile'}
     <div class="{CARD} space-y-6">
       <div class="flex items-center gap-4">
-        <ProfileAvatar avatar={profileAvatar} name={profileName} size={56} pro={pro.isPro || profile.plan === 'pro'} />
+        <ProfileAvatar avatar={profileAvatar} name={profileName} size={56} pro={pro.isPro} />
         <div class="min-w-0">
           <div class="flex items-center gap-2">
             <h2 class="text-lg font-semibold text-neutral-900 dark:text-white truncate">
               {profileName.trim() || profile.name}
             </h2>
-            {#if pro.isPro || profile.plan === 'pro'}
+            {#if pro.isPro}
               <span class="text-[10px] font-bold tracking-wider px-2 py-0.5 rounded-full border border-amber-400/50 bg-amber-400/10 text-amber-500 uppercase shadow-xs">
                 PRO
               </span>
@@ -389,7 +389,7 @@
         <div>
           <div class="flex items-center gap-2">
             <h2 class="text-lg font-semibold text-neutral-900 dark:text-white">CAMark Pro & Lisensi GCC Cloud</h2>
-            {#if pro.isPro || profile.plan === 'pro'}
+            {#if pro.isPro}
               <Badge variant="success" size="sm">PRO AKTIF ✓</Badge>
             {:else}
               <Badge variant="neutral" size="sm">FREE EDITION</Badge>
@@ -401,7 +401,7 @@
         </div>
       </div>
 
-      {#if pro.isPro || profile.plan === 'pro'}
+      {#if pro.isPro}
         <!-- Active Pro Lifetime Card (Matching CATerm Pro) -->
         <div class="rounded-xl border border-cyan-500/40 bg-gradient-to-br from-cyan-500/10 via-neutral-50 dark:via-neutral-900/60 to-transparent p-6 space-y-5">
           <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-neutral-200 dark:border-neutral-800">

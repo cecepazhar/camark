@@ -139,6 +139,19 @@ struct ActivateData {
     activated_at: Option<Timestamp>,
     #[serde(default)]
     activation_token: String,
+    #[serde(default)]
+    signed_token: Option<crate::license_token::SignedToken>,
+}
+
+/// `POST /api/v1/licenses/verify` data.
+#[derive(Deserialize, Default)]
+struct VerifyData {
+    #[serde(default)]
+    valid: bool,
+    #[serde(default)]
+    device_registered: bool,
+    #[serde(default)]
+    signed_token: Option<crate::license_token::SignedToken>,
 }
 
 /// HTTP client for GCC. Error statuses are returned as normal responses, because GCC puts
@@ -280,6 +293,15 @@ pub fn activate_license(
         .and_then(Timestamp::to_unix)
         .filter(|ts| *ts > 0);
 
+    // GCC License v2: no valid signed token for CAMARK on this device → nothing is stored.
+    let token = data
+        .signed_token
+        .clone()
+        .ok_or_else(|| pro_err("LICENSE_SIGNING_UNAVAILABLE: GCC tidak mengirim signed_token"))?;
+    let now = chrono::Utc::now().timestamp();
+    crate::license_token::verify(Some(&token), crate::license_token::public_key, &device_id, now, now)
+        .map_err(|e| pro_err(format!("INVALID_LICENSE_TOKEN: {e}")))?;
+
     let local = LocalLicense {
         key: clean_key.clone(),
         product: parsed.product.clone(),
@@ -293,6 +315,8 @@ pub fn activate_license(
             data.device_id.clone()
         },
         server_rejected: false,
+        signed_token: Some(token),
+        last_seen_unix: now,
     };
     let expiry = license_local::effective_expiry(&local);
     if expiry == Expiry::Undetermined
@@ -372,7 +396,8 @@ pub fn verify_license(gcc_url: Option<&str>, key: Option<&str>) -> Result<bool, 
         }
     };
 
-    match check_license_online(gcc_url, &resolved_key) {
+    let device_id = crate::paths::device_id()?;
+    match verify_on_device(gcc_url, &resolved_key, &device_id).0 {
         ServerVerdict::Valid => Ok(true),
         ServerVerdict::Rejected => Ok(false),
         ServerVerdict::Unknown => Err(CafError::Io(IoError::Generic(
@@ -381,11 +406,12 @@ pub fn verify_license(gcc_url: Option<&str>, key: Option<&str>) -> Result<bool, 
     }
 }
 
-/// Re-checks the stored license with GCC and records the answer in the local file.
+/// Re-checks the stored license with GCC (`POST /api/v1/licenses/verify`) and records the
+/// answer in the local file.
 ///
-/// A rejected key stops granting Pro (the file is kept, not deleted); a key GCC accepts
-/// again is restored. With no answer the local file is left as it is, which is the offline
-/// allowance: Pro keeps working until the license's own expiry.
+/// Valid on this device: the fresh 14-day `signed_token` is stored. Rejected (revoked, expired,
+/// device removed): the token is dropped and Pro stops (the file is kept). No answer: the file
+/// is left as it is and the stored token keeps working until its own `exp`.
 pub fn revalidate_stored_license(gcc_url: Option<&str>) -> ServerVerdict {
     let Ok(Some(mut lic)) = license_local::load_license(LICENSE_APP) else {
         return ServerVerdict::Unknown;
@@ -394,17 +420,54 @@ pub fn revalidate_stored_license(gcc_url: Option<&str>) -> ServerVerdict {
         // Not a key GCC could know; it is already invalid locally and is not sent anywhere.
         return ServerVerdict::Unknown;
     }
-    let verdict = check_license_online(gcc_url, &lic.key);
-    let rejected = match verdict {
-        ServerVerdict::Valid => false,
-        ServerVerdict::Rejected => true,
-        ServerVerdict::Unknown => return verdict,
+    let Ok(device_id) = crate::paths::device_id() else {
+        return ServerVerdict::Unknown;
     };
-    if lic.server_rejected != rejected {
-        lic.server_rejected = rejected;
-        let _ = license_local::save_license(LICENSE_APP, &lic);
+    let (verdict, data) = verify_on_device(gcc_url, &lic.key, &device_id);
+    match verdict {
+        ServerVerdict::Valid => {
+            lic.server_rejected = false;
+            if data.signed_token.is_some() {
+                lic.signed_token = data.signed_token;
+            }
+        }
+        ServerVerdict::Rejected => {
+            lic.server_rejected = true;
+            lic.signed_token = None;
+        }
+        ServerVerdict::Unknown => return verdict,
     }
+    lic.last_seen_unix = lic.last_seen_unix.max(chrono::Utc::now().timestamp());
+    let _ = license_local::save_license(LICENSE_APP, &lic);
     verdict
+}
+
+/// Asks GCC whether `key` is valid *and bound to this device*. Only a clear answer from GCC
+/// counts as rejected; transport errors and unreadable bodies are `Unknown`.
+fn verify_on_device(gcc_url: Option<&str>, key: &str, device_id: &str) -> (ServerVerdict, VerifyData) {
+    let base = resolve_gcc_url(gcc_url);
+    let url = format!("{base}/api/v1/licenses/verify");
+    let payload = serde_json::json!({
+        "license_key": license_local::normalize_key(key),
+        "device_id": device_id,
+    });
+    let Ok(resp) = agent(CHECK_TIMEOUT).post(&url).send_json(&payload) else {
+        return (ServerVerdict::Unknown, VerifyData::default());
+    };
+    let status = resp.status().as_u16();
+    let Ok(envelope) = resp.into_body().read_json::<GccEnvelope<VerifyData>>() else {
+        return (ServerVerdict::Unknown, VerifyData::default());
+    };
+    let verdict = match status {
+        200..300 if envelope.success => match envelope.data.as_ref() {
+            Some(d) if d.valid && d.device_registered => ServerVerdict::Valid,
+            Some(_) => ServerVerdict::Rejected,
+            None => ServerVerdict::Unknown,
+        },
+        404 => ServerVerdict::Rejected,
+        _ => ServerVerdict::Unknown,
+    };
+    (verdict, envelope.data.unwrap_or_default())
 }
 
 /// Runs [`revalidate_stored_license`] against the default server the first time it is called
@@ -511,6 +574,12 @@ mod tests {
             activated_at: activated_at.to_string(),
             device_id: "test-device-uuid".to_string(),
             server_rejected: false,
+            signed_token: Some(crate::license_token::test_support::token(
+                &["CAMARK"],
+                &crate::paths::device_id().unwrap_or_default(),
+                4_000_000_000,
+            )),
+            last_seen_unix: 0,
         }
     }
 

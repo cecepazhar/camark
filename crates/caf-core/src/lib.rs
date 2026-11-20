@@ -37,6 +37,7 @@ pub mod http;
 pub mod keyring;
 pub mod license_client;
 pub mod license_local;
+pub mod license_token;
 pub mod migrations;
 pub mod notes;
 pub mod paths;

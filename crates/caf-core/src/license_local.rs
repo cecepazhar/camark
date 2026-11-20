@@ -29,6 +29,12 @@ pub struct LocalLicense {
     /// Cleared again by a later successful check or a new activation.
     #[serde(default)]
     pub server_rejected: bool,
+    /// GCC License v2 Ed25519 token — the only thing that grants Pro. `None` = Free.
+    #[serde(default)]
+    pub signed_token: Option<crate::license_token::SignedToken>,
+    /// Latest wall clock this licence was checked at (clock-rollback ratchet).
+    #[serde(default)]
+    pub last_seen_unix: i64,
 }
 
 /// How long a key lasts, read from its two-digit tier code.
@@ -202,6 +208,10 @@ pub fn is_license_valid(lic: &LocalLicense, products: &[&str]) -> bool {
 }
 
 /// [`is_license_valid`] against an explicit clock.
+///
+/// GCC License v2: a well-formed key for one of `products` is necessary but never sufficient —
+/// the key checksum and tier can be computed by anyone. Pro needs a valid Ed25519
+/// `signed_token` for CAMARK on this device, before its `exp`.
 pub fn is_license_valid_at(lic: &LocalLicense, products: &[&str], now: i64) -> bool {
     if lic.server_rejected {
         return false;
@@ -212,11 +222,26 @@ pub fn is_license_valid_at(lic: &LocalLicense, products: &[&str], now: i64) -> b
     if !products.contains(&parsed.product.as_str()) {
         return false;
     }
-    match effective_expiry(lic) {
+    // The key's own expiry still applies (it can only take Pro away).
+    let key_ok = match effective_expiry(lic) {
         Expiry::Never => true,
         Expiry::At(expires_at) => now <= expires_at,
         Expiry::Undetermined => false,
+    };
+    if !key_ok {
+        return false;
     }
+    let Ok(device_id) = crate::paths::device_id() else {
+        return false;
+    };
+    crate::license_token::verify(
+        lic.signed_token.as_ref(),
+        crate::license_token::public_key,
+        &device_id,
+        lic.last_seen_unix,
+        now,
+    )
+    .is_ok()
 }
 
 #[cfg(test)]
@@ -241,6 +266,12 @@ mod tests {
             activated_at: activated_at.to_string(),
             device_id: String::new(),
             server_rejected: false,
+            signed_token: Some(crate::license_token::test_support::token(
+                &["CAMARK"],
+                &crate::paths::device_id().unwrap_or_default(),
+                4_000_000_000,
+            )),
+            last_seen_unix: 0,
         }
     }
 
@@ -282,12 +313,14 @@ mod tests {
 
     #[test]
     fn lifetime_key_without_expiry_is_valid() {
+        let _g = crate::test_support::isolated_data_dir("lic_local");
         assert!(is_license_valid_at(&lic(LIFETIME, 0, ""), PRODUCTS, NOW));
         assert!(is_license_valid_at(&lic(ALL_ACCESS, 0, ""), PRODUCTS, NOW));
     }
 
     #[test]
     fn other_product_key_is_not_valid() {
+        let _g = crate::test_support::isolated_data_dir("lic_local");
         assert!(!is_license_valid_at(
             &lic(OTHER_PRODUCT, 0, ""),
             PRODUCTS,
@@ -297,6 +330,7 @@ mod tests {
 
     #[test]
     fn timed_key_without_expiry_is_never_lifetime() {
+        let _g = crate::test_support::isolated_data_dir("lic_local");
         // No expiry and no activation date: invalid, not lifetime.
         assert!(!is_license_valid_at(&lic(MONTHLY, 0, ""), PRODUCTS, NOW));
         assert!(!is_license_valid_at(
@@ -308,6 +342,7 @@ mod tests {
 
     #[test]
     fn timed_key_falls_back_to_activation_date_plus_tier() {
+        let _g = crate::test_support::isolated_data_dir("lic_local");
         let monthly = lic(MONTHLY, 0, "2026-11-10T00:00:00Z");
         let activated = chrono::DateTime::parse_from_rfc3339("2026-11-10T00:00:00Z")
             .expect("date")
@@ -322,6 +357,7 @@ mod tests {
 
     #[test]
     fn stored_expiry_is_enforced() {
+        let _g = crate::test_support::isolated_data_dir("lic_local");
         assert!(is_license_valid_at(
             &lic(YEARLY, NOW + 10, ""),
             PRODUCTS,
@@ -342,6 +378,7 @@ mod tests {
 
     #[test]
     fn server_rejection_overrides_everything() {
+        let _g = crate::test_support::isolated_data_dir("lic_local");
         let mut l = lic(LIFETIME, 0, "");
         l.server_rejected = true;
         assert!(!is_license_valid_at(&l, PRODUCTS, NOW));
@@ -349,10 +386,45 @@ mod tests {
 
     #[test]
     fn handwritten_file_with_arbitrary_key_is_not_valid() {
+        let _g = crate::test_support::isolated_data_dir("lic_local");
         assert!(!is_license_valid_at(
             &lic("GCC-CAMARK-TEST-KEY-1234", 0, ""),
             PRODUCTS,
             NOW
         ));
+    }
+
+    /// GCC License v2 regression: a well-formed lifetime key (checksum and tier are public
+    /// knowledge) must not grant Pro without a signed token.
+    #[test]
+    fn valid_looking_key_without_signed_token_is_not_pro() {
+        let _g = crate::test_support::isolated_data_dir("lic_local");
+        let mut l = lic(LIFETIME, 0, "");
+        l.signed_token = None;
+        assert!(!is_license_valid_at(&l, PRODUCTS, NOW));
+    }
+
+    #[test]
+    fn signed_token_for_another_product_is_not_pro() {
+        let _g = crate::test_support::isolated_data_dir("lic_local");
+        let mut l = lic(LIFETIME, 0, "");
+        l.signed_token = Some(crate::license_token::test_support::token(
+            &["CASHELL"],
+            &crate::paths::device_id().unwrap_or_default(),
+            4_000_000_000,
+        ));
+        assert!(!is_license_valid_at(&l, PRODUCTS, NOW));
+    }
+
+    #[test]
+    fn signed_token_past_exp_is_not_pro() {
+        let _g = crate::test_support::isolated_data_dir("lic_local");
+        let mut l = lic(LIFETIME, 0, "");
+        l.signed_token = Some(crate::license_token::test_support::token(
+            &["CAMARK"],
+            &crate::paths::device_id().unwrap_or_default(),
+            NOW - 1,
+        ));
+        assert!(!is_license_valid_at(&l, PRODUCTS, NOW));
     }
 }
