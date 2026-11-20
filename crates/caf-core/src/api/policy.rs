@@ -246,6 +246,26 @@ pub const COMMAND_POLICIES: &[CommandPolicy] = &[
         returns_list: false,
     },
     CommandPolicy {
+        name: "workspace_watch_directory",
+        policy: Policy::Public,
+        returns_list: false,
+    },
+    CommandPolicy {
+        name: "workspace_unwatch_directory",
+        policy: Policy::Public,
+        returns_list: false,
+    },
+    CommandPolicy {
+        name: "workspace_save_image",
+        policy: Policy::Public,
+        returns_list: false,
+    },
+    CommandPolicy {
+        name: "workspace_move_note_assets",
+        policy: Policy::Public,
+        returns_list: false,
+    },
+    CommandPolicy {
         name: "get_initial_file_path",
         policy: Policy::Public,
         returns_list: false,
