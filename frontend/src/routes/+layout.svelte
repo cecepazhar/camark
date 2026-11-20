@@ -38,6 +38,7 @@ import {
     applyRailClick,
     type SidebarPanel
   } from '$lib/stores/sidebarPanel.svelte';
+  import { loadPerformancePrefs } from '$lib/stores/performance.svelte';
 
   let isCollapsed = $state(true);
   let isVaultUnlocked = $state(true); // Open directly without blocking lockscreen
@@ -207,6 +208,7 @@ import {
     initTheme();
     isVaultUnlocked = true;
     refreshProStatus().catch(() => {});
+    loadPerformancePrefs().catch(() => {});
 
     // Maximizing at start is done once, in Rust (window.rs). Do not call `window_maximize`
     // here: it is a toggle, so on an already-maximized window it restored it to 1200x800.

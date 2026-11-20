@@ -131,6 +131,9 @@ mod memory {
             }
             WindowEvent::Focused(false) => {
                 let ticket = generation.fetch_add(1, Ordering::SeqCst) + 1;
+                if !super::background_saving_enabled() {
+                    return;
+                }
                 let (generation, window) = (generation.clone(), handle.clone());
                 tauri::async_runtime::spawn(async move {
                     tokio::time::sleep(BACKGROUND_AFTER).await;
@@ -141,7 +144,9 @@ mod memory {
             }
             WindowEvent::Resized(_) if handle.is_minimized().unwrap_or(false) => {
                 generation.fetch_add(1, Ordering::SeqCst);
-                set_low_memory(&handle, true);
+                if super::background_saving_enabled() {
+                    set_low_memory(&handle, true);
+                }
             }
             _ => {}
         });
@@ -183,6 +188,12 @@ mod memory {
         });
     }
 
+    /// Drops WebKit's memory and disk caches now. Used by Settings → Performance.
+    pub fn clear_caches(window: &WebviewWindow) {
+        set_low_memory(window, true);
+        set_low_memory(window, false);
+    }
+
     pub fn install(window: &WebviewWindow) {
         let generation = Arc::new(AtomicU64::new(0));
         let handle = window.clone();
@@ -193,6 +204,9 @@ mod memory {
             }
             WindowEvent::Focused(false) => {
                 let ticket = generation.fetch_add(1, Ordering::SeqCst) + 1;
+                if !super::background_saving_enabled() {
+                    return;
+                }
                 let (generation, window) = (generation.clone(), handle.clone());
                 tauri::async_runtime::spawn(async move {
                     tokio::time::sleep(BACKGROUND_AFTER).await;
@@ -203,10 +217,35 @@ mod memory {
             }
             WindowEvent::Resized(_) if handle.is_minimized().unwrap_or(false) => {
                 generation.fetch_add(1, Ordering::SeqCst);
-                set_low_memory(&handle, true);
+                if super::background_saving_enabled() {
+                    set_low_memory(&handle, true);
+                }
             }
             _ => {}
         });
+    }
+}
+
+/// Settings → Performance → background memory saving. Read on every focus change, so
+/// turning it off applies immediately; a missing or unreadable file means the default (on).
+#[cfg(any(windows, target_os = "linux"))]
+fn background_saving_enabled() -> bool {
+    prefs::load_performance_prefs()
+        .map(|p| p.background_memory_saving)
+        .unwrap_or(true)
+}
+
+/// Drops the WebView's caches now. Returns false where this is not supported.
+pub fn clear_caches(window: &WebviewWindow) -> bool {
+    #[cfg(target_os = "linux")]
+    {
+        memory::clear_caches(window);
+        true
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = window;
+        false
     }
 }
 

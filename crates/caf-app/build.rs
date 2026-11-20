@@ -45,6 +45,8 @@ const COMMANDS: &[&str] = &[
     // Preferences
     "get_performance_prefs",
     "set_performance_prefs",
+    "performance_memory_usage",
+    "performance_clear_cache",
     // CAMark Filesystem Workspace
     "workspace_list_directory",
     "workspace_read_file",

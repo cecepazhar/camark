@@ -8,6 +8,7 @@
   import ProfileAvatar from '$lib/components/ProfileAvatar.svelte';
   import AvatarPicker from '$lib/components/AvatarPicker.svelte';
   import AmbientSettingsCard from '$lib/components/AmbientSettingsCard.svelte';
+  import PerformanceSettingsCard from '$lib/components/PerformanceSettingsCard.svelte';
   import { getProfile, saveProfile } from '$lib/stores/profile.svelte';
   import { getPro, refreshProStatus } from '$lib/stores/pro.svelte';
   import { showToast, confirmModal } from '$lib/stores/uiNotifications.svelte';
@@ -37,7 +38,7 @@
   const INPUT = 'w-full px-3.5 py-2.5 bg-neutral-50 dark:bg-neutral-950 border border-neutral-300 dark:border-neutral-800 rounded-lg text-sm text-neutral-900 dark:text-white placeholder-neutral-400 dark:placeholder-neutral-600 focus:outline-none focus:border-cyan-500 transition-colors';
   const EYE_BUTTON = 'absolute right-2.5 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-900 dark:hover:text-white transition-colors p-1.5 cursor-pointer';
 
-  const TABS = ['profile', 'pro', 'security', 'appearance', 'ai', 'backup', 'about'] as const;
+  const TABS = ['profile', 'pro', 'security', 'appearance', 'ai', 'backup', 'performance', 'about'] as const;
   type SettingsTab = (typeof TABS)[number];
 
   const requestedTab = page.url.searchParams.get('tab') ?? '';
@@ -886,6 +887,8 @@
         </form>
       </div>
     </div>
+  {:else if activeTab === 'performance'}
+    <PerformanceSettingsCard />
   {:else if activeTab === 'about'}
     <div class="{CARD} space-y-6">
       <div class="flex items-center gap-3.5">

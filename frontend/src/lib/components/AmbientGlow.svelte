@@ -1,11 +1,15 @@
 <script lang="ts">
   import { getAmbientStore } from '$lib/stores/ambient.svelte';
   import { getPro } from '$lib/stores/pro.svelte';
+  import { getPerformance } from '$lib/stores/performance.svelte';
 
   let { defaultAccent = '#06b6d4' }: { defaultAccent?: string } = $props();
 
   const ambient = getAmbientStore();
   const pro = getPro();
+  const perf = getPerformance();
+  // Settings → Performance → low power mode switches the glow off entirely.
+  const glowAllowed = $derived(pro.isPro && !perf.prefs.lowPowerMode);
 
   // Active color based on mode
   const activeColor = $derived.by(() => {
@@ -20,7 +24,7 @@
   );
 
   const glowBoxShadow = $derived.by(() => {
-    if (!ambient.config.enabled || !ambient.config.cardGlowEnabled || !pro.isPro) return 'none';
+    if (!ambient.config.enabled || !ambient.config.cardGlowEnabled || !glowAllowed) return 'none';
     if (isGradientMode) return 'none';
 
     const blur = ambient.config.blurRadius;
@@ -38,7 +42,7 @@
   const animationDuration = $derived(`${ambient.config.speedSec}s`);
 </script>
 
-{#if ambient.config.enabled && ambient.config.cardGlowEnabled && pro.isPro}
+{#if ambient.config.enabled && ambient.config.cardGlowEnabled && glowAllowed}
   <div
     class="pointer-events-none absolute -top-[2px] -left-[2px] right-0 bottom-0 md:rounded-tl-xl z-0 overflow-visible transition-opacity duration-300 will-change-[filter,opacity]"
     style:opacity={ambient.config.intensity}

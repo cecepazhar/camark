@@ -179,6 +179,16 @@ pub const COMMAND_POLICIES: &[CommandPolicy] = &[
         policy: Policy::Session,
         returns_list: false,
     },
+    CommandPolicy {
+        name: "performance_memory_usage",
+        policy: Policy::Session,
+        returns_list: false,
+    },
+    CommandPolicy {
+        name: "performance_clear_cache",
+        policy: Policy::Session,
+        returns_list: false,
+    },
     // CAMark Workspace
     CommandPolicy {
         name: "workspace_list_directory",

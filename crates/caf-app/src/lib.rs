@@ -24,6 +24,7 @@ mod commands;
 pub mod exporter;
 pub mod fs_watcher;
 pub mod fs_workspace;
+mod perf;
 pub mod vault_docs;
 mod window;
 
@@ -199,10 +200,18 @@ pub fn run_with_start(_start: std::time::Instant) {
                             use webkit2gtk::{SettingsExt, WebViewExt};
                             let inner = webview.inner();
                             if let Some(settings) = inner.settings() {
+                                // Settings → Performance → GPU acceleration. Off means
+                                // WebKit composites in software: less GPU memory, more CPU.
+                                // On keeps WebKit's own default policy. Applies on restart.
                                 let enable_gpu = caf_core::prefs::load_performance_prefs()
                                     .map(|p| p.gpu_acceleration)
-                                    .unwrap_or(false);
+                                    .unwrap_or(true);
                                 settings.set_enable_webgl(enable_gpu);
+                                if !enable_gpu {
+                                    settings.set_hardware_acceleration_policy(
+                                        webkit2gtk::HardwareAccelerationPolicy::Never,
+                                    );
+                                }
                             }
                         })
                         .ok();
@@ -242,6 +251,8 @@ pub fn run_with_start(_start: std::time::Instant) {
             commands::import_encrypted_backup,
             commands::get_performance_prefs,
             commands::set_performance_prefs,
+            commands::performance_memory_usage,
+            commands::performance_clear_cache,
             commands::workspace_list_directory,
             commands::workspace_read_file,
             commands::workspace_read_file_base64,

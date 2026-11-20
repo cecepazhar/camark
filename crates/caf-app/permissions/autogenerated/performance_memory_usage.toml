@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-performance-memory-usage"
+description = "Enables the performance_memory_usage command without any pre-configured scope."
+commands.allow = ["performance_memory_usage"]
+
+[[permission]]
+identifier = "deny-performance-memory-usage"
+description = "Denies the performance_memory_usage command without any pre-configured scope."
+commands.deny = ["performance_memory_usage"]

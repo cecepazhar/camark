@@ -154,6 +154,8 @@
     toggleSidebarVisible,
     type SidebarPanel
   } from '$lib/stores/sidebarPanel.svelte';
+  import { getPerformance, renderDelayMs } from '$lib/stores/performance.svelte';
+  const perfSettings = getPerformance();
   import { goto } from '$app/navigation';
 
   // State
@@ -1736,7 +1738,7 @@ graph TD;
   let renderTimer: ReturnType<typeof setTimeout> | null = null;
   function scheduleRender() {
     if (renderTimer) clearTimeout(renderTimer);
-    const delay = rawMarkdown.length > 100_000 ? 400 : rawMarkdown.length > 20_000 ? 200 : 80;
+    const delay = renderDelayMs(rawMarkdown.length, wordCount, perfSettings.prefs);
     renderTimer = setTimeout(() => {
       renderTimer = null;
       renderMarkdown(rawMarkdown);

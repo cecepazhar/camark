@@ -19,13 +19,20 @@ pub struct PerformancePrefs {
     pub gpu_acceleration: bool,
     /// Automatic trimming of memory working set when app is idle or minimized.
     pub background_memory_saving: bool,
-    /// Max scrollback history lines stored in memory per terminal session.
+    /// Inherited from CATerm; CAMark has no terminal sessions. Kept so existing
+    /// `performance.json` files still load and save unchanged. Not shown in Settings.
     pub scrollback_lines: u32,
-    /// Sleep/throttle background inactive terminal sessions to reduce CPU usage.
+    /// Inherited from CATerm; unused by CAMark. Kept for file compatibility.
     pub inactive_session_sleep: bool,
-    /// Low power mode (30 FPS limiter) for battery saving and low-end hardware.
+    /// Low power mode: no UI animations or ambient glow, and a slower preview refresh.
     pub low_power_mode: bool,
+    /// Documents with more words than this re-render the preview only after a typing
+    /// pause instead of while typing. `0` turns large-document mode off.
+    pub large_doc_words: u32,
 }
+
+/// Default for [`PerformancePrefs::large_doc_words`].
+pub const DEFAULT_LARGE_DOC_WORDS: u32 = 20_000;
 
 impl Default for PerformancePrefs {
     fn default() -> Self {
@@ -35,6 +42,7 @@ impl Default for PerformancePrefs {
             scrollback_lines: 5000,
             inactive_session_sleep: true,
             low_power_mode: false,
+            large_doc_words: DEFAULT_LARGE_DOC_WORDS,
         }
     }
 }
@@ -100,9 +108,26 @@ mod tests {
             scrollback_lines: 10000,
             inactive_session_sleep: false,
             low_power_mode: true,
+            large_doc_words: 5_000,
         };
         save_to(&dir, &prefs).unwrap();
         assert_eq!(load_from(&dir), prefs);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn file_written_before_large_doc_words_still_loads() {
+        let dir = scratch_dir("legacy");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join(FILE_NAME),
+            br#"{"gpuAcceleration":false,"backgroundMemorySaving":true,"scrollbackLines":5000,"inactiveSessionSleep":true,"lowPowerMode":true}"#,
+        )
+        .unwrap();
+        let loaded = load_from(&dir);
+        assert!(!loaded.gpu_acceleration);
+        assert!(loaded.low_power_mode);
+        assert_eq!(loaded.large_doc_words, DEFAULT_LARGE_DOC_WORDS);
         let _ = std::fs::remove_dir_all(&dir);
     }
 

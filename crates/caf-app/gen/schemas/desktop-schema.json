@@ -2115,6 +2115,18 @@
           "markdownDescription": "Enables the lock_vault command without any pre-configured scope."
         },
         {
+          "description": "Enables the performance_clear_cache command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-performance-clear-cache",
+          "markdownDescription": "Enables the performance_clear_cache command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the performance_memory_usage command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-performance-memory-usage",
+          "markdownDescription": "Enables the performance_memory_usage command without any pre-configured scope."
+        },
+        {
           "description": "Enables the pro_activate_license command without any pre-configured scope.",
           "type": "string",
           "const": "allow-pro-activate-license",
@@ -2461,6 +2473,18 @@
           "type": "string",
           "const": "deny-lock-vault",
           "markdownDescription": "Denies the lock_vault command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the performance_clear_cache command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-performance-clear-cache",
+          "markdownDescription": "Denies the performance_clear_cache command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the performance_memory_usage command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-performance-memory-usage",
+          "markdownDescription": "Denies the performance_memory_usage command without any pre-configured scope."
         },
         {
           "description": "Denies the pro_activate_license command without any pre-configured scope.",

@@ -606,3 +606,14 @@ html.dark {
   }
 }
 
+
+/* Settings → Performance → low power mode: no animations or transitions anywhere.
+   Toggled on <html> by $lib/stores/performance.svelte.ts. */
+html.low-power *,
+html.low-power *::before,
+html.low-power *::after {
+  animation-duration: 0s !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0s !important;
+  scroll-behavior: auto !important;
+}

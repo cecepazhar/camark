@@ -237,6 +237,18 @@ pub async fn set_performance_prefs(prefs: prefs::PerformancePrefs) -> Result<(),
     run_blocking(move || prefs::save_performance_prefs(&prefs)).await
 }
 
+/// Memory used by CAMark and the WebKit processes it started, for Settings → Performance.
+#[tauri::command]
+pub async fn performance_memory_usage() -> Result<crate::perf::MemoryUsage, CafError> {
+    run_blocking(|| Ok(crate::perf::memory_usage())).await
+}
+
+/// Drops the WebView's memory and disk caches now. Returns false where unsupported.
+#[tauri::command]
+pub async fn performance_clear_cache(window: tauri::WebviewWindow) -> Result<bool, CafError> {
+    Ok(crate::window::clear_caches(&window))
+}
+
 // CAMark Filesystem Workspace commands
 #[tauri::command]
 pub async fn workspace_list_directory(dir_path: String) -> Result<Vec<FileNode>, String> {
