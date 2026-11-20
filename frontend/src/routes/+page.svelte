@@ -147,7 +147,13 @@
   } from '$lib/utils/scrollSync';
   import { getPro } from '$lib/stores/pro.svelte';
   import { openAiChat } from '$lib/stores/aiChat.svelte';
-  import { getSidebarPanelStore, setActiveSidebarPanel, type SidebarPanel } from '$lib/stores/sidebarPanel.svelte';
+  import {
+    getSidebarPanelStore,
+    setActiveSidebarPanel,
+    setSidebarVisible,
+    toggleSidebarVisible,
+    type SidebarPanel
+  } from '$lib/stores/sidebarPanel.svelte';
   import { goto } from '$app/navigation';
 
   // State
@@ -155,11 +161,8 @@
   let fileTree = $state<FileNode[]>([]);
   let expandedDirs = $state<Set<string>>(new Set());
   let folderNavHistory = $state<string[]>([]); // breadcrumb trail of visited folder paths
-  let showFileTree = $state<boolean>(
-    typeof localStorage !== 'undefined'
-      ? localStorage.getItem('camark_show_file_tree') !== 'false'
-      : true
-  );
+  // Sidebar column visibility lives in the shared store so the icon rail can reopen it.
+  const showFileTree = $derived(getSidebarPanelStore().visible);
   // Flatten fileTree into a Set of all file paths (non-dir) for auto-linking inline code
   const knownFilesSet = $derived.by(() => {
     const set = new Set<string>();
@@ -829,10 +832,7 @@ graph TD;
   installMarkdownExtensions();
 
   function toggleFileTree() {
-    showFileTree = !showFileTree;
-    if (typeof localStorage !== 'undefined') {
-      localStorage.setItem('camark_show_file_tree', String(showFileTree));
-    }
+    toggleSidebarVisible();
   }
 
   async function toggleDir(path: string) {
@@ -1086,10 +1086,10 @@ graph TD;
     isZenMode = !isZenMode;
     if (isZenMode) {
       setViewMode('editor');
-      showFileTree = false;
+      setSidebarVisible(false, false);
       showToast(t('editor.zenModeActive'), 'info');
     } else {
-      showFileTree = true;
+      setSidebarVisible(true, false);
       setViewMode('preview');
     }
   }
@@ -1363,7 +1363,6 @@ graph TD;
       .then(async (path) => {
         if (path) {
           lastOpenFileEvent = { path, timestamp: Date.now() };
-          showFileTree = false;
           const parts = path.split('/');
           const name = parts[parts.length - 1] || 'document.md';
           await openFile({ name, path, is_dir: false });
@@ -1383,7 +1382,6 @@ graph TD;
           return;
         }
         lastOpenFileEvent = { path: event.payload, timestamp: now };
-        showFileTree = false;
         const parts = event.payload.split('/');
         const name = parts[parts.length - 1] || 'document.md';
         openFile({ name, path: event.payload, is_dir: false });

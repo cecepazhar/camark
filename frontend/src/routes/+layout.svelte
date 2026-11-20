@@ -33,7 +33,11 @@
   import AmbientGlow from '$lib/components/AmbientGlow.svelte';
   import { getAmbientStore } from '$lib/stores/ambient.svelte';
   import { getPro, refreshProStatus } from '$lib/stores/pro.svelte';
-import { getSidebarPanelStore, setActiveSidebarPanel, type SidebarPanel } from '$lib/stores/sidebarPanel.svelte';
+import {
+    getSidebarPanelStore,
+    applyRailClick,
+    type SidebarPanel
+  } from '$lib/stores/sidebarPanel.svelte';
 
   let isCollapsed = $state(true);
   let isVaultUnlocked = $state(true); // Open directly without blocking lockscreen
@@ -107,16 +111,12 @@ import { getSidebarPanelStore, setActiveSidebarPanel, type SidebarPanel } from '
   //   • special card      → toggle: if this card is open, close it (back to tree);
   //   • otherwise         → open that card
   // While on a non-editor route (e.g. /settings) we first navigate back to `/`.
+  //   • sidebar hidden    → show it with the clicked panel; never a silent no-op
   function handleNavClick(item: { key: string }) {
-    const panel = panelForKey(item.key);
-    if (item.key === 'editor') {
-      setActiveSidebarPanel('files');
+    const resetRoot = applyRailClick(panelForKey(item.key), item.key === 'editor');
+    if (resetRoot) {
       // Ask the page to reset the file explorer to the workspace root.
       window.dispatchEvent(new CustomEvent('camark:reset-folder-root'));
-    } else if (activePanel === panel) {
-      setActiveSidebarPanel('files'); // toggle the card off
-    } else {
-      setActiveSidebarPanel(panel); // toggle the card on
     }
     if (page.url.pathname !== '/') {
       goto('/');
@@ -208,8 +208,8 @@ import { getSidebarPanelStore, setActiveSidebarPanel, type SidebarPanel } from '
     isVaultUnlocked = true;
     refreshProStatus().catch(() => {});
 
-    // Open maximized (belt-and-suspenders with window.rs `maximized(true)`).
-    maximizeWindow().catch(() => {});
+    // Maximizing at start is done once, in Rust (window.rs). Do not call `window_maximize`
+    // here: it is a toggle, so on an already-maximized window it restored it to 1200x800.
 
     if (!import.meta.env.DEV) {
       checkForUpdates({ silent: true }).catch(() => {});

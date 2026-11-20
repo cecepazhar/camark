@@ -39,6 +39,9 @@ pub fn create_main_window(app: &tauri::App) -> tauri::Result<WebviewWindow> {
     }
 
     let window = builder.build()?;
+    // Some Wayland compositors ignore the maximized hint on an unmapped window. `maximize`
+    // is one-way (never a toggle), so asking again after build is safe.
+    let _ = window.maximize();
     memory::install(&window);
     disable_browser_accelerators(&window);
     Ok(window)
