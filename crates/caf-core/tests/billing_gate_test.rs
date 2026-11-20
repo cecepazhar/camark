@@ -33,6 +33,9 @@ fn test_require_pro_rust_guard_rejection_and_acceptance() {
     let temp_dir = std::env::temp_dir().join(format!("camark_test_gate_{}", uuid::Uuid::new_v4()));
     std::fs::create_dir_all(&temp_dir).unwrap();
     let prev_cmrk = std::env::var_os("CMRK_DATA_DIR");
+    // SAFETY: this integration-test binary has a single test, so no other thread
+    // reads or writes CMRK_DATA_DIR while it changes.
+    #[allow(clippy::disallowed_methods)]
     unsafe {
         std::env::set_var("CMRK_DATA_DIR", &temp_dir);
     }
@@ -71,10 +74,16 @@ fn test_require_pro_rust_guard_rejection_and_acceptance() {
 
     caf_core::vault::lock();
     if let Some(prev) = prev_cmrk {
+        // SAFETY: this integration-test binary has a single test, so no other thread
+        // reads or writes CMRK_DATA_DIR while it changes.
+        #[allow(clippy::disallowed_methods)]
         unsafe {
             std::env::set_var("CMRK_DATA_DIR", prev);
         }
     } else {
+        // SAFETY: this integration-test binary has a single test, so no other thread
+        // reads or writes CMRK_DATA_DIR while it changes.
+        #[allow(clippy::disallowed_methods)]
         unsafe {
             std::env::remove_var("CMRK_DATA_DIR");
         }

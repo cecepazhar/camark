@@ -126,10 +126,11 @@ pub fn is_supported_file(name: &str) -> bool {
     ) {
         return true;
     }
-    if let Some(ext) = lower.rsplit('.').next() {
-        if ext != lower && SUPPORTED_TEXT_EXTENSIONS.contains(&ext) {
-            return true;
-        }
+    if let Some(ext) = lower.rsplit('.').next()
+        && ext != lower
+        && SUPPORTED_TEXT_EXTENSIONS.contains(&ext)
+    {
+        return true;
     }
     false
 }
@@ -435,13 +436,11 @@ pub async fn open_with_default_app(file_path: String) -> Result<(), String> {
                             // Still running — check for stderr so far
                             if let Some(mut err_pipe) = child.stderr.take() {
                                 let mut chunk = [0u8; 1024];
-                                if let Ok(n) = err_pipe.read(&mut chunk) {
-                                    if n > 0 {
-                                        if let Some(slice) = chunk.get(..n) {
+                                if let Ok(n) = err_pipe.read(&mut chunk)
+                                    && n > 0
+                                        && let Some(slice) = chunk.get(..n) {
                                             stderr_buf.extend_from_slice(slice);
                                         }
-                                    }
-                                }
                             }
                             if std::time::Instant::now() >= deadline {
                                 // Give up waiting — process is alive, treat as success
@@ -473,10 +472,10 @@ pub async fn open_with_default_app(file_path: String) -> Result<(), String> {
                     }
                 }
                 let stderr_str = String::from_utf8_lossy(&stderr_buf);
-                return Err(format!(
+                Err(format!(
                     "{cmd} exited with {status}. stderr: {}",
                     stderr_str.trim()
-                ));
+                ))
             }
 
             let path_str = canonical.to_string_lossy().into_owned();
@@ -484,12 +483,12 @@ pub async fn open_with_default_app(file_path: String) -> Result<(), String> {
 
             // 1st: xdg-open (default handler registry)
             match try_launch("xdg-open", &[path_arg]) {
-                Ok(()) => return Ok(()),
+                Ok(()) => Ok(()),
                 Err(primary_err) => {
                     eprintln!("[open_with_default_app] xdg-open failed: {primary_err}");
                     // 2nd: kde-open (KDE-specific, often more reliable for Office/PDF on KDE)
                     match try_launch("kde-open", &[path_arg]) {
-                        Ok(()) => return Ok(()),
+                        Ok(()) => Ok(()),
                         Err(e2) => {
                             eprintln!("[open_with_default_app] kde-open failed: {e2}");
                             // 3rd: direct fallback based on extension
@@ -502,14 +501,13 @@ pub async fn open_with_default_app(file_path: String) -> Result<(), String> {
                                 "pdf" => Some(("okular", &[path_arg])),
                                 _ => None,
                             };
-                            if let Some((app, args)) = direct_app {
-                                if let Ok(()) = try_launch(app, args) {
+                            if let Some((app, args)) = direct_app
+                                && let Ok(()) = try_launch(app, args) {
                                     return Ok(());
                                 }
-                            }
-                            return Err(format!(
+                            Err(format!(
                                 "All openers failed for {path_str}.\n  xdg-open: {primary_err}\n  kde-open: {e2}"
-                            ));
+                            ))
                         }
                     }
                 }
@@ -915,7 +913,7 @@ fn save_image_inner(
         doc.to_path_buf()
     } else {
         std::env::current_dir()
-            .map_err(|e| ImageSaveError::Io(e))?
+            .map_err(ImageSaveError::Io)?
             .join(doc)
     };
 
@@ -979,17 +977,22 @@ fn save_image_inner(
         use sha2::{Digest, Sha256};
         let mut h = Sha256::new();
         h.update(data);
-        hex::encode(&Sha256::finalize(h)[..4])
+        let digest = Sha256::finalize(h);
+        hex::encode(digest.iter().take(4).copied().collect::<Vec<u8>>())
     };
-    let base_name = format!("{ts_tag}-{hash}.{ext}");
+    let stem = format!("{ts_tag}-{hash}");
+    let mut file_name = format!("{stem}.{ext}");
 
     fs::create_dir_all(&assets_abs).map_err(ImageSaveError::Io)?;
 
     // Find a free filename.
-    let mut candidate = assets_abs.join(&base_name);
+    // The counter goes before the extension (`name-1.png`, not `name.png-1`), so a
+    // de-duplicated file is still recognised and rendered as an image.
+    let mut candidate = assets_abs.join(&file_name);
     let mut suffix = 1u32;
     while candidate.exists() {
-        candidate = assets_abs.join(format!("{base_name}-{suffix}"));
+        file_name = format!("{stem}-{suffix}.{ext}");
+        candidate = assets_abs.join(&file_name);
         suffix += 1;
     }
 
@@ -1000,11 +1003,7 @@ fn save_image_inner(
     // 7. Compute the relative markdown link from the document to the stored
     //    asset. Since both live under `doc_parent`, the link is simply
     //    `<asset_folder>/<candidate_file_name>`.
-    let link = format!(
-        "{}/{}",
-        folder,
-        candidate.file_name().unwrap().to_string_lossy()
-    );
+    let link = format!("{}/{}", folder, file_name);
 
     Ok(WorkspaceImageResult {
         link,
@@ -1448,6 +1447,10 @@ mod tests {
             .expect("second");
 
         assert_ne!(r1.link, r2.link, "collision-safe names must differ");
+        // The de-duplicated name keeps its extension (`x-1.png`, never `x.png-1`), or the
+        // preview would not render it as an image.
+        assert!(r1.link.ends_with(".png"), "{}", r1.link);
+        assert!(r2.link.ends_with(".png"), "{}", r2.link);
         assert!(
             doc_dir
                 .join("assets")

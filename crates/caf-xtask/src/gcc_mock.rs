@@ -145,7 +145,10 @@ async fn handle_otp_request(
     State(_state): State<MockState>,
     Json(payload): Json<OtpRequestPayload>,
 ) -> impl IntoResponse {
-    println!("[GCC-MOCK] OTP for email {}: 123456", payload.email);
+    println!(
+        "[GCC-MOCK] OTP for email {} ({}): 123456",
+        payload.email, payload.product_code
+    );
     (
         StatusCode::ACCEPTED,
         Json(serde_json::json!({ "message": "OTP sent" })),
@@ -376,6 +379,7 @@ async fn handle_get_plans(
     Query(query): Query<PlansQuery>,
 ) -> impl IntoResponse {
     let currency = query.currency.unwrap_or_else(|| "IDR".to_string());
+    println!("[GCC-MOCK] plans for {} in {currency}", query.product_code);
     let plans = if currency == "USD" {
         vec![
             serde_json::json!({

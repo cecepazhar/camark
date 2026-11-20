@@ -162,11 +162,11 @@ fn rust_ret_to_ts(output: &syn::ReturnType) -> String {
 }
 
 fn is_injected_tauri_type(ty: &syn::Type) -> bool {
-    if let syn::Type::Path(type_path) = ty {
-        if let Some(seg) = type_path.path.segments.last() {
-            let ident = seg.ident.to_string();
-            return ident == "Window" || ident == "AppHandle";
-        }
+    if let syn::Type::Path(type_path) = ty
+        && let Some(seg) = type_path.path.segments.last()
+    {
+        let ident = seg.ident.to_string();
+        return ident == "Window" || ident == "AppHandle";
     }
     false
 }

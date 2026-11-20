@@ -69,17 +69,16 @@ pub fn is_recent_app_write<P: AsRef<Path>>(path: P) -> bool {
     };
     map.retain(|_, time| now.duration_since(*time) < Duration::from_secs(5));
 
-    if let Some(t) = map.get(p) {
-        if now.duration_since(*t) < Duration::from_millis(1500) {
-            return true;
-        }
+    if let Some(t) = map.get(p)
+        && now.duration_since(*t) < Duration::from_millis(1500)
+    {
+        return true;
     }
-    if let Ok(canonical) = p.canonicalize() {
-        if let Some(t) = map.get(&canonical) {
-            if now.duration_since(*t) < Duration::from_millis(1500) {
-                return true;
-            }
-        }
+    if let Ok(canonical) = p.canonicalize()
+        && let Some(t) = map.get(&canonical)
+        && now.duration_since(*t) < Duration::from_millis(1500)
+    {
+        return true;
     }
     false
 }

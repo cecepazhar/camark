@@ -167,32 +167,6 @@ pub fn run_with_start(_start: std::time::Instant) {
 
             #[cfg(target_os = "linux")]
             {
-                if let Ok(cert) = std::env::var("SSL_CERT_FILE") {
-                    if !std::path::Path::new(&cert).exists() {
-                        let valid_ca = [
-                            "/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem",
-                            "/etc/pki/tls/cert.pem",
-                            "/etc/ssl/ca-bundle.pem",
-                            "/etc/ssl/cert.pem",
-                        ]
-                        .into_iter()
-                        .find(|p| std::path::Path::new(p).exists());
-
-                        if let Some(valid) = valid_ca {
-                            unsafe {
-                                std::env::set_var("SSL_CERT_FILE", valid);
-                            }
-                        } else {
-                            unsafe {
-                                std::env::remove_var("SSL_CERT_FILE");
-                            }
-                        }
-                    }
-                }
-            }
-
-            #[cfg(target_os = "linux")]
-            {
                 use tauri::Manager;
                 if let Some(window) = app.get_webview_window("main") {
                     window
@@ -283,7 +257,11 @@ pub fn run_with_start(_start: std::time::Instant) {
             commands::pro_logout,
         ]);
 
-    if let Err(e) = app.run(tauri::generate_context!()) {
+    // `generate_context!` expands to Tauri-generated code that calls `std::process::exit`;
+    // the call is not ours and cannot be routed through a Result.
+    #[allow(clippy::disallowed_methods)]
+    let context = tauri::generate_context!();
+    if let Err(e) = app.run(context) {
         eprintln!("error while running tauri application: {e}");
     }
 }
