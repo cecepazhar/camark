@@ -48,7 +48,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEZBMzQwQzgyQ0ExNjREOApSV1RZWktFc3lFQ2pEMThrQ21uS0p0Vm40cW1NMmxWa3EvUHA0TkpCQVYzc2JtWk5QVndTQkd2cgo=",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEU4OUE2QTIyQzI2N0FBQUEKUldTcXFtZkNJbXFhNklxMjRMSThHUFg5WVV3VjVZazhZc2ZFTFhEYVZac3lpcmJiTHp2U0FpYTgK",
       "endpoints": [
         "https://github.com/cecepazhar/camark/releases/latest/download/latest.json"
       ],
