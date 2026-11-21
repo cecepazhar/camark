@@ -24,6 +24,8 @@ async function parserFor(lang: string): Promise<Parser | null> {
       return (await import('@codemirror/lang-python')).python().language.parser;
     case 'rs': case 'rust':
       return (await import('@codemirror/lang-rust')).rust().language.parser;
+    case 'go':
+      return (await import('@codemirror/lang-go')).go().language.parser;
     case 'md': case 'markdown':
       return (await import('@codemirror/lang-markdown')).markdown().language.parser;
     default:

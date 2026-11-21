@@ -299,8 +299,14 @@ pub fn activate_license(
         .clone()
         .ok_or_else(|| pro_err("LICENSE_SIGNING_UNAVAILABLE: GCC tidak mengirim signed_token"))?;
     let now = chrono::Utc::now().timestamp();
-    crate::license_token::verify(Some(&token), crate::license_token::public_key, &device_id, now, now)
-        .map_err(|e| pro_err(format!("INVALID_LICENSE_TOKEN: {e}")))?;
+    crate::license_token::verify(
+        Some(&token),
+        crate::license_token::public_key,
+        &device_id,
+        now,
+        now,
+    )
+    .map_err(|e| pro_err(format!("INVALID_LICENSE_TOKEN: {e}")))?;
 
     let local = LocalLicense {
         key: clean_key.clone(),
@@ -444,7 +450,11 @@ pub fn revalidate_stored_license(gcc_url: Option<&str>) -> ServerVerdict {
 
 /// Asks GCC whether `key` is valid *and bound to this device*. Only a clear answer from GCC
 /// counts as rejected; transport errors and unreadable bodies are `Unknown`.
-fn verify_on_device(gcc_url: Option<&str>, key: &str, device_id: &str) -> (ServerVerdict, VerifyData) {
+fn verify_on_device(
+    gcc_url: Option<&str>,
+    key: &str,
+    device_id: &str,
+) -> (ServerVerdict, VerifyData) {
     let base = resolve_gcc_url(gcc_url);
     let url = format!("{base}/api/v1/licenses/verify");
     let payload = serde_json::json!({
