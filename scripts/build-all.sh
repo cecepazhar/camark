@@ -25,7 +25,17 @@ npm run build
 if [[ "$TARGET" == "all" || "$TARGET" == "linux" ]]; then
   echo "--> [2/3] Building Linux Bundles (.deb, .rpm, .AppImage) via Podman..."
   cd "$ROOT_DIR"
-  podman run --rm -v "$ROOT_DIR":/app:z -w /app rust:latest bash -c "
+  # Updater artifacts (.sig) need the signing key. `-e NAME` (no value) forwards the variable
+  # from the caller's environment without printing it. Export both before running, e.g.
+  #   export TAURI_SIGNING_PRIVATE_KEY="$(cat ~/.tauri/camark.key)"
+  #   read -rs TAURI_SIGNING_PRIVATE_KEY_PASSWORD; export TAURI_SIGNING_PRIVATE_KEY_PASSWORD
+  SIGN_ARGS=()
+  if [[ -n "${TAURI_SIGNING_PRIVATE_KEY:-}" ]]; then
+    SIGN_ARGS+=(-e TAURI_SIGNING_PRIVATE_KEY -e TAURI_SIGNING_PRIVATE_KEY_PASSWORD)
+  else
+    echo "WARN: TAURI_SIGNING_PRIVATE_KEY not set; build fails or ships no .sig when updater artifacts are enabled." >&2
+  fi
+  podman run --rm "${SIGN_ARGS[@]}" -v "$ROOT_DIR":/app:z -w /app rust:latest bash -c "
     set -e
     apt-get update -qq
     apt-get install -y -qq nodejs npm libwebkit2gtk-4.1-dev build-essential curl wget file libssl-dev libayatana-appindicator3-dev librsvg2-dev rpm alien
@@ -66,6 +76,7 @@ if [[ "$TARGET" == "all" || "$TARGET" == "linux" ]]; then
     cp -f "$ROOT_DIR"/target/release/bundle/rpm/*.rpm "$DIST_DIR/" 2>/dev/null || true
   fi
   cp -f "$ROOT_DIR"/target/release/bundle/appimage/*.AppImage "$DIST_DIR/" 2>/dev/null || true
+  cp -f "$ROOT_DIR"/target/release/bundle/appimage/*.AppImage.sig "$DIST_DIR/" 2>/dev/null || true
 fi
 
 # 3. Build Windows x64 (.exe)
