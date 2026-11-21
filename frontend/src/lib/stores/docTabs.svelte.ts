@@ -147,6 +147,37 @@ export function closeAllTabs(): void {
   persist();
 }
 
+/**
+ * Moves `fromId` next to `toId` (after it when `after` is true, before it otherwise).
+ * Returns the same array instance when nothing would change, so callers can skip a write.
+ */
+export function reorderTabs<T extends { id: string }>(
+  list: readonly T[],
+  fromId: string,
+  toId: string,
+  after: boolean
+): readonly T[] {
+  if (fromId === toId) return list;
+  const from = list.findIndex((t) => t.id === fromId);
+  const to = list.findIndex((t) => t.id === toId);
+  if (from === -1 || to === -1) return list;
+  const moving = list[from];
+  if (!moving) return list;
+  const rest = list.filter((t) => t.id !== fromId);
+  const target = rest.findIndex((t) => t.id === toId);
+  const insertAt = after ? target + 1 : target;
+  if (insertAt === from) return list;
+  return [...rest.slice(0, insertAt), moving, ...rest.slice(insertAt)];
+}
+
+/** Drag-and-drop reorder of open tabs. The active tab and unsaved state are kept. */
+export function moveTab(fromId: string, toId: string, after: boolean): void {
+  const next = reorderTabs(tabs, fromId, toId, after);
+  if (next === tabs) return;
+  tabs = [...next];
+  persist();
+}
+
 export function setActiveTab(id: string): void {
   activeTabId = id;
   persist();

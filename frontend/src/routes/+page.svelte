@@ -66,6 +66,7 @@
     closeOtherTabs,
     closeTabsToRight,
     closeAllTabs,
+    moveTab,
     setActiveTab,
     setDirty,
     restoreTabs,
@@ -598,6 +599,43 @@ graph TD;
 
   // Tabs scroll & overflow container reference
   let tabsContainerEl = $state<HTMLDivElement | null>(null);
+
+  // Tab drag-and-drop reorder. A private MIME type keeps the file tree and the editor from
+  // reacting to a tab being dragged.
+  const TAB_DND_TYPE = 'application/x-camark-tab';
+  let draggingTabId = $state<string | null>(null);
+  let tabDropTarget = $state<{ id: string; after: boolean } | null>(null);
+
+  function handleTabDragStart(e: DragEvent, id: string) {
+    if (!e.dataTransfer) return;
+    draggingTabId = id;
+    e.dataTransfer.setData(TAB_DND_TYPE, id);
+    e.dataTransfer.effectAllowed = 'move';
+  }
+
+  function handleTabDragOver(e: DragEvent, id: string) {
+    if (!draggingTabId || !e.dataTransfer?.types.includes(TAB_DND_TYPE)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const after = e.clientX > rect.left + rect.width / 2;
+    if (tabDropTarget?.id !== id || tabDropTarget.after !== after) {
+      tabDropTarget = { id, after };
+    }
+  }
+
+  function handleTabDrop(e: DragEvent, id: string) {
+    if (!draggingTabId) return;
+    e.preventDefault();
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    moveTab(draggingTabId, id, e.clientX > rect.left + rect.width / 2);
+    handleTabDragEnd();
+  }
+
+  function handleTabDragEnd() {
+    draggingTabId = null;
+    tabDropTarget = null;
+  }
 
   function scrollTabsLeft() {
     if (tabsContainerEl) {
@@ -3826,10 +3864,15 @@ graph TD;
           role="button"
           tabindex="0"
           data-tab-id={tab.id}
+          draggable="true"
+          ondragstart={(e) => handleTabDragStart(e, tab.id)}
+          ondragover={(e) => handleTabDragOver(e, tab.id)}
+          ondrop={(e) => handleTabDrop(e, tab.id)}
+          ondragend={handleTabDragEnd}
           onclick={() => handleSelectTab(tab.id)}
           oncontextmenu={(e) => handleTabContextMenu(e, tab)}
           onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleSelectTab(tab.id); }}
-          class="group relative h-8 px-2.5 rounded-t-md flex items-center gap-1.5 text-xs font-mono transition-all cursor-pointer border-t border-x flex-shrink min-w-[70px] max-w-[140px] sm:max-w-[190px] {isActive ? 'bg-white dark:bg-[#1a1a1a] text-cyan-600 dark:text-cyan-400 border-neutral-300 dark:border-neutral-700/80 shadow-2xs font-semibold' : 'bg-transparent border-transparent text-neutral-500 hover:text-neutral-800 dark:text-neutral-400 dark:hover:text-neutral-200 hover:bg-neutral-200/50 dark:hover:bg-neutral-800/40'}"
+          class="group relative h-8 px-2.5 rounded-t-md flex items-center gap-1.5 text-xs font-mono transition-all cursor-pointer border-t border-x flex-shrink min-w-[70px] max-w-[140px] sm:max-w-[190px] {isActive ? 'bg-white dark:bg-[#1a1a1a] text-cyan-600 dark:text-cyan-400 border-neutral-300 dark:border-neutral-700/80 shadow-2xs font-semibold' : 'bg-transparent border-transparent text-neutral-500 hover:text-neutral-800 dark:text-neutral-400 dark:hover:text-neutral-200 hover:bg-neutral-200/50 dark:hover:bg-neutral-800/40'} {draggingTabId === tab.id ? 'opacity-40' : ''} {tabDropTarget?.id === tab.id && draggingTabId !== tab.id ? (tabDropTarget.after ? 'shadow-[inset_-2px_0_0_0_#06b6d4]' : 'shadow-[inset_2px_0_0_0_#06b6d4]') : ''}"
           title={tab.path}
         >
           {#if isActive}
