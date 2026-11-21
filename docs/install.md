@@ -23,7 +23,7 @@ Bandingkan SHA-256 berkas dengan isi `SHA256SUMS-*.txt` dari rilis yang sama.
 
 ```bash
 # Linux
-sha256sum -c SHA256SUMS-Linux.txt --ignore-missing
+sha256sum -c SHA256SUMS* --ignore-missing
 # macOS
 shasum -a 256 CAMark*.dmg
 ```
@@ -70,7 +70,7 @@ Compare the file's SHA-256 with `SHA256SUMS-*.txt` from the same release.
 
 ```bash
 # Linux
-sha256sum -c SHA256SUMS-Linux.txt --ignore-missing
+sha256sum -c SHA256SUMS* --ignore-missing
 # macOS
 shasum -a 256 CAMark*.dmg
 ```
