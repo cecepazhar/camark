@@ -198,7 +198,8 @@ fn save_stored_config(cfg: &StoredAiConfig) -> Result<(), CafError> {
     Ok(())
 }
 
-/// Helper to parse host from base_url without pulling external crates
+/// Helper to parse host from base_url without pulling external crates.
+/// Bracketed IPv6 hosts ("[::1]") are returned without the brackets.
 fn parse_host(url_str: &str) -> Option<String> {
     let trimmed = url_str.trim();
     let after_scheme = if let Some(idx) = trimmed.find("://") {
@@ -207,12 +208,24 @@ fn parse_host(url_str: &str) -> Option<String> {
         trimmed
     };
     let host_port = after_scheme.split('/').next().unwrap_or("");
-    let host = host_port.split(':').next().unwrap_or("").to_lowercase();
+    let host = if let Some(open) = host_port.find('[') {
+        // Bracketed IPv6: host runs from '[' to the first ']' that precedes any port.
+        host_port[open..]
+            .split(']')
+            .next()
+            .unwrap_or("")
+            .trim_start_matches('[')
+            .to_lowercase()
+    } else {
+        host_port.split(':').next().unwrap_or("").to_lowercase()
+    };
     if host.is_empty() { None } else { Some(host) }
 }
 
 pub fn is_loopback(url_str: &str) -> bool {
     if let Some(host) = parse_host(url_str) {
+        // parse_host leaves bracketed IPv6 as-is ("[::1]"); strip the brackets.
+        let host = host.trim_start_matches('[').trim_end_matches(']');
         host == "localhost" || host == "127.0.0.1" || host == "::1" || host == "[::1]"
     } else {
         false
@@ -949,5 +962,41 @@ pub mod tests {
             truncate_on_char_boundary("halo — dunia", 25_000),
             "halo — dunia"
         );
+    }
+
+    // H-06 consent-guard unit coverage: `withhold_body` inside
+    // chat_with_doc_context gates vault-document content on `is_loopback(&cfg.base_url)`.
+    // That call cannot be unit-tested without a live endpoint, so test the gate
+    // itself — the predicate that decides whether content may leave the machine.
+
+    #[test]
+    fn h06_is_loopback_true_for_local_endpoints() {
+        assert!(is_loopback("http://localhost:11434/v1"));
+        assert!(is_loopback("http://127.0.0.1:20128/v1"));
+        assert!(is_loopback("http://[::1]:8080/"));
+        // Bare "http://::1/" is not a well-formed URL (unbracketed IPv6 host
+        // parses to an empty host), so it is correctly treated as non-loopback.
+        assert!(!is_loopback("http://::1/"));
+    }
+
+    #[test]
+    fn h06_is_loopback_false_for_external_endpoints() {
+        // Any non-loopback host means a vault doc must be withheld without consent.
+        assert!(!is_loopback("https://api.openai.com/v1"));
+        assert!(!is_loopback("http://192.168.0.10:11434/"));
+        assert!(!is_loopback("http://ollama.local/"));
+        assert!(!is_loopback("http://example.com/"));
+    }
+
+    #[test]
+    fn h06_is_loopback_false_for_unparseable_or_empty() {
+        assert!(!is_loopback(""));
+        assert!(!is_loopback("http://"));
+    }
+
+    #[test]
+    fn h06_loopback_ignores_uppercase_host() {
+        assert!(is_loopback("http://LOCALHOST:11434/"));
+        assert!(is_loopback("http://127.0.0.1:11434/"));
     }
 }
