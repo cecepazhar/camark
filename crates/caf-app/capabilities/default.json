@@ -52,6 +52,7 @@
     "allow-workspace-save-image",
     "allow-workspace-move-note-assets",
     "allow-workspace-open-file-app",
+    "allow-workspace-search",
     "allow-workspace-watch-directory",
     "allow-workspace-unwatch-directory",
     "allow-get-initial-file-path",

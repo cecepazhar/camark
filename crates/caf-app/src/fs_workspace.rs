@@ -1091,8 +1091,231 @@ pub fn move_note_assets(
     Ok(())
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SearchMatch {
+    pub file_path: String,
+    pub relative_path: String,
+    pub line_number: usize,
+    pub line_content: String,
+    pub match_start: usize,
+    pub match_end: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SearchWorkspaceResult {
+    pub matches: Vec<SearchMatch>,
+    pub files_scanned: usize,
+    pub duration_ms: u64,
+}
+
+pub async fn search_workspace(
+    workspace_root: String,
+    query: String,
+    case_sensitive: bool,
+    whole_word: bool,
+    max_results: Option<usize>,
+) -> Result<SearchWorkspaceResult, String> {
+    tokio::task::spawn_blocking(move || {
+        search_workspace_sync(
+            &workspace_root,
+            &query,
+            case_sensitive,
+            whole_word,
+            max_results,
+        )
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+fn search_workspace_sync(
+    workspace_root: &str,
+    query: &str,
+    case_sensitive: bool,
+    whole_word: bool,
+    max_results: Option<usize>,
+) -> Result<SearchWorkspaceResult, String> {
+    let start_time = std::time::Instant::now();
+    let root = Path::new(workspace_root);
+    if !root.exists() || !root.is_dir() {
+        return Err(format!("Workspace root does not exist: {workspace_root}"));
+    }
+
+    if query.trim().is_empty() {
+        return Ok(SearchWorkspaceResult {
+            matches: Vec::new(),
+            files_scanned: 0,
+            duration_ms: start_time.elapsed().as_millis() as u64,
+        });
+    }
+
+    let limit = max_results.unwrap_or(500);
+    let mut matches = Vec::new();
+    let mut files_scanned = 0;
+
+    let mut stack = vec![root.to_path_buf()];
+    let query_lower = if case_sensitive {
+        String::new()
+    } else {
+        query.to_lowercase()
+    };
+
+    while let Some(current_dir) = stack.pop() {
+        let entries = match fs::read_dir(&current_dir) {
+            Ok(e) => e,
+            Err(_) => continue,
+        };
+
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let file_name = entry.file_name();
+            let name_str = file_name.to_string_lossy();
+
+            if name_str.starts_with('.') {
+                continue;
+            }
+
+            let is_dir = path.is_dir();
+            if is_dir && IGNORED_DIRS.contains(&name_str.as_ref()) {
+                continue;
+            }
+
+            if is_dir {
+                stack.push(path);
+            } else if path.is_file() && is_supported_file(&name_str) {
+                files_scanned += 1;
+                let rel_path = path
+                    .strip_prefix(root)
+                    .unwrap_or(&path)
+                    .to_string_lossy()
+                    .to_string();
+
+                if let Ok(content) = fs::read_to_string(&path) {
+                    for (line_idx, line) in content.lines().enumerate() {
+                        let line_to_search = if case_sensitive {
+                            line.to_string()
+                        } else {
+                            line.to_lowercase()
+                        };
+
+                        let search_term = if case_sensitive { query } else { &query_lower };
+
+                        let mut search_from = 0;
+                        while let Some(pos) = line_to_search[search_from..].find(search_term) {
+                            let match_start = search_from + pos;
+                            let match_end = match_start + search_term.len();
+
+                            let is_match = if whole_word {
+                                let before_ok = match_start == 0
+                                    || !line_to_search
+                                        .as_bytes()
+                                        .get(match_start - 1)
+                                        .is_some_and(|b| b.is_ascii_alphanumeric() || *b == b'_');
+                                let after_ok = match_end >= line_to_search.len()
+                                    || !line_to_search
+                                        .as_bytes()
+                                        .get(match_end)
+                                        .is_some_and(|b| b.is_ascii_alphanumeric() || *b == b'_');
+                                before_ok && after_ok
+                            } else {
+                                true
+                            };
+
+                            if is_match {
+                                matches.push(SearchMatch {
+                                    file_path: path.to_string_lossy().to_string(),
+                                    relative_path: rel_path.clone(),
+                                    line_number: line_idx + 1,
+                                    line_content: line.to_string(),
+                                    match_start,
+                                    match_end,
+                                });
+
+                                if matches.len() >= limit {
+                                    return Ok(SearchWorkspaceResult {
+                                        matches,
+                                        files_scanned,
+                                        duration_ms: start_time.elapsed().as_millis() as u64,
+                                    });
+                                }
+                            }
+
+                            search_from = match_end;
+                            if search_from >= line_to_search.len() {
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(SearchWorkspaceResult {
+        matches,
+        files_scanned,
+        duration_ms: start_time.elapsed().as_millis() as u64,
+    })
+}
+
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn test_search_workspace_finds_matches_and_options() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let root = temp.path();
+
+        let doc1 = root.join("note1.md");
+        fs::write(&doc1, "# Arsitektur CAMark\nRust dan Tauri v2.\n").expect("write doc1");
+
+        let sub = root.join("sub");
+        fs::create_dir(&sub).expect("create sub");
+        let doc2 = sub.join("note2.md");
+        fs::write(&doc2, "camark adalah editor cepat.\nBukan camark_app.\n").expect("write doc2");
+
+        // Case insensitive match
+        let res = search_workspace_sync(&root.to_string_lossy(), "camark", false, false, None)
+            .expect("search");
+        assert_eq!(res.matches.len(), 3);
+        assert_eq!(res.files_scanned, 2);
+
+        // Case sensitive match
+        let res_case = search_workspace_sync(&root.to_string_lossy(), "CAMark", true, false, None)
+            .expect("search case");
+        assert_eq!(res_case.matches.len(), 1);
+
+        // Whole word match
+        let res_word = search_workspace_sync(&root.to_string_lossy(), "camark", false, true, None)
+            .expect("search word");
+        assert_eq!(res_word.matches.len(), 2);
+    }
+
+    #[test]
+    fn test_search_workspace_5000_notes_performance() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let root = temp.path();
+
+        for i in 0..5000 {
+            let p = root.join(format!("note_{i}.md"));
+            let text = if i == 2500 {
+                "Target kata kunci unik F3-06 di catatan tengah."
+            } else {
+                "Catatan biasa untuk pengujian performa pencarian workspace."
+            };
+            fs::write(&p, text).expect("write batch");
+        }
+
+        let res = search_workspace_sync(&root.to_string_lossy(), "F3-06", false, false, None)
+            .expect("search 5k");
+        assert_eq!(res.matches.len(), 1);
+        assert_eq!(res.files_scanned, 5000);
+        assert!(
+            res.duration_ms < 5000,
+            "5,000 files scan took {} ms (expected < 5000ms)",
+            res.duration_ms
+        );
+    }
+
     use super::*;
 
     #[tokio::test]

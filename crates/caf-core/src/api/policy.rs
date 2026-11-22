@@ -261,6 +261,11 @@ pub const COMMAND_POLICIES: &[CommandPolicy] = &[
         returns_list: false,
     },
     CommandPolicy {
+        name: "workspace_search",
+        policy: Policy::Public,
+        returns_list: false,
+    },
+    CommandPolicy {
         name: "workspace_watch_directory",
         policy: Policy::Public,
         returns_list: false,

@@ -2349,6 +2349,12 @@
           "markdownDescription": "Enables the workspace_save_image command without any pre-configured scope."
         },
         {
+          "description": "Enables the workspace_search command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-workspace-search",
+          "markdownDescription": "Enables the workspace_search command without any pre-configured scope."
+        },
+        {
           "description": "Enables the workspace_unwatch_directory command without any pre-configured scope.",
           "type": "string",
           "const": "allow-workspace-unwatch-directory",
@@ -2713,6 +2719,12 @@
           "type": "string",
           "const": "deny-workspace-save-image",
           "markdownDescription": "Denies the workspace_save_image command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the workspace_search command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-workspace-search",
+          "markdownDescription": "Denies the workspace_search command without any pre-configured scope."
         },
         {
           "description": "Denies the workspace_unwatch_directory command without any pre-configured scope.",

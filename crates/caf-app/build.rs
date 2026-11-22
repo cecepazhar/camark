@@ -61,6 +61,7 @@ const COMMANDS: &[&str] = &[
     "workspace_open_file_app",
     "workspace_save_image",
     "workspace_move_note_assets",
+    "workspace_search",
     "workspace_watch_directory",
     "workspace_unwatch_directory",
     "get_initial_file_path",

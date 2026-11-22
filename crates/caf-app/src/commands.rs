@@ -341,6 +341,24 @@ pub fn workspace_move_note_assets(
 }
 
 #[tauri::command]
+pub async fn workspace_search(
+    workspace_root: String,
+    query: String,
+    case_sensitive: bool,
+    whole_word: bool,
+    max_results: Option<usize>,
+) -> Result<fs_workspace::SearchWorkspaceResult, String> {
+    fs_workspace::search_workspace(
+        workspace_root,
+        query,
+        case_sensitive,
+        whole_word,
+        max_results,
+    )
+    .await
+}
+
+#[tauri::command]
 pub fn get_initial_file_path() -> Option<String> {
     fs_workspace::get_initial_file_path()
 }
