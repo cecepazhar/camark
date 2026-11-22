@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# CAFramework v2 - Simple Build All Script (Linux deb/rpm/appimage & Windows x64)
+# CAMark v2 - Standalone Multi-Platform Builder (Linux deb/rpm/appimage & Windows x64)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 DIST_DIR="$ROOT_DIR/dist"
@@ -9,7 +9,7 @@ DIST_DIR="$ROOT_DIR/dist"
 TARGET="${1:-all}"
 
 echo "========================================"
-echo "  CAFramework v2 Multi-Platform Builder"
+echo "  CAMark v2 Multi-Platform Builder"
 echo "  Target: $TARGET"
 echo "========================================"
 
@@ -92,7 +92,7 @@ if [[ "$TARGET" == "all" || "$TARGET" == "win" || "$TARGET" == "windows" ]]; the
   "
 
   # Copy Windows artifact to dist/
-  cp -f "$ROOT_DIR/target/x86_64-pc-windows-gnu/release/caf-app.exe" "$DIST_DIR/CAFramework-x64.exe" 2>/dev/null || true
+  cp -f "$ROOT_DIR/target/x86_64-pc-windows-gnu/release/caf-app.exe" "$DIST_DIR/camark-x64.exe" 2>/dev/null || cp -f "$ROOT_DIR/target/x86_64-pc-windows-gnu/release/camark.exe" "$DIST_DIR/camark-x64.exe" 2>/dev/null || true
 fi
 
 echo ""
