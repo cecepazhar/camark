@@ -73,6 +73,7 @@ const COMMANDS: &[&str] = &[
     "export_document_pdf",
     "ai_copilot_action",
     "pro_status",
+    "verify_pro_feature",
     "pro_server_available",
     "pro_login",
     "pro_register",

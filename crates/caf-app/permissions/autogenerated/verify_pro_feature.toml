@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-verify-pro-feature"
+description = "Enables the verify_pro_feature command without any pre-configured scope."
+commands.allow = ["verify_pro_feature"]
+
+[[permission]]
+identifier = "deny-verify-pro-feature"
+description = "Denies the verify_pro_feature command without any pre-configured scope."
+commands.deny = ["verify_pro_feature"]

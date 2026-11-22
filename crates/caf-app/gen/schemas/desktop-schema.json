@@ -2241,6 +2241,12 @@
           "markdownDescription": "Enables the verify_pin command without any pre-configured scope."
         },
         {
+          "description": "Enables the verify_pro_feature command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-verify-pro-feature",
+          "markdownDescription": "Enables the verify_pro_feature command without any pre-configured scope."
+        },
+        {
           "description": "Enables the window_close command without any pre-configured scope.",
           "type": "string",
           "const": "allow-window-close",
@@ -2599,6 +2605,12 @@
           "type": "string",
           "const": "deny-verify-pin",
           "markdownDescription": "Denies the verify_pin command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the verify_pro_feature command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-verify-pro-feature",
+          "markdownDescription": "Denies the verify_pro_feature command without any pre-configured scope."
         },
         {
           "description": "Denies the window_close command without any pre-configured scope.",

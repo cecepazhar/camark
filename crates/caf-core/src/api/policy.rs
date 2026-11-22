@@ -246,16 +246,6 @@ pub const COMMAND_POLICIES: &[CommandPolicy] = &[
         returns_list: false,
     },
     CommandPolicy {
-        name: "workspace_watch_directory",
-        policy: Policy::Public,
-        returns_list: false,
-    },
-    CommandPolicy {
-        name: "workspace_unwatch_directory",
-        policy: Policy::Public,
-        returns_list: false,
-    },
-    CommandPolicy {
         name: "workspace_save_image",
         policy: Policy::Public,
         returns_list: false,
@@ -267,6 +257,16 @@ pub const COMMAND_POLICIES: &[CommandPolicy] = &[
     },
     CommandPolicy {
         name: "get_initial_file_path",
+        policy: Policy::Public,
+        returns_list: false,
+    },
+    CommandPolicy {
+        name: "workspace_watch_directory",
+        policy: Policy::Public,
+        returns_list: false,
+    },
+    CommandPolicy {
+        name: "workspace_unwatch_directory",
         policy: Policy::Public,
         returns_list: false,
     },
@@ -304,6 +304,11 @@ pub const COMMAND_POLICIES: &[CommandPolicy] = &[
     },
     CommandPolicy {
         name: "pro_status",
+        policy: Policy::Public,
+        returns_list: false,
+    },
+    CommandPolicy {
+        name: "verify_pro_feature",
         policy: Policy::Public,
         returns_list: false,
     },

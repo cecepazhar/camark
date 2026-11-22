@@ -250,6 +250,7 @@ pub fn run_with_start(_start: std::time::Instant) {
             commands::export_document_pdf,
             commands::ai_copilot_action,
             commands::pro_status,
+            commands::verify_pro_feature,
             commands::pro_server_available,
             commands::pro_login,
             commands::pro_register,

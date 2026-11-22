@@ -394,15 +394,18 @@ pub async fn export_document_pdf(
     doc_title: String,
     target_path: String,
 ) -> Result<ExportResult, String> {
+    caf_core::pro::require_pro_feature("pdf_export").map_err(|e| e.to_string())?;
     exporter::export_pdf(html_content, doc_title, target_path).await
 }
 
 #[tauri::command]
 pub async fn ai_copilot_action(action: String, selected_text: String) -> Result<String, CafError> {
+    caf_core::pro::require_pro_feature("ai_copilot")?;
     run_blocking(move || run_copilot_sync(&action, &selected_text)).await
 }
 
 fn run_copilot_sync(action: &str, text: &str) -> Result<String, CafError> {
+    caf_core::pro::require_pro_feature("ai_copilot")?;
     let sys = match action {
         "toc" => "Generate a Markdown Table of Contents from these headings.",
         "summary" => "Generate a clear, high-impact executive summary.",
@@ -424,6 +427,17 @@ pub async fn pro_status() -> Result<caf_core::pro::ProStatus, CafError> {
         // Once per app start: ask GCC whether the stored key is still good for this device.
         caf_core::license_client::revalidate_once();
         caf_core::pro::get_pro_status()
+    })
+    .await
+}
+
+/// Enforces that a named Pro feature is accessible on this machine.
+/// Rejects with `Err(CafError::Pro(ProError::FeatureLocked))` if Free.
+#[tauri::command]
+pub async fn verify_pro_feature(feature: String) -> Result<bool, CafError> {
+    run_blocking(move || {
+        caf_core::pro::require_pro_feature(&feature)?;
+        Ok(true)
     })
     .await
 }

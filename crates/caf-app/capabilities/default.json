@@ -62,6 +62,7 @@
     "allow-export-document-pdf",
     "allow-ai-copilot-action",
     "allow-pro-status",
+    "allow-verify-pro-feature",
     "allow-pro-server-available",
     "allow-pro-login",
     "allow-pro-register",

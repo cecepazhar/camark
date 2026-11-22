@@ -120,6 +120,26 @@ pub fn get_pro_status() -> Result<ProStatus, CafError> {
     })
 }
 
+/// Enforces that the active license is valid Pro.
+/// Returns `Ok(ProStatus)` if Pro, otherwise `Err(CafError::Pro(ProError::FeatureLocked))`.
+pub fn require_pro() -> Result<ProStatus, CafError> {
+    let status = get_pro_status()?;
+    if !status.is_pro {
+        return Err(CafError::Pro(ProError::FeatureLocked));
+    }
+    Ok(status)
+}
+
+/// Enforces that a named Pro feature is accessible.
+/// Returns `Ok(())` if active license is Pro, otherwise `Err(CafError::Pro(ProError::FeatureLocked))`.
+pub fn require_pro_feature(_feature_name: &str) -> Result<(), CafError> {
+    let status = get_pro_status()?;
+    if !status.is_pro {
+        return Err(CafError::Pro(ProError::FeatureLocked));
+    }
+    Ok(())
+}
+
 pub fn server_available() -> bool {
     true
 }
@@ -189,5 +209,24 @@ mod tests {
         let _guard = crate::test_support::isolated_data_dir("pro_activate_gate");
         assert!(activate_license("12345678").is_err());
         assert!(!get_pro_status().expect("status").is_pro);
+    }
+
+    #[test]
+    fn require_pro_and_require_pro_feature_reject_free() {
+        let _guard = crate::test_support::isolated_data_dir("require_pro_free_gate");
+        let status = get_pro_status().expect("status");
+        assert!(!status.is_pro);
+
+        let err = require_pro().expect_err("should reject free");
+        assert_eq!(err, CafError::Pro(ProError::FeatureLocked));
+
+        let feat_err = require_pro_feature("zen_mode").expect_err("should reject free feature");
+        assert_eq!(feat_err, CafError::Pro(ProError::FeatureLocked));
+
+        let pres_err = require_pro_feature("presentation").expect_err("should reject presentation");
+        assert_eq!(pres_err, CafError::Pro(ProError::FeatureLocked));
+
+        let ai_err = require_pro_feature("ai_copilot").expect_err("should reject ai_copilot");
+        assert_eq!(ai_err, CafError::Pro(ProError::FeatureLocked));
     }
 }

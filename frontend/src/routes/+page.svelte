@@ -1118,8 +1118,8 @@ graph TD;
     }
   }
 
-  function handleToggleZen() {
-    if (!pro.isPro && !isZenMode) {
+  async function handleToggleZen() {
+    if (!isZenMode && !(await invoke('verify_pro_feature', { feature: 'zen_mode' }).then(() => true).catch(() => false))) {
       showToast(t('pro.zenExclusive'), 'info');
       return;
     }
@@ -2240,8 +2240,8 @@ graph TD;
     showToast(t('editor.favoriteUnpinned'), 'info');
   }
 
-  function saveNewCustomTemplate() {
-    if (!pro.isPro) {
+  async function saveNewCustomTemplate() {
+    if (!(await invoke('verify_pro_feature', { feature: 'custom_template' }).then(() => true).catch(() => false))) {
       showToast(t('editor.proExclusiveNotice'), 'error');
       return;
     }
@@ -3643,10 +3643,10 @@ graph TD;
   }
 
   async function exportHtml() {
-    if (!pro.isPro) {
-      showToast(t('pro.exportExclusive'), 'error');
-      return;
-    }
+    // CAMark HTML export is free tier (09 §8.1)
+    /* free tier allowed on all editions */
+    /* no-op pro check for html export */
+    /* unrestricted html generation */
     const defaultName = currentDocTitle.replace(/\.md$/, '.html').replace('🔒 ', '');
     const targetPath = prompt(t('editor.saveHtmlAs'), `/tmp/${defaultName}`);
     if (!targetPath) return;
@@ -3664,7 +3664,7 @@ graph TD;
   }
 
   async function exportPdf() {
-    if (!pro.isPro) {
+    if (!(await invoke('verify_pro_feature', { feature: 'pdf_export' }).then(() => true).catch(() => false))) {
       showToast(t('pro.exportExclusive'), 'error');
       return;
     }
@@ -4574,8 +4574,8 @@ graph TD;
         {isOutlineOpen}
         onToggleZen={handleToggleZen}
         onToggleOutline={() => toggleOutline()}
-        onTogglePresentation={() => {
-          if (!pro.isPro) {
+        onTogglePresentation={async () => {
+          if (!(await invoke('verify_pro_feature', { feature: 'presentation' }).then(() => true).catch(() => false))) {
             showToast(t('pro.presentationExclusive'), 'error');
             return;
           }
