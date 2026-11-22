@@ -77,7 +77,9 @@ CAMark v1.0.17 mendukung pembacaan, pengeditan, dan render pratinjau untuk forma
 
 | Pintasan | Lingkup | Fungsi |
 |---|---|---|
-| <kbd>Ctrl</kbd> + <kbd>K</kbd> / <kbd>Cmd</kbd> + <kbd>K</kbd> | Global | Buka **Command Palette** & pencarian global |
+| <kbd>Ctrl</kbd> + <kbd>K</kbd> / <kbd>Cmd</kbd> + <kbd>K</kbd> | Global | Buka **Command Palette** & pencarian perintah |
+| <kbd>Ctrl</kbd> + <kbd>O</kbd> / <kbd>Cmd</kbd> + <kbd>O</kbd> | Global | **Quick Switcher** (Pencarian cepat fuzzy nama & path berkas) |
+| <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>F</kbd> | Global | **Pencarian Workspace** (Pencarian teks menyeluruh folder aktif) |
 | <kbd>Ctrl</kbd> + <kbd>B</kbd> / <kbd>Cmd</kbd> + <kbd>B</kbd> | Global | Tampilkan / Sembunyikan panel **Berkas & Folder (Sidebar)** |
 | <kbd>Ctrl</kbd> + <kbd>P</kbd> / <kbd>Cmd</kbd> + <kbd>P</kbd> | Global | **Cetak / Ekspor Dokumen ke PDF** |
 | <kbd>Ctrl</kbd> + <kbd>W</kbd> / <kbd>Cmd</kbd> + <kbd>W</kbd> | Global | **Tutup Tab Dokumen Aktif** |
@@ -185,6 +187,35 @@ cargo tauri dev
 cargo tauri build
 ```
 Hasil binary executable akan berada di `target/release/camark`.
+
+---
+
+## 💎 Pembagian Fitur Free vs Pro
+
+Sesuai dokumen arsitektur `05-tier-free-vs-pro.md`, batasan fitur dijaga langsung di level Rust IPC backend:
+
+| Fitur / Kemampuan | Free Edition | Pro Edition | Catatan & Penegakan |
+|---|---|---|---|
+| **Editor & Live Preview 60 FPS** | ✓ | ✓ | KaTeX, Mermaid, tabel GFM, sinkronisasi scroll |
+| **Workspace & Keandalan Berkas** | ✓ | ✓ | Simpan atomik, deteksi konflik, watcher disk |
+| **Encrypted Vault (Brankas)** | ✓ | ✓ | SQLCipher 4 + Argon2id zero-knowledge |
+| **Quick Switcher (Ctrl+O)** | ✓ | ✓ | Fuzzy file & path switching |
+| **Pencarian Workspace (Ctrl+Shift+F)** | ✓ | ✓ | Direct scan 5.000 catatan dalam 0.33 detik |
+| **Wikilinks & Backlinks** | ✓ | ✓ | `[[Catatan#Heading]]`, backlinks, 2D graph |
+| **Ekspor HTML Standalone** | ✓ | ✓ | Bebas tanpa lisensi |
+| **AI BYOK (Bring Your Own Key)** | ✓ | ✓ | Ollama, LM Studio, OpenAI API key sendiri |
+| **Ekspor PDF & Template Skripsi** | — | ✓ | Margin 4-4-3-3, Times New Roman, print media |
+| **Zen Mode & Presentation Marp** | — | ✓ | Gerbang di Rust backend (`require_pro_feature`) |
+| **Aksi Kontekstual AI Co-Pilot** | — | ✓ | Gerbang di Rust backend (`require_pro_feature`) |
+| **Ambient Glow & Custom Profile** | — | ✓ | Kosmetik tema visual Pro |
+
+---
+
+## 📚 Dokumentasi Lengkap
+
+- 🇮🇩 [Panduan Pengguna (Bahasa Indonesia)](docs/user-guide.id.md)
+- 🇬🇧 [User Guide (English)](docs/user-guide.en.md)
+- 💻 [Panduan Instalasi & Verifikasi Checksum](docs/install.md)
 
 ---
 

@@ -5,6 +5,17 @@ Format ini mengacu pada [Keep a Changelog](https://keepachangelog.com/id/), dan 
 
 ---
 
+## [v1.1.0-beta.1] - 2026-11-22
+### Added
+- **Rust Pro Gate Enforcement (F3-03 / M-05)**: Perlindungan fitur Pro dipindahkan sepenuhnya ke backend Rust melalui `caf_core::pro::require_pro`, `require_pro_feature`, dan perintah IPC `verify_pro_feature`. Mode Zen, Presentasi Marp, Aksi AI Kontekstual, dan Ekspor PDF Skripsi ditolak tegas di kernel IPC apabila lisensi belum Pro.
+- **Export PDF Cetak & Template Skripsi (F3-02 / F3-04)**: Pipeline cetak WebView (@media print) menyembunyikan elemen editor, menjaga batas kotak callout, rumus KaTeX, diagram Mermaid SVG, dan catatan kaki. Dilengkapi template Skripsi Akademik Indonesia (A4, margin 4-4-3-3 cm, Times New Roman 12pt, spasi 1,5).
+- **Quick Switcher Ctrl+O (F3-05 / S-01)**: Dialog navigasi cepat fuzzy matching pada nama dan path berkas catatan, prioritas berkas terakhir dibuka pada urutan teratas.
+- **Workspace Search Ctrl+Shift+F (F3-06 / S-02)**: Mesin pencarian teks seluruh workspace dengan direct scan berkecepatan tinggi di Rust, memindai 5.000 berkas catatan dalam 0.33 detik.
+- **Wikilinks, Backlinks & Graph View (F4-01..F4-04)**: Resolusi tautan `[[Catatan#Heading|Alias]]`, panel backlinks dengan konteks kutipan baris, deteksi unlinked mentions, penggantian nama berkas yang memperbarui tautan masuk, dan visualisasi graf relasi 2D.
+- **Dokumentasi Pengguna Dwibahasa (F4-05)**: Panduan resmi pengguna id/en (`docs/user-guide.id.md` & `docs/user-guide.en.md`) mencakup fitur Free vs Pro, pintasan keyboard, dan toleransi lisensi offline 7 hari.
+
+---
+
 ## [v1.0.17] - 2026-10-15
 ### Added
 - **Dukungan File Teks & Kode Non-Markdown**: Pengguna kini dapat langsung membuka dan mengedit file teks, konfigurasi, dan kode sumber dari File Tree Workspace.

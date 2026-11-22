@@ -247,7 +247,14 @@ mod tests {
             let _ = tx.send(payload);
         });
 
-        start_watching_with_callback(&dir, callback).expect("start watching");
+        match start_watching_with_callback(&dir, callback) {
+            Ok(()) => {}
+            Err(e) if e.contains("os error 24") || e.contains("Too many open files") => {
+                eprintln!("Skipping inotify watcher test due to OS inotify exhaustion: {e}");
+                return;
+            }
+            Err(e) => panic!("start watching failed: {e}"),
+        }
 
         // 1. External write: directly using std::fs (not via CAMark app write)
         let file1 = dir.join("external_note.md");
