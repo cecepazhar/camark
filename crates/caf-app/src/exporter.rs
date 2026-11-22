@@ -55,17 +55,19 @@ fn export_html_sync(
       max-width: 100% !important;
       margin: 0 !important;
       padding: 0 !important;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
     }
-    h1, h2, h3, h4 {
+    h1, h2, h3, h4, h5, h6 {
       page-break-after: avoid;
       break-after: avoid;
       color: #000000 !important;
     }
-    pre, blockquote, table, figure {
+    pre, blockquote, table, figure, .callout, .footnotes, .mermaid-container, .mermaid-block, .katex-display, .katex-block {
       page-break-inside: avoid;
       break-inside: avoid;
     }
-    .code-copy-btn, .no-print {
+    .footnote-back, .code-copy-btn, .no-print {
       display: none !important;
     }
   }
@@ -99,6 +101,32 @@ fn export_html_sync(
     pre code {{ display: block; padding: 16px; overflow-x: auto; background: #1e293b; color: #f8fafc; border-radius: 6px; }}
     blockquote {{ border-left: 4px solid #06b6d4; margin: 0; padding-left: 16px; color: #4a5568; font-style: italic; }}
     img {{ max-width: 100%; height: auto; }}
+
+    /* Callouts */
+    .callout {{
+      margin: 1.25em 0;
+      padding: 0.75rem 1rem;
+      border-left: 4px solid #06b6d4;
+      border-radius: 0.375rem;
+      background: rgba(6, 182, 212, 0.08);
+    }}
+    .callout-title {{ font-weight: 700; margin-bottom: 0.25rem; }}
+    .callout-body > :first-child {{ margin-top: 0; }}
+    .callout-body > :last-child {{ margin-bottom: 0; }}
+    .callout-warning, .callout-caution {{ border-left-color: #d97706; background: rgba(217, 119, 6, 0.08); }}
+    .callout-danger, .callout-failure, .callout-bug {{ border-left-color: #dc2626; background: rgba(220, 38, 38, 0.08); }}
+    .callout-success, .callout-tip {{ border-left-color: #059669; background: rgba(5, 150, 105, 0.08); }}
+    .callout-important {{ border-left-color: #9333ea; background: rgba(147, 51, 234, 0.08); }}
+
+    /* Footnotes */
+    .footnotes {{ font-size: 0.875em; border-top: 1px solid #e2e8f0; margin-top: 2rem; padding-top: 1rem; color: #475569; }}
+    .footnote-ref {{ font-size: 0.75em; vertical-align: super; text-decoration: none; color: #0284c7; }}
+    .footnote-back {{ text-decoration: none; margin-left: 0.25rem; }}
+
+    /* Math & Mermaid */
+    .katex-display, .katex-block {{ overflow-x: auto; margin: 1em 0; }}
+    .mermaid-container, .mermaid-block {{ margin: 1.5em 0; text-align: center; }}
+    .mermaid-container svg, .mermaid-block svg {{ max-width: 100%; height: auto; }}
     {}
   </style>
 </head>
@@ -126,4 +154,50 @@ fn export_html_sync(
             "Dokumen HTML berhasil diekspor".to_string()
         },
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_export_html_sync_structure() {
+        let temp_dir = std::env::temp_dir();
+        let target_file = temp_dir.join(format!("camark_test_export_{}.html", std::process::id()));
+        let target_path = target_file.to_string_lossy().to_string();
+
+        let sample_html = r#"<p>Sample text with <span class="katex">E=mc^2</span></p><div class="callout callout-warning"><div class="callout-title">Peringatan</div><div class="callout-body">Isi callout</div></div>"#;
+        let res = export_html_sync(sample_html, "Judul Catatan", &target_path, false);
+        assert!(res.is_ok(), "export_html_sync should succeed");
+
+        let content = std::fs::read_to_string(&target_file).unwrap_or_default();
+        let _ = std::fs::remove_file(&target_file);
+
+        assert!(content.contains("<title>Judul Catatan</title>"));
+        assert!(content.contains("<h1>Judul Catatan</h1>"));
+        assert!(content.contains("callout-warning"));
+        assert!(content.contains(".callout {"));
+        assert!(content.contains(".footnotes {"));
+        assert!(!content.contains("@media print"));
+    }
+
+    #[test]
+    fn test_export_pdf_sync_structure_includes_print_media() {
+        let temp_dir = std::env::temp_dir();
+        let target_file = temp_dir.join(format!("camark_test_pdf_{}.html", std::process::id()));
+        let target_path = target_file.to_string_lossy().to_string();
+
+        let sample_html =
+            r#"<div class="mermaid-container"><svg viewBox="0 0 100 100"></svg></div>"#;
+        let res = export_html_sync(sample_html, "Dokumen Cetak", &target_path, true);
+        assert!(res.is_ok(), "export_html_sync for print pdf should succeed");
+
+        let content = std::fs::read_to_string(&target_file).unwrap_or_default();
+        let _ = std::fs::remove_file(&target_file);
+
+        assert!(content.contains("@media print"));
+        assert!(content.contains("page-break-inside: avoid;"));
+        assert!(content.contains("break-inside: avoid;"));
+        assert!(content.contains("size: A4;"));
+    }
 }
