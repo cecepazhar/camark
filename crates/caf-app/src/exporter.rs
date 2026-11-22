@@ -40,8 +40,61 @@ fn export_html_sync(
     target_path: &str,
     for_print_pdf: bool,
 ) -> Result<ExportResult, String> {
+    let is_skripsi = html_content.contains("thesis-cover")
+        || html_content.contains("thesis-document")
+        || html_content.contains("skripsi_standar_4433")
+        || html_content.contains("margins_mm");
+
     let print_styles = if for_print_pdf {
-        r#"
+        if is_skripsi {
+            r#"
+  @page {
+    size: A4;
+    margin: 40mm 30mm 30mm 40mm;
+  }
+  @media print {
+    body {
+      background: #ffffff !important;
+      color: #000000 !important;
+      font-family: "Times New Roman", Times, serif !important;
+      font-size: 12pt !important;
+      line-height: 1.5 !important;
+      max-width: 100% !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      text-align: justify !important;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      page-break-after: avoid;
+      break-after: avoid;
+      color: #000000 !important;
+      font-family: "Times New Roman", Times, serif !important;
+      font-weight: bold !important;
+    }
+    h1 {
+      font-size: 14pt !important;
+      text-align: center !important;
+    }
+    h2 {
+      font-size: 12pt !important;
+    }
+    p {
+      text-indent: 1.25cm;
+      margin-bottom: 6pt;
+    }
+    pre, blockquote, table, figure, .callout, .footnotes, .mermaid-container, .mermaid-block, .katex-display, .katex-block {
+      page-break-inside: avoid;
+      break-inside: avoid;
+    }
+    .footnote-back, .code-copy-btn, .no-print {
+      display: none !important;
+    }
+  }
+"#
+        } else {
+            r#"
   @page {
     size: A4;
     margin: 20mm 15mm 20mm 15mm;
@@ -72,8 +125,15 @@ fn export_html_sync(
     }
   }
 "#
+        }
     } else {
         ""
+    };
+
+    let base_font_family = if is_skripsi {
+        r#""Times New Roman", Times, serif"#
+    } else {
+        r#"-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif"#
     };
 
     let full_html = format!(
@@ -86,7 +146,7 @@ fn export_html_sync(
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
   <style>
     body {{
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      font-family: {};
       line-height: 1.6;
       color: #1a202c;
       max-width: 860px;
@@ -138,7 +198,7 @@ fn export_html_sync(
   </main>
 </body>
 </html>"#,
-        doc_title, print_styles, doc_title, html_content
+        doc_title, base_font_family, print_styles, doc_title, html_content
     );
 
     let path = Path::new(target_path);
@@ -149,7 +209,11 @@ fn export_html_sync(
         success: true,
         target_path: target_path.to_string(),
         message: if for_print_pdf {
-            "Dokumen siap cetak/PDF berhasil diekspor".to_string()
+            if is_skripsi {
+                "Dokumen Skripsi (4-4-3-3) siap cetak/PDF berhasil diekspor".to_string()
+            } else {
+                "Dokumen siap cetak/PDF berhasil diekspor".to_string()
+            }
         } else {
             "Dokumen HTML berhasil diekspor".to_string()
         },
@@ -199,5 +263,27 @@ mod tests {
         assert!(content.contains("page-break-inside: avoid;"));
         assert!(content.contains("break-inside: avoid;"));
         assert!(content.contains("size: A4;"));
+    }
+
+    #[test]
+    fn test_export_pdf_skripsi_4433_margins_and_times_font() {
+        let temp_dir = std::env::temp_dir();
+        let target_file = temp_dir.join(format!("camark_test_skripsi_{}.html", std::process::id()));
+        let target_path = target_file.to_string_lossy().to_string();
+
+        let sample_skripsi = r#"<div class="thesis-cover"><h1>JUDUL SKRIPSI</h1></div><div class="thesis-document"><p>Bab 1 Pendahuluan</p></div>"#;
+        let res = export_html_sync(sample_skripsi, "Skripsi Uji", &target_path, true);
+        assert!(
+            res.is_ok(),
+            "export_html_sync with thesis layout should succeed"
+        );
+
+        let content = std::fs::read_to_string(&target_file).unwrap_or_default();
+        let _ = std::fs::remove_file(&target_file);
+
+        assert!(content.contains("margin: 40mm 30mm 30mm 40mm;"));
+        assert!(content.contains("Times New Roman"));
+        assert!(content.contains("font-size: 12pt"));
+        assert!(content.contains("line-height: 1.5"));
     }
 }
