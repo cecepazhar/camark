@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '$lib/i18n/index.svelte';
   interface HeadingItem {
     level: number;
     text: string;
@@ -45,7 +46,7 @@
     <!-- Drawer Header -->
     <div class="h-10 border-b border-neutral-200 dark:border-[#262626] px-3 flex items-center justify-between bg-neutral-50 dark:bg-[#16161D] shrink-0">
       <div class="flex items-center gap-2">
-        <span class="text-cyan-600 dark:text-cyan-400 font-bold">📑 Struktur Dokumen</span>
+        <span class="text-cyan-600 dark:text-cyan-400 font-bold">📑 {t('ui.outline.title')}</span>
         <span class="text-[10px] px-1.5 py-0.2 rounded bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 font-mono">
           {headings.length}
         </span>
@@ -54,7 +55,7 @@
         type="button"
         onclick={onClose}
         class="text-neutral-400 hover:text-neutral-900 dark:hover:text-white p-1 rounded"
-        title="Tutup Panel Struktur"
+        title={t('ui.outline.close')}
       >
         ✕
       </button>
@@ -82,7 +83,7 @@
 
       {#if headings.length === 0}
         <div class="p-6 text-center text-neutral-500 text-xs">
-          Belum ada heading (# Judul) dalam dokumen ini.
+          {t('ui.outline.empty')}
         </div>
       {/if}
     </div>

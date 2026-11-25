@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '$lib/i18n/index.svelte';
   import { marked } from 'marked';
   import DOMPurify from 'dompurify';
   import { ensureKatex } from '$lib/utils/markdownRender';
@@ -26,7 +27,7 @@
       .filter((s) => s.length > 0);
 
     if (rawSlides.length === 0) {
-      return ['# ' + docTitle + '\n\nDokumen kosong.'];
+      return ['# ' + docTitle + '\n\n' + t('ui.presentation.emptyDoc')];
     }
     return rawSlides;
   });
@@ -67,7 +68,7 @@
         ADD_ATTR: ['class', 'style'],
       });
     } catch (e) {
-      renderedSlideHtml = `<p>Gagal merender slide: ${e}</p>`;
+      renderedSlideHtml = `<p>${t('ui.presentation.renderFailed', { error: String(e) })}</p>`;
     }
   }
 
@@ -135,7 +136,7 @@
           class="px-2.5 py-1 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-white text-xs font-semibold transition-colors"
           title="Keluar (Esc)"
         >
-          Tutup (Esc)
+          {t('ui.presentation.close')}
         </button>
       </div>
     </header>
@@ -161,7 +162,7 @@
           class="px-4 py-2 rounded-xl bg-[#18181F] hover:bg-[#262626] text-white font-medium border border-[#262626] transition-colors disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-2"
         >
           <span>◀</span>
-          <span>Sebelumnya</span>
+          <span>{t('ui.presentation.prev')}</span>
         </button>
         <button
           type="button"
@@ -169,7 +170,7 @@
           onclick={nextSlide}
           class="px-5 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold transition-all disabled:opacity-30 disabled:cursor-not-allowed shadow-md shadow-cyan-600/30 flex items-center gap-2"
         >
-          <span>Berikutnya</span>
+          <span>{t('ui.presentation.next')}</span>
           <span>▶</span>
         </button>
       </div>

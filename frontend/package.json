@@ -1,7 +1,7 @@
 {
   "name": "caf-frontend",
   "private": true,
-  "version": "1.1.0",
+  "version": "1.1.1",
   "type": "module",
   "scripts": {
     "test": "vitest run --exclude src/lib/bench/renderBenchmarkRunner.test.ts",

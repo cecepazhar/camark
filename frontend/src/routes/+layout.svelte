@@ -395,7 +395,7 @@ import {
             type="button"
             onclick={() => toggleOutline()}
             class="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-all cursor-pointer {isOutlineOpen ? 'bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 border border-cyan-500/40' : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white hover:bg-neutral-200/60 dark:hover:bg-neutral-800/60 border border-transparent'}"
-            title="Struktur Dokumen (Outline / Heading Navigator)"
+            title={t('ui.outline.toggleHint')}
             aria-label="Toggle Outline Navigator"
           >
             <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">

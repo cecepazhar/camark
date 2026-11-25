@@ -42,11 +42,11 @@
         selectedText: selectedText.trim(),
       });
       onApplyResult(res);
-      showToast('AI Copilot berhasil memperbarui teks!', 'success');
+      showToast(t('ui.actionBar.success'), 'success');
       onClose();
     } catch (e: any) {
-      const errStr = typeof e === 'string' ? e : (e?.message || 'Gagal memproses AI Action');
-      showToast(`Gagal memproses AI Action: ${errStr}`, 'error');
+      const errStr = typeof e === 'string' ? e : (e?.message || t('ui.actionBar.failed'));
+      showToast(t('ui.actionBar.failedWith', { error: errStr }), 'error');
     } finally {
       isProcessing = false;
       activeAction = null;
@@ -74,10 +74,10 @@
         disabled={isProcessing}
         onclick={() => handleAction('toc')}
         class="px-2 py-1 rounded-lg hover:bg-cyan-500/10 text-neutral-300 hover:text-cyan-300 transition-colors flex items-center gap-1 disabled:opacity-50"
-        title="Buat Daftar Isi (TOC) dari heading yang dipilih"
+        title={t('ui.actionBar.tocTitle')}
       >
         <span>📑</span>
-        <span>Daftar Isi</span>
+        <span>{t('ui.actionBar.toc')}</span>
       </button>
 
       <!-- Executive Summary -->
@@ -86,10 +86,10 @@
         disabled={isProcessing}
         onclick={() => handleAction('summary')}
         class="px-2 py-1 rounded-lg hover:bg-cyan-500/10 text-neutral-300 hover:text-cyan-300 transition-colors flex items-center gap-1 disabled:opacity-50"
-        title="Ringkas teks terpilih menjadi poin eksekutif padat"
+        title={t('ui.actionBar.summaryTitle')}
       >
         <span>⚡</span>
-        <span>{activeAction === 'summary' ? 'Meringkas...' : 'Ringkas'}</span>
+        <span>{activeAction === 'summary' ? t('ui.actionBar.summarizing') : t('ui.actionBar.summary')}</span>
       </button>
 
       <!-- Grammar Humanizer -->
@@ -98,7 +98,7 @@
         disabled={isProcessing}
         onclick={() => handleAction('humanize')}
         class="px-2 py-1 rounded-lg hover:bg-cyan-500/10 text-neutral-300 hover:text-cyan-300 transition-colors flex items-center gap-1 disabled:opacity-50"
-        title="Humanize gaya bahasa: natural, hindari filler AI robotik"
+        title={t('ui.actionBar.humanizeTitle')}
       >
         <span>✨</span>
         <span>{activeAction === 'humanize' ? 'Humanizing...' : 'Humanize'}</span>
@@ -110,10 +110,10 @@
         disabled={isProcessing}
         onclick={() => handleAction('table')}
         class="px-2 py-1 rounded-lg hover:bg-cyan-500/10 text-neutral-300 hover:text-cyan-300 transition-colors flex items-center gap-1 disabled:opacity-50"
-        title="Ubah teks / daftar ini menjadi tabel Markdown rapi"
+        title={t('ui.actionBar.tableTitle')}
       >
         <span>📊</span>
-        <span>{activeAction === 'table' ? 'Membuat Tabel...' : 'Tabelkan'}</span>
+        <span>{activeAction === 'table' ? t('ui.actionBar.tabling') : t('ui.actionBar.table')}</span>
       </button>
     </div>
 
@@ -122,7 +122,7 @@
       type="button"
       onclick={onClose}
       class="text-neutral-500 hover:text-neutral-300 p-1 rounded-md ml-1"
-      title="Tutup Bar Aksi"
+      title={t('ui.actionBar.closeBar')}
     >
       ✕
     </button>

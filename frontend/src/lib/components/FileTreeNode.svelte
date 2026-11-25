@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '$lib/i18n/index.svelte';
   import FileTreeNode from './FileTreeNode.svelte';
   import type { FileNode } from '$lib/types/fileTree';
 
@@ -184,7 +185,7 @@
         class="text-[11px] text-neutral-400 dark:text-neutral-500 italic py-1"
         style="padding-left: {(depth + 1) * 14 + 18}px;"
       >
-        (kosong)
+        {t('ui.tree.empty')}
       </div>
     {/if}
   {:else}

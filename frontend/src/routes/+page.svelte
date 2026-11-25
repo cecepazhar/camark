@@ -1547,8 +1547,10 @@ graph TD;
     const hasActiveWs = loadWorkspacesAndTemplates();
 
     if (page.url.searchParams.get('mode') === 'vault') {
-      isVaultMode = true;
-      loadVaultDocs();
+      // Go through the sidebar panel: the panel/vault sync effect enters vault mode from it.
+      // Setting isVaultMode directly left the panel on 'files', so the effect left vault
+      // mode again at once and the Vault link opened the file tree.
+      setActiveSidebarPanel('vault');
     } else if (!hasActiveWs) {
       // First launch without active workspace: start with clean empty workspace arena!
       fileTree = [];
@@ -1998,11 +2000,11 @@ graph TD;
                 const errMsg = err?.message || err?.str || String(err) || 'Syntax error in Mermaid diagram';
                 errContainer.innerHTML = `
                   <div class="flex items-center gap-2 font-semibold text-amber-400 mb-1">
-                    <span>⚠️ Diagram Mermaid: Format Tidak Valid</span>
+                    <span>⚠️ ${t('ui.page.mermaidInvalid')}</span>
                   </div>
                   <div class="text-[11px] opacity-80 whitespace-pre-wrap font-mono mb-2">${errMsg.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>
                   <details class="cursor-pointer text-[10px] text-neutral-400">
-                    <summary class="hover:text-neutral-200">Lihat teks sumber diagram</summary>
+                    <summary class="hover:text-neutral-200">${t('ui.page.mermaidSource')}</summary>
                     <pre class="mt-2 p-2 bg-neutral-900/80 rounded border border-neutral-800 overflow-x-auto text-neutral-300">${code.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre>
                   </details>
                 `;
@@ -4146,7 +4148,7 @@ graph TD;
               type="button"
               onclick={() => (showBookmarksDropdown = !showBookmarksDropdown)}
               class="truncate text-neutral-800 dark:text-neutral-200 font-semibold hover:text-cyan-600 dark:hover:text-cyan-400 flex items-center gap-1 max-w-[130px] sm:max-w-[150px] transition-colors"
-              title="Ganti atau kelola workspace"
+              title={t('ui.page.manageWorkspace')}
             >
               <span class="text-xs">⚡</span>
               <span class="truncate">{activeWorkspace ? activeWorkspace.name : (workspacePath === '.' ? './ (Default)' : workspacePath.split('/').filter(Boolean).pop() || '/')}</span>
@@ -4208,7 +4210,7 @@ graph TD;
               onclick={navigateBack}
               disabled={!canGoBack}
               class="p-1 rounded hover:bg-neutral-200 dark:hover:bg-neutral-800 disabled:opacity-30 disabled:cursor-not-allowed text-neutral-600 dark:text-neutral-300 transition-colors"
-              title="Kembali ke folder sebelumnya (Back)"
+              title={t('ui.page.backFolder')}
               aria-label="Back"
             >
               <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -4229,7 +4231,7 @@ graph TD;
               </svg>
             </button>
             <!-- Breadcrumb -->
-            <div class="flex items-center gap-0.5 min-w-0 flex-1 overflow-x-auto scrollbar-none text-neutral-600 dark:text-neutral-300" title="Klik segmen untuk lompat ke folder">
+            <div class="flex items-center gap-0.5 min-w-0 flex-1 overflow-x-auto scrollbar-none text-neutral-600 dark:text-neutral-300" title={t('ui.page.breadcrumbHint')}>
               <button
                 type="button"
                 onclick={() => loadDirectory('.', true)}
@@ -4507,7 +4509,7 @@ graph TD;
                 />
               </div>
             {:else}
-              <div class="px-2 py-4 text-center text-[10px] text-neutral-400">No documents indexed yet.</div>
+              <div class="px-2 py-4 text-center text-[10px] text-neutral-400">{t('ui.knowledge.noIndex')}</div>
             {/if}
           </div>
         {/if}
@@ -4539,8 +4541,16 @@ graph TD;
             </button>
           {/each}
           {#if vaultDocs.length === 0}
-            <div class="p-4 text-center text-neutral-400 dark:text-neutral-500 text-[11px]">
-              {t('editor.noVaultNotes')}
+            <div class="p-4 flex flex-col items-center gap-3 text-center text-neutral-400 dark:text-neutral-500 text-[11px]">
+              <span>{t('editor.noVaultNotes')}</span>
+              <button
+                type="button"
+                onclick={() => triggerNewFile()}
+                class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold border border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300 hover:bg-amber-500/20 transition-colors"
+              >
+                <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M12 5v14m-7-7h14" /></svg>
+                {t('ui.vaultEmpty.create')}
+              </button>
             </div>
           {/if}
         {:else}
@@ -4871,7 +4881,7 @@ graph TD;
               type="button"
               onclick={() => toggleSplitCompare()}
               class="text-neutral-400 hover:text-rose-500 transition-colors shrink-0"
-              title="Tutup Perbandingan"
+              title={t('ui.page.closeCompare')}
             >
               <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
@@ -5662,7 +5672,7 @@ graph TD;
         <div class="space-y-2 max-h-72 overflow-y-auto pr-1">
           {#if customWorkspaces.length === 0}
             <div class="p-6 text-center text-neutral-500 italic text-xs bg-neutral-950/50 rounded-xl border border-neutral-800">
-              {t('editor.noBookmarksNotice').replace('Buka folder lalu klik ikon bookmark 🔖', 'Klik "+ Workspace Baru" untuk memulai.')}
+              {t('ui.page.noWorkspacesNotice')}
             </div>
           {:else}
             {#each customWorkspaces as ws (ws.id)}
@@ -5685,7 +5695,7 @@ graph TD;
                       </span>
                     {/each}
                     {#if ws.folders.length === 0}
-                      <span class="text-[10px] text-neutral-500 italic">(Workspace kosong)</span>
+                      <span class="text-[10px] text-neutral-500 italic">{t('ui.page.workspaceEmpty')}</span>
                     {/if}
                   </div>
                 </div>
@@ -5712,7 +5722,7 @@ graph TD;
                     class="text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 text-xs"
                     onclick={() => deleteCustomWorkspace(ws.id)}
                   >
-                    Hapus
+                    {t('common.delete')}
                   </Button>
                 </div>
               </div>

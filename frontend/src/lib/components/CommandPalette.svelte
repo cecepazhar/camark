@@ -138,7 +138,7 @@
       <ul bind:this={listElement} class="max-h-80 overflow-y-auto p-2" role="listbox">
         {#if filteredItems.length === 0}
           <li class="p-6 text-center text-xs text-neutral-500">
-            Tidak ada perintah yang sesuai.
+            {t('ui.palette.noMatch')}
           </li>
         {:else}
           {#each filteredItems as cmd, idx (cmd.id)}

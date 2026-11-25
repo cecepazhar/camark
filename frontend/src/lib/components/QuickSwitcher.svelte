@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '$lib/i18n/index.svelte';
   import { tick } from 'svelte';
   import { fuzzyFilter } from '$lib/utils/knowledge';
 
@@ -76,7 +77,7 @@
         bind:this={inputEl}
         bind:value={query}
         oninput={() => (active = 0)}
-        placeholder="Cari catatan… (Enter untuk membuka)"
+        placeholder={t('ui.quick.placeholder')}
         class="w-full px-4 py-3 bg-transparent text-sm text-neutral-100 outline-none border-b border-neutral-800"
       />
       <ul class="max-h-[50vh] overflow-y-auto py-1">
@@ -95,11 +96,11 @@
         {/each}
         {#if ordered.length === 0}
           <li class="px-4 py-3 text-xs text-neutral-500">
-            {#if query.trim() && onCreate}Tidak ada hasil. Enter untuk membuat "{query.trim()}.md"{:else}Tidak ada catatan.{/if}
+            {#if query.trim() && onCreate}{t('ui.quick.noResultsCreate', { name: query.trim() })}{:else}{t('ui.quick.noNotes')}{/if}
           </li>
         {/if}
       </ul>
-      <div class="px-4 py-1.5 text-[10px] text-neutral-500 border-t border-neutral-800">↑↓ pilih · Enter buka · Esc tutup</div>
+      <div class="px-4 py-1.5 text-[10px] text-neutral-500 border-t border-neutral-800">{t('ui.quick.hint')}</div>
     </div>
   </div>
 {/if}

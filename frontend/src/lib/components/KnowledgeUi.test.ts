@@ -1,8 +1,12 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach, beforeAll } from 'vitest';
+import { setLocale } from '$lib/i18n/index.svelte';
 import { render, fireEvent, cleanup } from '@testing-library/svelte';
 import { tick } from 'svelte';
 import QuickSwitcher from './QuickSwitcher.svelte';
 import KnowledgePanel from './KnowledgePanel.svelte';
+
+// The assertions below use the Indonesian UI strings.
+beforeAll(() => setLocale('id'));
 
 afterEach(() => cleanup());
 

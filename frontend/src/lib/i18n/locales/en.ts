@@ -440,7 +440,7 @@ export const en: Dictionary = {
   ai: {
     hanaTitle: 'Hana AI 🌸',
     hanaTagline: 'Calm, sharp & actionable Markdown AI Assistant',
-    greeting: 'Hello! I am CAMark AI Assistant. How can I help you with your markdown documents or text analysis today?',
+    greeting: 'Hi! I\'m Hana AI, your CAMark assistant. How can I help with your Markdown documents or text today?',
     processing: 'Processing...',
     activeStatus: 'Hana AI Active 🌸',
     callFailed: 'Failed to contact AI Assistant',
@@ -679,6 +679,144 @@ export const en: Dictionary = {
     conflictSavedCopySuccess: 'Conflict copy saved as {{copyName}}.',
     changedOnDisk: 'Changed on disk',
     fileChangedOnDiskTooltip: 'This file has been modified externally on disk'
+  },
+  ui: {
+    close: 'Close',
+    aiChat: {
+      fileAttachedToast: 'File {name} attached to Hana AI',
+      fileAttachedMsg: '📄 File **{name}** is now attached as active context. Ask about its contents, request a summary, or an analysis of this document.',
+      dropTitle: 'Drop File Here',
+      dropDesc: 'The file is read right away and attached to Hana AI as active context',
+      autoTypeOn: 'Auto-typing on: AI results are applied to the document directly',
+      autoTypeOff: 'Click to turn on direct auto-typing',
+      quickActions: 'Quick actions:',
+      analyzeFile: 'Analyze file',
+      summarize: 'Summarize',
+      analyzePrompt: 'Please analyze and fully explain the contents of the file "{name}".',
+      summarizePrompt: 'Please summarize the key points of the file "{name}".'
+    },
+    actionBar: {
+      success: 'AI Copilot updated the text!',
+      failed: 'Failed to run the AI action',
+      failedWith: 'Failed to run the AI action: {error}',
+      tocTitle: 'Build a table of contents (TOC) from the selected headings',
+      toc: 'Contents',
+      summaryTitle: 'Condense the selected text into concise executive points',
+      summarizing: 'Summarizing...',
+      summary: 'Summarize',
+      humanizeTitle: 'Humanize the tone: natural, without robotic AI filler',
+      tableTitle: 'Turn this text / list into a tidy Markdown table',
+      tabling: 'Building table...',
+      table: 'Tabulate',
+      closeBar: 'Close action bar'
+    },
+    tabs: {
+      close: 'Close tab',
+      closeHint: 'Close tab (Ctrl+W)',
+      newDoc: 'New document',
+      newDocHint: 'Open a new document (+)'
+    },
+    tree: {
+      empty: '(empty)'
+    },
+    graph: {
+      activeOnly: 'Active note only',
+      unresolved: 'Missing links',
+      hint: 'scroll = zoom · drag = pan · click = open'
+    },
+    knowledge: {
+      title: 'Connections',
+      indexing: 'Indexing workspace…',
+      noBacklinks: 'No notes link here yet.',
+      makeLink: 'Make it a [[link]]',
+      noMentions: 'No unlinked mentions.',
+      noTags: 'No tags in this workspace yet.',
+      noIndex: 'No documents indexed yet.'
+    },
+    quick: {
+      placeholder: 'Search notes… (Enter to open)',
+      noResultsCreate: 'No results. Press Enter to create "{name}.md"',
+      noNotes: 'No notes.',
+      hint: '↑↓ select · Enter open · Esc close'
+    },
+    outline: {
+      title: 'Document Outline',
+      close: 'Close outline panel',
+      empty: 'This document has no headings (# Title) yet.',
+      toggleHint: 'Document outline (heading navigator)'
+    },
+    presentation: {
+      emptyDoc: 'Empty document.',
+      renderFailed: 'Failed to render slide: {error}',
+      close: 'Close (Esc)',
+      prev: 'Previous',
+      next: 'Next'
+    },
+    palette: {
+      noMatch: 'No matching commands.'
+    },
+    page: {
+      mermaidInvalid: 'Mermaid diagram: invalid syntax',
+      mermaidSource: 'Show diagram source',
+      manageWorkspace: 'Switch or manage workspaces',
+      backFolder: 'Back to the previous folder',
+      breadcrumbHint: 'Click a segment to jump to that folder',
+      closeCompare: 'Close comparison',
+      noWorkspacesNotice: 'No saved workspaces yet. Click "+ New Workspace" to get started.',
+      workspaceEmpty: '(Empty workspace)'
+    },
+    vaultEmpty: {
+      create: 'New vault note'
+    },
+    pro: {
+      title: 'CAMark Pro & GCC Cloud License',
+      active: 'PRO ACTIVE ✓',
+      subtitle: 'Unlocks E2EE cloud vault encryption, high-resolution PDF & HTML, the AI Markdown Copilot and professional productivity features.',
+      verified: 'License status permanently verified for this device.',
+      expires: 'Expires:',
+      deactivate: 'Deactivate License',
+      f1: 'SQLCipher Vault Encryption (Zero-Knowledge)',
+      f2: 'Unlimited PDF & Standalone HTML Export',
+      f3: 'Hana AI Assistant & Markdown Copilot',
+      f4: 'Ambient Glow & Reactive Typing Mode',
+      f5: 'Interactive Slide Deck Presentation Mode',
+      f6: 'Pro Avatar Collection & Halo Light Effects',
+      activateTitle: 'Activate License Key',
+      activateDesc: 'Enter an official license code from Mayar, Ko-fi or Founder Lifetime to unlock every Pro capability.',
+      activate: 'Activate License',
+      cloudAccount: 'GCC Cloud Hub Account',
+      signOut: 'Sign Out',
+      activated: 'Pro license activated! All Pro features are on.',
+      activateFailed: 'License activation failed: {error}',
+      signedInAs: 'Signed in as {name}!',
+      signedOut: 'Signed out of your Pro account',
+      signOutFailed: 'Sign-out failed: {error}'
+    },
+    ambient: {
+      requiresPro: '(Requires a Founder Lifetime / Pro license)',
+      desc: 'GPU-accelerated outer halo lighting around the Markdown editor. Supports solid colour, brand accent and dynamic RGB spectrum modes, like a mechanical keyboard.',
+      exclusive: 'Exclusive PRO Founder Feature',
+      unlock: 'Activate your {app} Pro license to unlock ambient underglow lighting.',
+      colorMode: 'Color Mode',
+      brandDesc: 'Default {app} accent',
+      solidDesc: 'Static custom colour',
+      rgbDesc: 'Rotating rainbow spectrum',
+      auroraDesc: 'Soft light waves',
+      palette: 'Custom Colour Palette',
+      animation: 'Animation Effect',
+      static: 'Static (Solid)',
+      breathing: 'Breathing',
+      intensity: 'Intensity (Brightness)',
+      speed: 'Animation Speed',
+      avatarDesc: 'Reactive micro halo on the profile avatar in the Lock Screen, Menu and Settings.',
+      cometDesc: 'Default: a comet laser beam sweeping 120° around the avatar ring.',
+      photonsDesc: '2 satellite photon particles chasing each other 180° apart with a double glow.',
+      reactiveDesc: 'Reactive aura that follows the selected ambient colour spectrum & speed.',
+      cardDesc: 'Outer glow on the work-area card, tracing its rounded corner out onto the canvas.',
+      diffusedDesc: 'Soft ambient glow radiating out to the canvas around the corner.',
+      hairlineDesc: 'A crisp, high-precision neon line along the top & left edges.',
+      beamDesc: 'A laser beam flowing dynamically around the rounded corner.'
+    }
   }
 };
 

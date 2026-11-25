@@ -64,17 +64,17 @@
     try {
       await proActivateLicense(key);
       await refreshProStatus();
-      showToast('Lisensi Pro berhasil diaktivasi! Semua fitur Pro aktif.', 'success');
+      showToast(t('ui.pro.activated'), 'success');
       licenseKeyInput = '';
     } catch (e: any) {
-      alert(`Gagal aktivasi lisensi: ${e?.message || e}`);
+      alert(t('ui.pro.activateFailed', { error: String(e?.message || e) }));
     } finally {
       isActivatingLicense = false;
     }
   }
 
   async function handleProSignedIn(account: ProAccount) {
-    showToast(`Berhasil masuk sebagai ${account.name}!`, 'success');
+    showToast(t('ui.pro.signedInAs', { name: account.name }), 'success');
     await refreshProStatus();
   }
 
@@ -82,9 +82,9 @@
     try {
       await proLogout();
       await refreshProStatus();
-      showToast('Berhasil keluar akun Pro', 'info');
+      showToast(t('ui.pro.signedOut'), 'info');
     } catch (e: any) {
-      alert(`Gagal keluar: ${e}`);
+      alert(t('ui.pro.signOutFailed', { error: String(e) }));
     }
   }
 
@@ -388,15 +388,15 @@
       <div class="flex items-center justify-between border-b border-neutral-200 dark:border-neutral-800 pb-4">
         <div>
           <div class="flex items-center gap-2">
-            <h2 class="text-lg font-semibold text-neutral-900 dark:text-white">CAMark Pro & Lisensi GCC Cloud</h2>
+            <h2 class="text-lg font-semibold text-neutral-900 dark:text-white">{t('ui.pro.title')}</h2>
             {#if pro.isPro}
-              <Badge variant="success" size="sm">PRO AKTIF ✓</Badge>
+              <Badge variant="success" size="sm">{t('ui.pro.active')}</Badge>
             {:else}
               <Badge variant="neutral" size="sm">FREE EDITION</Badge>
             {/if}
           </div>
           <p class="{MUTED} text-sm mt-1">
-            Membuka enkripsi brankas cloud E2EE, PDF & HTML beresolusi tinggi, AI Markdown Copilot, dan fitur produktivitas profesional.
+            {t('ui.pro.subtitle')}
           </p>
         </div>
       </div>
@@ -411,11 +411,11 @@
                 <span class="px-2 py-0.5 rounded-full text-[10px] font-black tracking-wider bg-amber-400 dark:bg-amber-500 text-neutral-950 shadow-xs border border-white dark:border-neutral-900">FOUNDER</span>
               </div>
               <p class="text-xs text-neutral-500 dark:text-neutral-400 mt-1">
-                Status lisensi terverifikasi permanen untuk perangkat ini.
+                {t('ui.pro.verified')}
               </p>
               {#if pro.status?.entitlement && 'expiresAt' in pro.status.entitlement && pro.status.entitlement.expiresAt}
                 <p class="text-xs text-neutral-500 dark:text-neutral-400 mt-1">
-                  Tempo kadaluarsa: {new Date(pro.status.entitlement.expiresAt * 1000).toLocaleDateString('id-ID', {
+                  {t('ui.pro.expires')} {new Date(pro.status.entitlement.expiresAt * 1000).toLocaleDateString('id-ID', {
                     year: 'numeric',
                     month: 'short',
                     day: 'numeric'
@@ -430,34 +430,34 @@
               onclick={handleProLogout}
               class="text-rose-600 dark:text-rose-400 border-rose-500/30 hover:bg-rose-500/10"
             >
-              Nonaktifkan Lisensi
+              {t('ui.pro.deactivate')}
             </Button>
           </div>
 
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
             <div class="flex items-center gap-2.5 text-neutral-700 dark:text-neutral-300">
               <span class="text-emerald-500">✓</span>
-              <span>Enkripsi Brankas SQLCipher (Zero-Knowledge)</span>
+              <span>{t('ui.pro.f1')}</span>
             </div>
             <div class="flex items-center gap-2.5 text-neutral-700 dark:text-neutral-300">
               <span class="text-emerald-500">✓</span>
-              <span>Ekspor PDF & Standalone HTML Tanpa Batas</span>
+              <span>{t('ui.pro.f2')}</span>
             </div>
             <div class="flex items-center gap-2.5 text-neutral-700 dark:text-neutral-300">
               <span class="text-emerald-500">✓</span>
-              <span>Hana AI Assistant & Markdown Copilot</span>
+              <span>{t('ui.pro.f3')}</span>
             </div>
             <div class="flex items-center gap-2.5 text-neutral-700 dark:text-neutral-300">
               <span class="text-emerald-500">✓</span>
-              <span>Ambient Glow & Mode Mengetik Reaktif</span>
+              <span>{t('ui.pro.f4')}</span>
             </div>
             <div class="flex items-center gap-2.5 text-neutral-700 dark:text-neutral-300">
               <span class="text-emerald-500">✓</span>
-              <span>Mode Presentasi Slide Deck Interaktif</span>
+              <span>{t('ui.pro.f5')}</span>
             </div>
             <div class="flex items-center gap-2.5 text-neutral-700 dark:text-neutral-300">
               <span class="text-emerald-500">✓</span>
-              <span>Koleksi Avatar Pro & Efek Halo Cahaya</span>
+              <span>{t('ui.pro.f6')}</span>
             </div>
           </div>
         </div>
@@ -467,10 +467,10 @@
           <div>
             <h3 class="text-sm font-bold text-neutral-900 dark:text-white flex items-center gap-2">
               <span>🔑</span>
-              <span>Aktivasi License Key</span>
+              <span>{t('ui.pro.activateTitle')}</span>
             </h3>
             <p class="text-xs {MUTED} mt-1">
-              Masukkan kode lisensi resmi dari Mayar, Ko-fi, atau Founder Lifetime untuk membuka seluruh kapabilitas Pro.
+              {t('ui.pro.activateDesc')}
             </p>
           </div>
 
@@ -490,7 +490,7 @@
               onclick={() => handleActivateLicense()}
               class="shrink-0 !bg-cyan-600 hover:!bg-cyan-500 !text-white border-cyan-600 font-semibold"
             >
-              Aktivasi Lisensi
+              {t('ui.pro.activate')}
             </Button>
           </div>
 
@@ -516,7 +516,7 @@
       <div class="{SUBCARD} space-y-4">
         <h3 class="text-sm font-bold text-neutral-900 dark:text-white flex items-center gap-2">
           <span>☁️</span>
-          <span>Akun GCC Cloud Hub</span>
+          <span>{t('ui.pro.cloudAccount')}</span>
         </h3>
 
         {#if pro.status?.signedIn && pro.status?.account}
@@ -532,7 +532,7 @@
               onclick={handleProLogout}
               class="text-rose-600 dark:text-rose-400 border-rose-500/30"
             >
-              Keluar Akun
+              {t('ui.pro.signOut')}
             </Button>
           </div>
         {:else}

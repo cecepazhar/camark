@@ -78,10 +78,10 @@
           selected_text: '',
           is_vault_doc: !!parsed.isVault,
         });
-        showToast(`Berkas ${parsed.name} dilampirkan ke Hana AI`, 'success');
+        showToast(t('ui.aiChat.fileAttachedToast', { name: parsed.name }), 'success');
         messages.push({
           role: 'assistant',
-          content: `📄 Berkas **${parsed.name}** berhasil dilampirkan sebagai konteks aktif. Anda dapat langsung menanyakan isi, meminta ringkasan, atau analisis dokumen ini.`,
+          content: t('ui.aiChat.fileAttachedMsg', { name: parsed.name }),
         });
         return;
       } catch (err) {
@@ -102,10 +102,10 @@
           selected_text: '',
           is_vault_doc: false,
         });
-        showToast(`Berkas ${file.name} dilampirkan ke Hana AI`, 'success');
+        showToast(t('ui.aiChat.fileAttachedToast', { name: file.name }), 'success');
         messages.push({
           role: 'assistant',
-          content: `📄 Berkas **${file.name}** berhasil dilampirkan sebagai konteks aktif. Anda dapat langsung menanyakan isi, meminta ringkasan, atau analisis dokumen ini.`,
+          content: t('ui.aiChat.fileAttachedMsg', { name: file.name }),
         });
         return;
       } catch (err) {
@@ -128,10 +128,10 @@
           selected_text: '',
           is_vault_doc: false,
         });
-        showToast(`Berkas ${name} dilampirkan ke Hana AI`, 'success');
+        showToast(t('ui.aiChat.fileAttachedToast', { name: name }), 'success');
         messages.push({
           role: 'assistant',
-          content: `📄 Berkas **${name}** berhasil dilampirkan sebagai konteks aktif. Anda dapat langsung menanyakan isi, meminta ringkasan, atau analisis dokumen ini.`,
+          content: t('ui.aiChat.fileAttachedMsg', { name: name }),
         });
       } catch (err) {
         console.warn('Failed reading dropped text path:', err);
@@ -232,7 +232,7 @@
 {#if isOpen}
   {#if isMinimized}
     <!-- Floating collapsed pill so it never blocks the editor workspace -->
-    <div class="fixed bottom-4 right-4 z-50 animate-in fade-in duration-150">
+    <div class="fixed bottom-10 right-4 z-50 animate-in fade-in duration-150">
       <button
         onclick={() => (isMinimized = false)}
         class="flex items-center gap-2 px-3.5 py-2 rounded-full bg-rose-600 hover:bg-rose-500 text-white shadow-xl shadow-rose-600/30 font-medium text-xs border border-rose-400/30 transition-transform hover:scale-105 cursor-pointer"
@@ -253,8 +253,8 @@
       ondragleave={handleDragLeave}
       ondrop={handleDrop}
       class="fixed z-50 flex flex-col bg-neutral-900/95 backdrop-blur-xl border border-neutral-700/80 rounded-2xl shadow-2xl shadow-black/80 overflow-hidden transition-all duration-200 {isFullHeight
-        ? 'top-[calc(3.5rem+env(safe-area-inset-top,0px))] bottom-3 right-3 w-[420px]'
-        : 'bottom-4 right-4 w-[410px] h-[550px] max-h-[calc(100vh-4.5rem-env(safe-area-inset-top,0px))]'}"
+        ? 'top-[calc(3.5rem+env(safe-area-inset-top,0px))] bottom-10 right-3 w-[420px]'
+        : 'bottom-10 right-4 w-[410px] h-[550px] max-h-[calc(100vh-6rem-env(safe-area-inset-top,0px))]'}"
     >
       <!-- Drop Zone Visual Indicator Overlay -->
       {#if isDragOver}
@@ -263,8 +263,8 @@
             📥
           </div>
           <div>
-            <h4 class="text-sm font-bold text-white tracking-wide">Lepaskan Berkas di Sini</h4>
-            <p class="text-xs text-neutral-300 mt-1 max-w-xs">Berkas akan langsung dibaca dan dilampirkan sebagai konteks aktif ke Hana AI</p>
+            <h4 class="text-sm font-bold text-white tracking-wide">{t('ui.aiChat.dropTitle')}</h4>
+            <p class="text-xs text-neutral-300 mt-1 max-w-xs">{t('ui.aiChat.dropDesc')}</p>
           </div>
         </div>
       {/if}
@@ -345,7 +345,7 @@
             type="button"
             onclick={toggleAutoApply}
             class="px-2 py-0.5 rounded text-[10px] font-sans flex items-center gap-1 transition-all cursor-pointer {autoApply ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 font-semibold shadow-xs' : 'bg-neutral-800 text-neutral-400 border border-neutral-700 hover:text-white'}"
-            title={autoApply ? 'Pengetikan otomatis aktif: hasil AI langsung diterapkan ke dokumen' : 'Klik untuk mengaktifkan pengetikan otomatis langsung'}
+            title={autoApply ? t('ui.aiChat.autoTypeOn') : t('ui.aiChat.autoTypeOff')}
           >
             <span>⚡</span>
             <span>Auto-Type: {autoApply ? 'ON' : 'OFF'}</span>
@@ -440,26 +440,26 @@
       <div class="p-3 border-t border-neutral-800/80 bg-neutral-950/80">
         {#if docCtx.active_doc_title}
           <div class="flex items-center gap-1.5 pb-2 overflow-x-auto scrollbar-none text-[10px]">
-            <span class="text-neutral-500 shrink-0 font-medium">Aksi Cepat:</span>
+            <span class="text-neutral-500 shrink-0 font-medium">{t('ui.aiChat.quickActions')}</span>
             <button
               type="button"
               onclick={() => {
-                inputPrompt = `Tolong analisa dan jelaskan isi berkas "${docCtx.active_doc_title}" ini secara lengkap.`;
+                inputPrompt = t('ui.aiChat.analyzePrompt', { name: docCtx.active_doc_title ?? '' });
                 handleSend();
               }}
               class="px-2 py-0.5 rounded-full bg-neutral-800 hover:bg-neutral-700 text-neutral-300 hover:text-white border border-neutral-700/80 transition-colors shrink-0 cursor-pointer"
             >
-              🔍 Analisa Berkas
+              🔍 {t('ui.aiChat.analyzeFile')}
             </button>
             <button
               type="button"
               onclick={() => {
-                inputPrompt = `Tolong buat ringkasan poin-poin utama dari berkas "${docCtx.active_doc_title}" ini.`;
+                inputPrompt = t('ui.aiChat.summarizePrompt', { name: docCtx.active_doc_title ?? '' });
                 handleSend();
               }}
               class="px-2 py-0.5 rounded-full bg-neutral-800 hover:bg-neutral-700 text-neutral-300 hover:text-white border border-neutral-700/80 transition-colors shrink-0 cursor-pointer"
             >
-              📝 Ringkas
+              📝 {t('ui.aiChat.summarize')}
             </button>
           </div>
         {/if}

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '$lib/i18n/index.svelte';
   import { getAmbientStore } from '$lib/stores/ambient.svelte';
   import { getPro } from '$lib/stores/pro.svelte';
 
@@ -31,11 +32,11 @@
           PRO EXCLUSIVE
         </span>
         {#if !pro.isPro}
-          <span class="text-xs text-neutral-400 italic">(Memerlukan lisensi Founder Lifetime / Pro)</span>
+          <span class="text-xs text-neutral-400 italic">{t('ui.ambient.requiresPro')}</span>
         {/if}
       </div>
       <p class="text-xs text-neutral-500 dark:text-neutral-400 max-w-xl">
-        Pencahayaan halo luar di sekeliling area editor Markdown dengan akselerasi GPU. Mendukung mode warna solid, aksen brand, dan spektrum RGB dinamis ala keyboard mekanik.
+        {t('ui.ambient.desc')}
       </p>
     </div>
 
@@ -69,8 +70,8 @@
           </svg>
         </div>
         <div>
-          <p class="text-xs font-semibold text-amber-600 dark:text-amber-400">Fitur Eksklusif PRO Founder</p>
-          <p class="text-[11px] text-neutral-500 dark:text-neutral-400">Aktifkan lisensi {appName} Pro Anda untuk membuka pencahayaan ambient underglow.</p>
+          <p class="text-xs font-semibold text-amber-600 dark:text-amber-400">{t('ui.ambient.exclusive')}</p>
+          <p class="text-[11px] text-neutral-500 dark:text-neutral-400">{t('ui.ambient.unlock', { app: appName })}</p>
         </div>
       </div>
     </div>
@@ -82,7 +83,7 @@
       <!-- 1. Color Mode Selection -->
       <div class="space-y-2.5">
         <span class="block text-xs font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
-          Mode Warna (Color Mode)
+          {t('ui.ambient.colorMode')}
         </span>
         <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
           <button
@@ -94,7 +95,7 @@
               <span class="w-3 h-3 rounded-full" style:background-color={defaultAccent}></span>
               <span class="text-xs font-semibold">App Brand</span>
             </div>
-            <p class="text-[10px] text-neutral-500 dark:text-neutral-400">Aksen default {appName}</p>
+            <p class="text-[10px] text-neutral-500 dark:text-neutral-400">{t('ui.ambient.brandDesc', { app: appName })}</p>
           </button>
 
           <button
@@ -106,7 +107,7 @@
               <span class="w-3 h-3 rounded-full border border-black/20" style:background-color={ambient.config.customColor}></span>
               <span class="text-xs font-semibold">Solid Hex</span>
             </div>
-            <p class="text-[10px] text-neutral-500 dark:text-neutral-400">Warna kustom statis</p>
+            <p class="text-[10px] text-neutral-500 dark:text-neutral-400">{t('ui.ambient.solidDesc')}</p>
           </button>
 
           <button
@@ -118,7 +119,7 @@
               <span class="w-3 h-3 rounded-full bg-[linear-gradient(45deg,#06b6d4,#8b5cf6,#ec4899)]"></span>
               <span class="text-xs font-semibold">RGB Chroma</span>
             </div>
-            <p class="text-[10px] text-neutral-500 dark:text-neutral-400">Spektrum rotasi rainbow</p>
+            <p class="text-[10px] text-neutral-500 dark:text-neutral-400">{t('ui.ambient.rgbDesc')}</p>
           </button>
 
           <button
@@ -130,7 +131,7 @@
               <span class="w-3 h-3 rounded-full bg-[radial-gradient(circle,#06b6d4,#8b5cf6)]"></span>
               <span class="text-xs font-semibold">Aurora Drift</span>
             </div>
-            <p class="text-[10px] text-neutral-500 dark:text-neutral-400">Gelombang cahaya halus</p>
+            <p class="text-[10px] text-neutral-500 dark:text-neutral-400">{t('ui.ambient.auroraDesc')}</p>
           </button>
         </div>
       </div>
@@ -139,7 +140,7 @@
       {#if ambient.config.mode === 'solid'}
         <div class="p-4 rounded-xl border border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-950 space-y-3">
           <span class="block text-xs font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
-            Palet Warna Kustom
+            {t('ui.ambient.palette')}
           </span>
           <div class="flex flex-wrap items-center gap-2">
             {#each PRESET_COLORS as preset}
@@ -178,7 +179,7 @@
       <!-- 2. Animation Effect Selection -->
       <div class="space-y-2.5">
         <span class="block text-xs font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
-          Efek Animasi (Animation Effect)
+          {t('ui.ambient.animation')}
         </span>
         <div class="grid grid-cols-3 gap-2.5">
           <button
@@ -186,7 +187,7 @@
             onclick={() => ambient.setEffect('static')}
             class="p-3 rounded-xl border text-center transition-all {ambient.config.effect === 'static' ? 'border-cyan-500 bg-cyan-500/10 text-cyan-700 dark:text-cyan-300 font-semibold' : 'border-neutral-200 dark:border-neutral-800 hover:bg-neutral-100 dark:hover:bg-neutral-800'}"
           >
-            <span class="text-xs">Statis (Solid)</span>
+            <span class="text-xs">{t('ui.ambient.static')}</span>
           </button>
 
           <button
@@ -194,7 +195,7 @@
             onclick={() => ambient.setEffect('breathing')}
             class="p-3 rounded-xl border text-center transition-all {ambient.config.effect === 'breathing' ? 'border-cyan-500 bg-cyan-500/10 text-cyan-700 dark:text-cyan-300 font-semibold' : 'border-neutral-200 dark:border-neutral-800 hover:bg-neutral-100 dark:hover:bg-neutral-800'}"
           >
-            <span class="text-xs">Breathing (Nafas)</span>
+            <span class="text-xs">{t('ui.ambient.breathing')}</span>
           </button>
 
           <button
@@ -211,7 +212,7 @@
       <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
         <div class="space-y-1.5">
           <div class="flex justify-between text-xs text-neutral-600 dark:text-neutral-400">
-            <span>Intensitas (Brightness)</span>
+            <span>{t('ui.ambient.intensity')}</span>
             <span class="font-mono font-semibold">{Math.round(ambient.config.intensity * 100)}%</span>
           </div>
           <input
@@ -219,7 +220,7 @@
             min="0.1"
             max="1.0"
             step="0.05"
-            aria-label="Intensitas"
+            aria-label={t('ui.ambient.intensity')}
             value={ambient.config.intensity}
             oninput={(e) => ambient.setIntensity(parseFloat((e.target as HTMLInputElement).value))}
             class="w-full accent-cyan-600"
@@ -245,7 +246,7 @@
 
         <div class="space-y-1.5">
           <div class="flex justify-between text-xs text-neutral-600 dark:text-neutral-400">
-            <span>Kecepatan Animasi</span>
+            <span>{t('ui.ambient.speed')}</span>
             <span class="font-mono font-semibold">{ambient.config.speedSec}s</span>
           </div>
           <input
@@ -253,7 +254,7 @@
             min="2"
             max="15"
             step="1"
-            aria-label="Kecepatan Animasi"
+            aria-label={t('ui.ambient.speed')}
             value={ambient.config.speedSec}
             oninput={(e) => ambient.setSpeedSec(parseFloat((e.target as HTMLInputElement).value))}
             class="w-full accent-cyan-600"
@@ -274,7 +275,7 @@
               </span>
             </div>
             <p class="text-[11px] text-neutral-500 dark:text-neutral-400">
-              Pancaran halo mikro reaktif pada avatar profil di LockScreen, Menu, dan Pengaturan.
+              {t('ui.ambient.avatarDesc')}
             </p>
           </div>
 
@@ -314,7 +315,7 @@
                 </div>
               </div>
               <p class="text-[10px] text-neutral-500 dark:text-neutral-400 leading-relaxed">
-                Default: Berkas laser komet berputar 120° mengelilingi cincin avatar.
+                {t('ui.ambient.cometDesc')}
               </p>
             </button>
 
@@ -333,7 +334,7 @@
                 </div>
               </div>
               <p class="text-[10px] text-neutral-500 dark:text-neutral-400 leading-relaxed">
-                2 partikel foton satelit berkejaran 180° dengan pendar ganda.
+                {t('ui.ambient.photonsDesc')}
               </p>
             </button>
 
@@ -352,7 +353,7 @@
                 </div>
               </div>
               <p class="text-[10px] text-neutral-500 dark:text-neutral-400 leading-relaxed">
-                Aura reaktif mengikuti spektrum warna & kecepatan ambient terpilih.
+                {t('ui.ambient.reactiveDesc')}
               </p>
             </button>
           </div>
@@ -372,7 +373,7 @@
               </span>
             </div>
             <p class="text-[11px] text-neutral-500 dark:text-neutral-400">
-              Pendaran cahaya luar pada kartu area kerja (&lt;main&gt;) menyusuri sudut siku rounded-tl-xl ke kanvas luar.
+              {t('ui.ambient.cardDesc')}
             </p>
           </div>
 
@@ -412,7 +413,7 @@
                 </div>
               </div>
               <p class="text-[10px] text-neutral-500 dark:text-neutral-400 leading-relaxed">
-                Pendaran cahaya ambient lembut memancar keluar ke kanvas dan sekeliling sudut siku.
+                {t('ui.ambient.diffusedDesc')}
               </p>
             </button>
 
@@ -430,7 +431,7 @@
                 </div>
               </div>
               <p class="text-[10px] text-neutral-500 dark:text-neutral-400 leading-relaxed">
-                Garis tepi siku atas & kiri menyala tegas dengan pendaran neon berpresisi tinggi.
+                {t('ui.ambient.hairlineDesc')}
               </p>
             </button>
 
@@ -449,7 +450,7 @@
                 </div>
               </div>
               <p class="text-[10px] text-neutral-500 dark:text-neutral-400 leading-relaxed">
-                Sinar berkas laser mengalir dinamis mengitari lengkungan siku rounded.
+                {t('ui.ambient.beamDesc')}
               </p>
             </button>
           </div>

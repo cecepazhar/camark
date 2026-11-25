@@ -5,6 +5,20 @@ Format ini mengacu pada [Keep a Changelog](https://keepachangelog.com/id/), dan 
 
 ---
 
+## [v1.1.1] - 2026-11-25
+### Added
+- **Tombol di Empty State Vault**: "Belum ada catatan di Vault" kini disertai tombol **Catatan brankas baru**.
+
+### Changed
+- **Teks Antarmuka Dwibahasa Penuh**: ±100 teks yang sebelumnya ditulis langsung (panel Hana AI, AI Action Bar, tab dokumen, Quick Switcher, Outline, Presentasi, Graph & Knowledge, Command Palette, error Mermaid, tab Pro & Lisensi, kartu Ambient) dipindah ke kamus i18n dan kini mengikuti bahasa yang dipilih (EN/ID).
+- **Nama Asisten Konsisten**: Sapaan pembuka kini memperkenalkan diri sebagai **Hana AI**, sama dengan tombol dan judul panel.
+- **Panel Hana AI Tidak Menutupi Status Bar**: Panel dan gelembung AI berhenti di atas status bar.
+
+### Fixed
+- **Tautan Vault Membuka File Tree**: Membuka `/vault` (atau `?mode=vault`) kini benar-benar membuka panel Vault; sebelumnya efek sinkronisasi panel langsung keluar lagi dari mode Vault.
+
+---
+
 ## [v1.1.0] - 2026-11-25
 ### Added
 - **Splash & Progres Boot**: Layar pembuka bergaya keluarga CA (CAPost) yang tampil di frame pertama — logo dengan cincin "bernapas", progress bar, langkah dwibahasa (Memuat workspace → Menyiapkan editor → Memuat font → Siap), minimal 1 detik dan maksimal 3 detik.

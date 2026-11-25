@@ -438,7 +438,7 @@ export const id: Dictionary = {
   ai: {
     hanaTitle: 'Hana AI 🌸',
     hanaTagline: 'Asisten AI Markdown tenang, presisi & siap membantu',
-    greeting: 'Halo! Saya asisten AI CAMark. Ada yang bisa saya bantu dengan dokumen markdown atau analisis teks Anda?',
+    greeting: 'Halo! Saya Hana AI, asisten CAMark. Ada yang bisa saya bantu dengan dokumen Markdown atau teks Anda?',
     processing: 'Sedang memproses...',
     activeStatus: 'Hana AI Aktif 🌸',
     callFailed: 'Gagal memanggil AI Assistant',
@@ -677,6 +677,144 @@ export const id: Dictionary = {
     conflictSavedCopySuccess: 'Salinan konflik berhasil disimpan sebagai {{copyName}}.',
     changedOnDisk: 'Diubah di disk',
     fileChangedOnDiskTooltip: 'Berkas ini telah diubah secara eksternal di disk'
+  },
+  ui: {
+    close: 'Tutup',
+    aiChat: {
+      fileAttachedToast: 'Berkas {name} dilampirkan ke Hana AI',
+      fileAttachedMsg: '📄 Berkas **{name}** berhasil dilampirkan sebagai konteks aktif. Anda dapat langsung menanyakan isi, meminta ringkasan, atau analisis dokumen ini.',
+      dropTitle: 'Lepaskan Berkas di Sini',
+      dropDesc: 'Berkas akan langsung dibaca dan dilampirkan sebagai konteks aktif ke Hana AI',
+      autoTypeOn: 'Pengetikan otomatis aktif: hasil AI langsung diterapkan ke dokumen',
+      autoTypeOff: 'Klik untuk mengaktifkan pengetikan otomatis langsung',
+      quickActions: 'Aksi Cepat:',
+      analyzeFile: 'Analisa Berkas',
+      summarize: 'Ringkas',
+      analyzePrompt: 'Tolong analisa dan jelaskan isi berkas "{name}" ini secara lengkap.',
+      summarizePrompt: 'Tolong buat ringkasan poin-poin utama dari berkas "{name}" ini.'
+    },
+    actionBar: {
+      success: 'AI Copilot berhasil memperbarui teks!',
+      failed: 'Gagal memproses AI Action',
+      failedWith: 'Gagal memproses AI Action: {error}',
+      tocTitle: 'Buat Daftar Isi (TOC) dari heading yang dipilih',
+      toc: 'Daftar Isi',
+      summaryTitle: 'Ringkas teks terpilih menjadi poin eksekutif padat',
+      summarizing: 'Meringkas...',
+      summary: 'Ringkas',
+      humanizeTitle: 'Humanize gaya bahasa: natural, hindari filler AI robotik',
+      tableTitle: 'Ubah teks / daftar ini menjadi tabel Markdown rapi',
+      tabling: 'Membuat Tabel...',
+      table: 'Tabelkan',
+      closeBar: 'Tutup Bar Aksi'
+    },
+    tabs: {
+      close: 'Tutup Tab',
+      closeHint: 'Tutup Tab (Ctrl+W)',
+      newDoc: 'Buka Dokumen Baru',
+      newDocHint: 'Buka Dokumen Baru (+)'
+    },
+    tree: {
+      empty: '(kosong)'
+    },
+    graph: {
+      activeOnly: 'Hanya catatan aktif',
+      unresolved: 'Link belum ada',
+      hint: 'scroll = zoom · drag = geser · klik = buka'
+    },
+    knowledge: {
+      title: 'Koneksi',
+      indexing: 'Mengindeks workspace…',
+      noBacklinks: 'Belum ada catatan yang menautkan ke sini.',
+      makeLink: 'Jadikan [[link]]',
+      noMentions: 'Tidak ada penyebutan tanpa link.',
+      noTags: 'Belum ada tag di workspace.',
+      noIndex: 'Belum ada dokumen yang terindeks.'
+    },
+    quick: {
+      placeholder: 'Cari catatan… (Enter untuk membuka)',
+      noResultsCreate: 'Tidak ada hasil. Enter untuk membuat "{name}.md"',
+      noNotes: 'Tidak ada catatan.',
+      hint: '↑↓ pilih · Enter buka · Esc tutup'
+    },
+    outline: {
+      title: 'Struktur Dokumen',
+      close: 'Tutup Panel Struktur',
+      empty: 'Belum ada heading (# Judul) dalam dokumen ini.',
+      toggleHint: 'Struktur Dokumen (Outline / Heading Navigator)'
+    },
+    presentation: {
+      emptyDoc: 'Dokumen kosong.',
+      renderFailed: 'Gagal merender slide: {error}',
+      close: 'Tutup (Esc)',
+      prev: 'Sebelumnya',
+      next: 'Berikutnya'
+    },
+    palette: {
+      noMatch: 'Tidak ada perintah yang sesuai.'
+    },
+    page: {
+      mermaidInvalid: 'Diagram Mermaid: Format Tidak Valid',
+      mermaidSource: 'Lihat teks sumber diagram',
+      manageWorkspace: 'Ganti atau kelola workspace',
+      backFolder: 'Kembali ke folder sebelumnya',
+      breadcrumbHint: 'Klik segmen untuk lompat ke folder',
+      closeCompare: 'Tutup Perbandingan',
+      noWorkspacesNotice: 'Belum ada workspace yang disimpan. Klik "+ Workspace Baru" untuk memulai.',
+      workspaceEmpty: '(Workspace kosong)'
+    },
+    vaultEmpty: {
+      create: 'Catatan brankas baru'
+    },
+    pro: {
+      title: 'CAMark Pro & Lisensi GCC Cloud',
+      active: 'PRO AKTIF ✓',
+      subtitle: 'Membuka enkripsi brankas cloud E2EE, PDF & HTML beresolusi tinggi, AI Markdown Copilot, dan fitur produktivitas profesional.',
+      verified: 'Status lisensi terverifikasi permanen untuk perangkat ini.',
+      expires: 'Tempo kadaluarsa:',
+      deactivate: 'Nonaktifkan Lisensi',
+      f1: 'Enkripsi Brankas SQLCipher (Zero-Knowledge)',
+      f2: 'Ekspor PDF & Standalone HTML Tanpa Batas',
+      f3: 'Hana AI Assistant & Markdown Copilot',
+      f4: 'Ambient Glow & Mode Mengetik Reaktif',
+      f5: 'Mode Presentasi Slide Deck Interaktif',
+      f6: 'Koleksi Avatar Pro & Efek Halo Cahaya',
+      activateTitle: 'Aktivasi License Key',
+      activateDesc: 'Masukkan kode lisensi resmi dari Mayar, Ko-fi, atau Founder Lifetime untuk membuka seluruh kapabilitas Pro.',
+      activate: 'Aktivasi Lisensi',
+      cloudAccount: 'Akun GCC Cloud Hub',
+      signOut: 'Keluar Akun',
+      activated: 'Lisensi Pro berhasil diaktivasi! Semua fitur Pro aktif.',
+      activateFailed: 'Gagal aktivasi lisensi: {error}',
+      signedInAs: 'Berhasil masuk sebagai {name}!',
+      signedOut: 'Berhasil keluar akun Pro',
+      signOutFailed: 'Gagal keluar: {error}'
+    },
+    ambient: {
+      requiresPro: '(Memerlukan lisensi Founder Lifetime / Pro)',
+      desc: 'Pencahayaan halo luar di sekeliling area editor Markdown dengan akselerasi GPU. Mendukung mode warna solid, aksen brand, dan spektrum RGB dinamis ala keyboard mekanik.',
+      exclusive: 'Fitur Eksklusif PRO Founder',
+      unlock: 'Aktifkan lisensi {app} Pro Anda untuk membuka pencahayaan ambient underglow.',
+      colorMode: 'Mode Warna',
+      brandDesc: 'Aksen default {app}',
+      solidDesc: 'Warna kustom statis',
+      rgbDesc: 'Spektrum rotasi rainbow',
+      auroraDesc: 'Gelombang cahaya halus',
+      palette: 'Palet Warna Kustom',
+      animation: 'Efek Animasi',
+      static: 'Statis (Solid)',
+      breathing: 'Breathing (Nafas)',
+      intensity: 'Intensitas (Brightness)',
+      speed: 'Kecepatan Animasi',
+      avatarDesc: 'Pancaran halo mikro reaktif pada avatar profil di LockScreen, Menu, dan Pengaturan.',
+      cometDesc: 'Default: Berkas laser komet berputar 120° mengelilingi cincin avatar.',
+      photonsDesc: '2 partikel foton satelit berkejaran 180° dengan pendar ganda.',
+      reactiveDesc: 'Aura reaktif mengikuti spektrum warna & kecepatan ambient terpilih.',
+      cardDesc: 'Pendaran cahaya luar pada kartu area kerja, menyusuri sudut siku ke kanvas luar.',
+      diffusedDesc: 'Pendaran cahaya ambient lembut memancar keluar ke kanvas dan sekeliling sudut siku.',
+      hairlineDesc: 'Garis tepi siku atas & kiri menyala tegas dengan pendaran neon berpresisi tinggi.',
+      beamDesc: 'Sinar berkas laser mengalir dinamis mengitari lengkungan siku rounded.'
+    }
   }
 };
 

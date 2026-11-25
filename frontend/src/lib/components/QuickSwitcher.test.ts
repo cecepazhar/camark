@@ -1,6 +1,10 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach, beforeAll } from 'vitest';
+import { setLocale } from '$lib/i18n/index.svelte';
 import { render, fireEvent, cleanup } from '@testing-library/svelte';
 import QuickSwitcher from './QuickSwitcher.svelte';
+
+// The assertions below use the Indonesian UI strings.
+beforeAll(() => setLocale('id'));
 
 describe('Quick Switcher Ctrl+O (F3-05 / S-01)', () => {
   afterEach(() => {

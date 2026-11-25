@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '$lib/i18n/index.svelte';
   export interface TabItem {
     id: string; // path or vault id
     path: string;
@@ -60,8 +61,8 @@
             onCloseTab(tab.id);
           }}
           class="opacity-60 group-hover:opacity-100 p-0.5 rounded-sm hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-400 hover:text-rose-500 dark:hover:text-rose-400 transition-all shrink-0"
-          title="Tutup Tab (Ctrl+W)"
-          aria-label="Tutup Tab"
+          title={t('ui.tabs.closeHint')}
+          aria-label={t('ui.tabs.close')}
         >
           <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
@@ -76,8 +77,8 @@
       type="button"
       onclick={onNewTab}
       class="h-7 w-7 rounded-md flex items-center justify-center text-neutral-400 hover:text-neutral-700 dark:hover:text-white hover:bg-neutral-200/60 dark:hover:bg-neutral-800/60 transition-colors ml-0.5 shrink-0"
-      title="Buka Dokumen Baru (+)"
-      aria-label="Buka Dokumen Baru"
+      title={t('ui.tabs.newDocHint')}
+      aria-label={t('ui.tabs.newDoc')}
     >
       <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />

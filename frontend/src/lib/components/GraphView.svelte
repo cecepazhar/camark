@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '$lib/i18n/index.svelte';
   import { tick } from 'svelte';
   import { graphData, forceLayout, type NoteIndex, type GraphNode, type GraphEdge } from '$lib/utils/knowledge';
 
@@ -160,10 +161,10 @@
       <header class="flex items-center gap-4 px-4 py-2 border-b border-neutral-800 text-xs text-neutral-300">
         <span class="font-semibold">Graph View</span>
         <span class="text-neutral-500">{nodes.length} catatan · {edges.length} link</span>
-        <label class="flex items-center gap-1"><input type="checkbox" bind:checked={localOnly} /> Hanya catatan aktif</label>
-        <label class="flex items-center gap-1"><input type="checkbox" bind:checked={showUnresolved} /> Link belum ada</label>
-        <span class="ml-auto text-neutral-500">scroll = zoom · drag = geser · klik = buka</span>
-        <button type="button" class="text-neutral-400 hover:text-white" onclick={onClose} aria-label="Tutup">✕</button>
+        <label class="flex items-center gap-1"><input type="checkbox" bind:checked={localOnly} /> {t('ui.graph.activeOnly')}</label>
+        <label class="flex items-center gap-1"><input type="checkbox" bind:checked={showUnresolved} /> {t('ui.graph.unresolved')}</label>
+        <span class="ml-auto text-neutral-500">{t('ui.graph.hint')}</span>
+        <button type="button" class="text-neutral-400 hover:text-white" onclick={onClose} aria-label={t('ui.close')}>✕</button>
       </header>
       <canvas
         bind:this={canvas}
