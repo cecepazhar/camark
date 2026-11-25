@@ -13,7 +13,10 @@
         "height": 800,
         "minWidth": 800,
         "minHeight": 600,
-        "maximized": false,
+        "maximized": true,
+        "center": true,
+        "visible": false,
+        "backgroundColor": "#0a0a0c",
         "decorations": false,
 				"create": false,
 				"additionalBrowserArgs": "--renderer-process-limit=1 --disable-features=Translate,OptimizationHints,MediaRouter --disable-gpu-shader-disk-cache --disk-cache-size=16777216"

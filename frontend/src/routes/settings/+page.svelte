@@ -313,7 +313,7 @@
           ? 'border-cyan-500 text-neutral-900 dark:text-white font-semibold'
           : 'border-transparent text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-200'}"
       >
-        {tab === 'pro' ? 'Pro & Lisensi' : t(`settings.tabs.${tab}`)}
+        {t(`settings.tabs.${tab}`)}
       </button>
     {/each}
   </div>

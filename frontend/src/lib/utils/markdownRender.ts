@@ -3,7 +3,29 @@
  * Fixes audit findings F-07: KaTeX inside code/prose, frontmatter, task toggling.
  */
 import { marked, type TokenizerAndRendererExtension } from 'marked';
-import katex from 'katex';
+// KaTeX (~260 KB) is loaded on first render instead of with the editor bundle, so opening
+// the app does not pay for math typesetting until a document is actually rendered.
+type Katex = typeof import('katex').default;
+let katex: Katex | null = null;
+let katexLoading: Promise<Katex | null> | null = null;
+
+/** Loads KaTeX once; safe to call repeatedly (boot warm-up, every render). */
+export function ensureKatex(): Promise<Katex | null> {
+  if (katex) return Promise.resolve(katex);
+  // The stylesheet was never loaded before, so math showed twice (MathML fallback + HTML).
+  // Load it with the library; in the markdown worker there is no DOM, so skip it there.
+  katexLoading ??= Promise.all([
+    import('katex'),
+    typeof document !== 'undefined' ? import('katex/dist/katex.min.css').catch(() => {}) : null
+  ]).then(
+    ([m]) => (katex = m.default),
+    () => {
+      katexLoading = null;
+      return null;
+    }
+  );
+  return katexLoading;
+}
 
 /**
  * Rewrite relative image `src` attributes in rendered HTML to a Tauri asset
@@ -82,6 +104,7 @@ function renderMath(tex: string, displayMode: boolean): string {
   const cacheKey = `${displayMode ? 'D' : 'I'}:${hash}`;
   const cached = katexCache.get(cacheKey);
   if (cached) return cached;
+  if (!katex) return escapeHtml(tex);
   try {
     const rendered = katex.renderToString(tex, { displayMode, throwOnError: false });
     if (katexCache.size > 2000) katexCache.clear();
@@ -427,6 +450,7 @@ export async function renderMarkdownToHtml(
   opts: RenderOptions = {}
 ): Promise<{ html: string; yaml: string | null }> {
   installMarkdownExtensions();
+  await ensureKatex();
   const { yaml, body } = splitFrontmatter(src);
   const { body: noDefs, defs } = extractFootnoteDefs(body);
   fnState = { defs, order: [] };

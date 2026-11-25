@@ -30,7 +30,6 @@
   import { oneDark } from '@codemirror/theme-one-dark';
   import { marked } from 'marked';
   import DOMPurify from 'dompurify';
-  import katex from 'katex';
   // mermaid is ~500 KB — lazy-loaded on demand (first mermaid block render) to
   // keep the cold start under a second.
   let mermaid: typeof import('mermaid').default | null = null;
@@ -40,17 +39,22 @@
     }
     return mermaid;
   }
-  let mermaidInitialized = false;
+  // Theme the diagrams were last initialized with; re-initialized when the app theme changes
+  // (a dark-themed diagram on the light preview had near-invisible edges and labels).
+  let mermaidInitialized: 'dark' | 'default' | null = null;
+  const mermaidThemeNow = (): 'dark' | 'default' =>
+    typeof document !== 'undefined' && !document.documentElement.classList.contains('dark') ? 'default' : 'dark';
   async function ensureMermaidInitialized() {
-    if (mermaidInitialized) return;
+    const theme = mermaidThemeNow();
+    if (mermaidInitialized === theme) return;
     const m = await getMermaid();
     m.initialize({
       startOnLoad: false,
-      theme: 'dark',
+      theme,
       securityLevel: 'strict',
       suppressErrorRendering: true,
     });
-    mermaidInitialized = true;
+    mermaidInitialized = theme;
   }
   import { Button, Input, Badge } from '@cecepazhar/caui';
 
@@ -147,6 +151,7 @@
     previewScrollToLine,
   } from '$lib/utils/scrollSync';
   import { getPro } from '$lib/stores/pro.svelte';
+  import { getTheme } from '$lib/stores/theme.svelte';
   import { openAiChat } from '$lib/stores/aiChat.svelte';
   import {
     getSidebarPanelStore,
@@ -696,6 +701,61 @@ graph TD;
   const lineWrappingCompartment = new Compartment();
   const liveMarkdownCompartment = new Compartment();
   const lineNumbersCompartment = new Compartment();
+  // oneDark was applied unconditionally, so in light mode the editor drew #abb2bf text on a
+  // white page. The theme now follows the app theme.
+  const editorThemeCompartment = new Compartment();
+  const lightEditorTheme = EditorView.theme(
+    {
+      '&': { color: '#27272a', backgroundColor: 'transparent' },
+      '.cm-content': { caretColor: '#0891b2' },
+      '.cm-cursor, .cm-dropCursor': { borderLeftColor: '#0891b2' },
+      '&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection': {
+        backgroundColor: '#a5f3fc80'
+      },
+      '.cm-activeLine': { backgroundColor: '#0891b20d' },
+      '.cm-gutters': { backgroundColor: 'transparent', color: '#a1a1aa', border: 'none' }
+    },
+    { dark: false }
+  );
+  const editorThemeFor = (name: string) => (name === 'light' ? lightEditorTheme : oneDark);
+  const appTheme = getTheme();
+  let lastAppTheme = appTheme.name;
+  $effect(() => {
+    const name = appTheme.name;
+    const ext = editorThemeFor(name);
+    untrack(() => {
+      editorView?.dispatch({ effects: editorThemeCompartment.reconfigure(ext) });
+      if (name !== lastAppTheme) {
+        lastAppTheme = name;
+        void rethemeMermaidDiagrams();
+      }
+    });
+  });
+
+  /** Re-renders diagrams already in the preview with the current theme (after a theme toggle). */
+  async function rethemeMermaidDiagrams() {
+    const containers = document.querySelectorAll<HTMLElement>('[data-mermaid-src]');
+    if (containers.length === 0) return;
+    await ensureMermaidInitialized();
+    const m = await getMermaid();
+    for (const container of containers) {
+      const code = container.dataset.mermaidSrc ?? '';
+      const cacheKey = hashString(mermaidThemeNow() + code);
+      try {
+        let safeSvg = mermaidSvgCache.get(cacheKey);
+        if (!safeSvg) {
+          const { svg } = await m.render(`mermaid-svg-${cacheKey}`, code);
+          safeSvg = DOMPurify.sanitize(svg, { USE_PROFILES: { svg: true, svgFilters: true }, ADD_TAGS: ['foreignObject'], HTML_INTEGRATION_POINTS: { foreignobject: true } });
+          if (mermaidSvgCache.size > 100) mermaidSvgCache.clear();
+          mermaidSvgCache.set(cacheKey, safeSvg);
+        }
+        container.innerHTML = safeSvg;
+        container.dataset.mermaidHash = cacheKey;
+      } catch {
+        // Keep the diagram as it was; the next edit re-renders it anyway.
+      }
+    }
+  }
 
   $effect(() => {
     if (editorView) {
@@ -1348,7 +1408,7 @@ graph TD;
           highlightActiveLine(),
           lineNumbersCompartment.of(!isMarkdownFile(currentFilePath) && viewMode === 'editor' ? lineNumbers() : []),
           languageCompartment.of(markdown()),
-          oneDark,
+          editorThemeCompartment.of(editorThemeFor(appTheme.name)),
           lineWrappingCompartment.of(isZenMode || viewMode === 'live' || isMarkdownFile(currentFilePath) ? EditorView.lineWrapping : []),
           liveMarkdownCompartment.of(viewMode === 'live' ? createLiveMarkdownPlugin() : []),
           EditorView.updateListener.of((update) => {
@@ -1904,7 +1964,7 @@ graph TD;
             mermaidBlocks.forEach(async (block) => {
               block.dataset.rendered = '1';
               const code = block.textContent || '';
-              const cacheKey = hashString(code);
+              const cacheKey = hashString(mermaidThemeNow() + code);
               const id = `mermaid-svg-${cacheKey}`;
               try {
                 // Cache by source: unchanged diagrams are not re-rendered on every edit.
@@ -1918,6 +1978,7 @@ graph TD;
                 const container = document.createElement('div');
                 container.id = `mermaid-container-${cacheKey}`;
                 container.dataset.mermaidHash = cacheKey;
+                container.dataset.mermaidSrc = code;
                 container.className = 'my-4 flex justify-center overflow-x-auto';
                 container.innerHTML = safeSvg;
                 block.parentElement?.replaceWith(container);

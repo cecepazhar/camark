@@ -56,6 +56,8 @@ export const en: Dictionary = {
     darkTheme: 'Dark Theme'
   },
   nav: {
+    expandSidebar: 'Expand sidebar',
+    collapseSidebar: 'Collapse sidebar',
     workspace: 'Files & Folders',
     editor: 'Markdown Studio',
     vault: 'Encrypted Vault',
@@ -290,6 +292,7 @@ export const en: Dictionary = {
     title: 'Settings',
     subtitle: 'Configure vault security, ambient aura, AI copilot, family profiles, and encrypted backups.',
     tabs: {
+      pro: 'Pro & License',
       profile: 'Profile',
       security: 'Security & Vault',
       appearance: 'Appearance & Ambient',

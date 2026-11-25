@@ -38,10 +38,33 @@ pub fn create_main_window(app: &tauri::App) -> tauri::Result<WebviewWindow> {
         }
     }
 
+    // The window starts hidden (tauri.conf.json `visible: false`) on the app's dark background
+    // and is shown — already maximized — once the page, whose first paint is the boot splash,
+    // has loaded. The user never sees WebView2's blank surface or a 1200x800 frame that then
+    // jumps to full screen. A timer shows it anyway if the load event never arrives.
+    builder = builder.on_page_load(|webview, payload| {
+        if matches!(payload.event(), tauri::webview::PageLoadEvent::Finished) {
+            let _ = webview.maximize();
+            let _ = webview.show();
+            let _ = webview.set_focus();
+        }
+    });
+
     let window = builder.build()?;
     // Some Wayland compositors ignore the maximized hint on an unmapped window. `maximize`
     // is one-way (never a toggle), so asking again after build is safe.
     let _ = window.maximize();
+    {
+        let w = window.clone();
+        tauri::async_runtime::spawn(async move {
+            tokio::time::sleep(std::time::Duration::from_millis(2500)).await;
+            if !w.is_visible().unwrap_or(true) {
+                let _ = w.maximize();
+                let _ = w.show();
+                let _ = w.set_focus();
+            }
+        });
+    }
     memory::install(&window);
     disable_browser_accelerators(&window);
     Ok(window)

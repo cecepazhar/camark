@@ -96,10 +96,10 @@
 </script>
 
 <div
-  class="h-9 px-2 bg-neutral-100 dark:bg-[#121217] border-b border-neutral-200 dark:border-[#262626] flex items-center justify-between text-neutral-600 dark:text-neutral-400 select-none overflow-x-auto scrollbar-none z-10 shrink-0"
+  class="@container h-9 px-2 gap-2 bg-neutral-100 dark:bg-[#121217] border-b border-neutral-200 dark:border-[#262626] flex items-center justify-between text-neutral-600 dark:text-neutral-400 select-none z-10 shrink-0"
 >
   <!-- Left Formatting Tools -->
-  <div class="flex items-center gap-0.5">
+  <div class="flex items-center gap-0.5 min-w-0 overflow-x-auto scrollbar-none">
     <!-- Undo / Redo -->
     <button
       type="button"
@@ -124,7 +124,7 @@
       </svg>
     </button>
 
-    <span class="w-[1px] h-3.5 bg-neutral-300 dark:bg-[#262626] mx-1"></span>
+    <span class="w-[1px] h-3.5 shrink-0 bg-neutral-300 dark:bg-[#262626] mx-0.5"></span>
 
     <!-- Headings -->
     <button
@@ -152,7 +152,7 @@
       H3
     </button>
 
-    <span class="w-[1px] h-3.5 bg-neutral-300 dark:bg-[#262626] mx-1"></span>
+    <span class="w-[1px] h-3.5 shrink-0 bg-neutral-300 dark:bg-[#262626] mx-0.5"></span>
 
     <!-- Text Formatting -->
     <button
@@ -180,7 +180,7 @@
       S
     </button>
 
-    <span class="w-[1px] h-3.5 bg-neutral-300 dark:bg-[#262626] mx-1"></span>
+    <span class="w-[1px] h-3.5 shrink-0 bg-neutral-300 dark:bg-[#262626] mx-0.5"></span>
 
     <!-- Lists -->
     <button
@@ -227,7 +227,7 @@
       </svg>
     </button>
 
-    <span class="w-[1px] h-3.5 bg-neutral-300 dark:bg-[#262626] mx-1"></span>
+    <span class="w-[1px] h-3.5 shrink-0 bg-neutral-300 dark:bg-[#262626] mx-0.5"></span>
 
     <!-- Blockquote & Code -->
     <button
@@ -269,7 +269,7 @@
       </svg>
     </button>
 
-    <span class="w-[1px] h-3.5 bg-neutral-300 dark:bg-[#262626] mx-1"></span>
+    <span class="w-[1px] h-3.5 shrink-0 bg-neutral-300 dark:bg-[#262626] mx-0.5"></span>
 
     <!-- Table Tools -->
     <button
@@ -292,7 +292,10 @@
       title={t('toolbar.alignTable')}
       class="px-2 py-0.5 rounded text-[10px] font-semibold bg-neutral-200/80 dark:bg-[#18181F] hover:bg-cyan-500/20 text-cyan-700 dark:text-cyan-400 border border-cyan-500/30 flex items-center gap-1 transition-colors"
     >
-      <span>{t('toolbar.alignTable')}</span>
+      <svg class="w-3 h-3 @3xl:hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true">
+        <path d="M3 6h18M3 12h18M3 18h18M9 6v12M15 6v12"></path>
+      </svg>
+      <span class="hidden @3xl:inline whitespace-nowrap">{t('toolbar.alignTable')}</span>
     </button>
   </div>
 
@@ -306,7 +309,7 @@
       title={t('toolbar.outlineDesc')}
     >
       <span>📑</span>
-      <span class="hidden sm:inline">{t('toolbar.outline')}</span>
+      <span class="hidden @3xl:inline">{t('toolbar.outline')}</span>
     </button>
 
     <!-- Presentation / Slideshow Toggle -->
@@ -317,7 +320,7 @@
       title={t('toolbar.presentationDesc')}
     >
       <span>📽️</span>
-      <span>{t('toolbar.presentation')}</span>
+      <span class="hidden @3xl:inline">{t('toolbar.presentation')}</span>
     </button>
 
     <!-- Zen Mode Switch -->
@@ -331,7 +334,7 @@
         <circle cx="12" cy="12" r="3"></circle>
         <path d="M3 12h1m16 0h1m-9-9v1m0 16v1"></path>
       </svg>
-      <span>{isZenMode ? t('toolbar.zenActive') : t('toolbar.zen')}</span>
+      <span class="hidden @3xl:inline">{isZenMode ? t('toolbar.zenActive') : t('toolbar.zen')}</span>
     </button>
   </div>
 </div>

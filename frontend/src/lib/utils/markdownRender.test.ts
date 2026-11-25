@@ -6,9 +6,14 @@ import {
   toggleNthTask,
   escapeHtml,
   rewriteRelativeImageSrcs,
+  ensureKatex,
 } from './markdownRender';
 
-beforeAll(() => installMarkdownExtensions());
+// KaTeX is lazy-loaded; these tests call marked synchronously, so load it up front.
+beforeAll(async () => {
+  installMarkdownExtensions();
+  await ensureKatex();
+});
 const render = (s: string) => marked.parse(s, { gfm: true }) as string;
 
 describe('math (F-07 / T1, T2)', () => {

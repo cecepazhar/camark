@@ -39,6 +39,7 @@ import {
     type SidebarPanel
   } from '$lib/stores/sidebarPanel.svelte';
   import { loadPerformancePrefs } from '$lib/stores/performance.svelte';
+  import { finishBoot } from '$lib/boot';
 
   let isCollapsed = $state(true);
   let isVaultUnlocked = $state(true); // Open directly without blocking lockscreen
@@ -205,6 +206,7 @@ import {
   }
 
   onMount(() => {
+    void finishBoot();
     initTheme();
     isVaultUnlocked = true;
     refreshProStatus().catch(() => {});
@@ -594,8 +596,8 @@ import {
             <button
               type="button"
               onclick={toggleSidebar}
-              title="Perluas sidebar"
-              aria-label="Expand sidebar"
+              title={t('nav.expandSidebar')}
+              aria-label={t('nav.expandSidebar')}
               class="p-1.5 rounded-lg hover:bg-neutral-200/70 dark:hover:bg-neutral-800 transition-colors"
             >
               <Logo size={22} mode="brand" />
@@ -609,8 +611,8 @@ import {
             <button
               type="button"
               onclick={toggleSidebar}
-              title="Kecilkan sidebar"
-              aria-label="Collapse sidebar"
+              title={t('nav.collapseSidebar')}
+              aria-label={t('nav.collapseSidebar')}
               class="p-1 rounded-md hover:bg-neutral-200/70 dark:hover:bg-neutral-800 text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 transition-colors shrink-0"
             >
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

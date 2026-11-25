@@ -54,6 +54,8 @@ export const id: Dictionary = {
     darkTheme: 'Tema Gelap'
   },
   nav: {
+    expandSidebar: 'Perluas sidebar',
+    collapseSidebar: 'Kecilkan sidebar',
     workspace: 'Berkas & Direktori',
     editor: 'Studio Markdown',
     vault: 'Brankas Catatan',
@@ -288,6 +290,7 @@ export const id: Dictionary = {
     title: 'Pengaturan',
     subtitle: 'Konfigurasi keamanan brankas, aura ambient, AI copilot, profil keluarga, dan pencadangan terenkripsi.',
     tabs: {
+      pro: 'Pro & Lisensi',
       profile: 'Profil',
       security: 'Keamanan & Brankas',
       appearance: 'Tampilan & Ambient',

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { marked } from 'marked';
   import DOMPurify from 'dompurify';
-  import katex from 'katex';
+  import { ensureKatex } from '$lib/utils/markdownRender';
   import { onMount, onDestroy } from 'svelte';
   import { getPro } from '$lib/stores/pro.svelte';
 
@@ -43,7 +43,9 @@
 
   async function renderCurrentSlide(slideMd: string) {
     try {
-      // Math KaTeX
+      // Math KaTeX (loaded on demand; the presentation is rarely opened)
+      const katex = await ensureKatex();
+      if (!katex) throw new Error('KaTeX unavailable');
       let processed = slideMd.replace(/\$\$([\s\S]+?)\$\$/g, (_, math) => {
         try {
           return katex.renderToString(math, { displayMode: true, throwOnError: false });

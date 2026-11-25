@@ -5,6 +5,24 @@ Format ini mengacu pada [Keep a Changelog](https://keepachangelog.com/id/), dan 
 
 ---
 
+## [v1.1.0] - 2026-11-25
+### Added
+- **Splash & Progres Boot**: Layar pembuka bergaya keluarga CA (CAPost) yang tampil di frame pertama — logo dengan cincin "bernapas", progress bar, langkah dwibahasa (Memuat workspace → Menyiapkan editor → Memuat font → Siap), minimal 1 detik dan maksimal 3 detik.
+
+### Changed
+- **Auto-Maximize Tanpa Kedip**: Jendela disembunyikan sampai halaman (splash) siap, lalu tampil langsung dalam keadaan maximized. Tidak ada lagi layar putih WebView2 maupun lompatan dari 1200×800 ke layar penuh. Timer cadangan 2,5 detik memastikan jendela tetap muncul.
+- **Startup Lebih Ringan**: KaTeX (~260 KB) kini dimuat saat dibutuhkan dan dipanaskan di splash; JavaScript statis halaman editor turun dari 1.344 KB menjadi 1.090 KB (−19%).
+- **Toolbar Format Responsif**: Kontrol Outline, Presentasi, dan Zen selalu terlihat di panel sempit (mode Split); label disembunyikan otomatis dan alat format dapat digulir.
+
+### Fixed
+- **Teks Preview Dark Mode Tidak Terbaca**: Selektor `:global(.dark)` di `app.css` tidak valid di CSS global sehingga seluruh aturan warna dark mode dibuang; judul dan teks preview tampil gelap di atas latar gelap.
+- **Rumus KaTeX Tampil Ganda**: Stylesheet KaTeX tidak pernah dimuat sehingga fallback MathML ikut terlihat di samping rumus.
+- **Editor Pucat di Light Mode**: Tema `oneDark` CodeMirror kini mengikuti tema aplikasi (light/dark) dan berganti secara langsung.
+- **Diagram Mermaid di Light Mode**: Diagram memakai tema terang/gelap sesuai aplikasi dan di-render ulang saat tema diganti.
+- **Teks Campur Bahasa**: Tab "Pro & License" dan tombol perluas/kecilkan sidebar kini mengikuti bahasa yang dipilih.
+
+---
+
 ## [v1.1.0-beta.1] - 2026-11-22
 ### Added
 - **Rust Pro Gate Enforcement (F3-03 / M-05)**: Perlindungan fitur Pro dipindahkan sepenuhnya ke backend Rust melalui `caf_core::pro::require_pro`, `require_pro_feature`, dan perintah IPC `verify_pro_feature`. Mode Zen, Presentasi Marp, Aksi AI Kontekstual, dan Ekspor PDF Skripsi ditolak tegas di kernel IPC apabila lisensi belum Pro.
