@@ -88,7 +88,7 @@
       </p>
       <p class="text-sm text-neutral-800 dark:text-neutral-200 break-words">{report.message}</p>
       {#if report.location}
-        <p class="text-xs text-neutral-500 dark:text-neutral-400">
+        <p class="text-xs text-neutral-500 dark:text-neutral-400 break-all">
           {t('crash.location', { location: report.location })}
         </p>
       {/if}

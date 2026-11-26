@@ -5,6 +5,13 @@ Format ini mengacu pada [Keep a Changelog](https://keepachangelog.com/id/), dan 
 
 ---
 
+## [v1.1.2] - 2026-11-26
+### Fixed
+- **Crash "cannot move state from Destroyed" (Windows)**: CAMark crash saat Windows mengakhiri sesinya (shutdown, restart, sign-out, atau installer/updater menutup aplikasi yang sedang berjalan lewat Restart Manager), lalu menampilkan dialog laporan error pada pembukaan berikutnya. Penyebabnya, `tao` 0.35 menandai event loop `Destroyed` pada `WM_ENDSESSION` sementara loop masih berjalan. CAMark kini menangani pesan tersebut sendiri dan keluar dengan bersih.
+- **Dialog Laporan Error**: Judul bagian kini "Pesan kesalahan", lokasi error ditampilkan (sebelumnya hanya label "Location"), dan subjudul tidak lagi menyatakan aplikasi sudah dipulihkan.
+
+---
+
 ## [v1.1.1] - 2026-11-25
 ### Added
 - **Tombol di Empty State Vault**: "Belum ada catatan di Vault" kini disertai tombol **Catatan brankas baru**.

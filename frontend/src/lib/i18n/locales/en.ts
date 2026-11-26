@@ -124,9 +124,9 @@ export const en: Dictionary = {
   },
   crash: {
     title: 'Application Error Report',
-    subtitle: 'CAMark encountered an unexpected issue and recovered.',
-    whatHappened: 'What were you doing when this happened?',
-    location: 'Location',
+    subtitle: 'CAMark closed unexpectedly the last time it ran.',
+    whatHappened: 'Error message',
+    location: 'Location: {location}',
     viewDetails: 'View Technical Details',
     hideDetails: 'Hide Details',
     send: 'Send Crash Report',

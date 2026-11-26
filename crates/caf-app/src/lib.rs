@@ -25,6 +25,8 @@ pub mod exporter;
 pub mod fs_watcher;
 pub mod fs_workspace;
 mod perf;
+#[cfg(windows)]
+mod session_end;
 pub mod vault_docs;
 mod window;
 
@@ -191,6 +193,10 @@ pub fn run_with_start(_start: std::time::Instant) {
                         .ok();
                 }
             }
+
+            // Last in setup: every window of this thread exists by now.
+            #[cfg(windows)]
+            session_end::install();
 
             Ok(())
         })

@@ -122,9 +122,9 @@ export const id: Dictionary = {
   },
   crash: {
     title: 'Laporan Kendala Aplikasi',
-    subtitle: 'CAMark mengalami kendala tak terduga dan telah dipulihkan.',
-    whatHappened: 'Apa yang sedang Anda lakukan saat kendala terjadi?',
-    location: 'Lokasi',
+    subtitle: 'CAMark tertutup secara tak terduga saat terakhir dijalankan.',
+    whatHappened: 'Pesan kesalahan',
+    location: 'Lokasi: {location}',
     viewDetails: 'Lihat Rincian Teknis',
     hideDetails: 'Sembunyikan Rincian',
     send: 'Kirim Laporan',
